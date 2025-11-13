@@ -157,7 +157,9 @@ const HARDWARE_PATTERNS = {
     gpu: {
         dependencies: ['torch', 'tensorflow-gpu', 'cuda', 'cudnn', 'cupy', 'pycuda', 'cupy-cuda'],
         patterns: [
-            { pattern: /cuda|gpu|nvidia/i, type: 'GPU', weight: 3 },
+            // Use word boundaries and specific contexts to avoid false positives
+            { pattern: /\b(cuda|nvidia)\b/i, type: 'GPU', weight: 3 },
+            { pattern: /\bgpu\b/i, type: 'GPU', weight: 3 },
             { pattern: /device\s*=\s*['"]cuda['"]/i, type: 'GPU', weight: 5 },
             { pattern: /\.to\(['"]cuda['"]\)/i, type: 'GPU', weight: 5 },
             { pattern: /\.cuda\(\)/i, type: 'GPU', weight: 5 },
@@ -168,9 +170,13 @@ const HARDWARE_PATTERNS = {
     tpu: {
         dependencies: ['tensorflow', 'jax', 'cloud-tpu-client'],
         patterns: [
-            { pattern: /tpu/i, type: 'TPU', weight: 4 },
+            // Use word boundaries and specific contexts to avoid false positives (output, timeout, etc.)
+            { pattern: /\btpu\b/i, type: 'TPU', weight: 4 },
+            { pattern: /['"]tpu['"]/i, type: 'TPU', weight: 5 },
+            { pattern: /device.*=.*tpu/i, type: 'TPU', weight: 5 },
             { pattern: /tf\.distribute\.TPUStrategy/i, type: 'TPU', weight: 5 },
-            { pattern: /jax\.devices\(['"]tpu['"]\)/i, type: 'TPU', weight: 5 }
+            { pattern: /jax\.devices\(['"]tpu['"]\)/i, type: 'TPU', weight: 5 },
+            { pattern: /cloud-tpu|tpu-vm|tpu_name/i, type: 'TPU', weight: 5 }
         ]
     },
     specialized: {

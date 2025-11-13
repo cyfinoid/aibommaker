@@ -31,6 +31,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Detects specialized hardware: TensorRT, OpenVINO, ONNX Runtime, CoreML
 - Hardware patterns now scan both dependencies and code files
 - Hardware findings include evidence with file locations and code snippets
+- **Fixed TPU false positives**: TPU patterns now use word boundaries and only scan Python files
+  - Prevents false matches on "output", "timeout", "interrupted" in JavaScript
+  - TPU is TensorFlow/JAX specific, so only Python files are scanned
+  - GPU patterns also improved with word boundaries
+  - Specialized hardware (TensorRT, OpenVINO) restricted to Python files
 
 #### Infrastructure & Deployment Detection
 - Added infrastructure detection for containerization (Docker, Docker Compose)
@@ -124,6 +129,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Repository keywords are informational, not AIBOM components
   - Metadata already captured in BOM metadata section
   - Reduces noise in findings list
+- **Prompt detector now logs only** (doesn't create findings)
+  - Prompts are not components in AIBOM specifications (CycloneDX, SPDX)
+  - Prompts are inputs/configuration, not part of the bill of materials
+  - Directory names (prompts/, templates/, etc.) are organizational structure, not components
+  - Prompt template files are logged for analysis but not included as findings
+  - Aligns with AIBOM specification focus on components (dependencies, models, hardware, infrastructure)
+- **Infrastructure detector now only reports ML-specific infrastructure**
+  - Generic Docker/Kubernetes detection removed (deployment infrastructure, not AIBOM components)
+  - Only reports ML-specific containerization: GPU-enabled containers, ML framework base images (PyTorch, TensorFlow, HuggingFace)
+  - Only reports ML-specific orchestration: GPU scheduling in Kubernetes (nvidia.com/gpu)
+  - Cloud ML platforms (SageMaker, Vertex AI, Azure ML) still reported (ML-specific platforms)
+  - MLOps tools (MLflow, W&B) still reported (ML-specific dependencies)
+  - All infrastructure findings now include evidence (file paths and code snippets)
+  - Aligns with AIBOM specification: infrastructure is HOW the system runs, not WHAT components are in it
+  - ML-specific infrastructure (GPU, ML platforms) is relevant because it indicates hardware requirements and ML context
 
 #### Constants & Patterns
 - Added `HARDWARE_PATTERNS` with GPU, TPU, and specialized compute patterns
@@ -189,13 +209,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **De-emphasized scoring**: Removed confidence score display from UI
   - AIBOM focuses on comprehensive documentation, not arbitrary scoring
   - Categories and findings speak for themselves
-- **Added Analysis Notes section**: NEW transparency feature
-  - Separate section documenting what could NOT be detected
-  - Missing documentation tracked with purpose and impact
-  - Undetectable components explained (training data, weights, metrics)
-  - Detection limitations noted (context-specific gaps)
-  - Suggested improvements with actionable recommendations
-  - Philosophy: Analysis Notes ≠ Findings (transparency without false negatives)
+- **Added Analysis Notes section**: NEW practical feature
+  - **Scan-specific**: Documents what we scanned for but didn't find in THIS repository
+  - **NOT philosophical**: No generic limitations that apply to all scans
+  - Shows components we actively searched for but were not present:
+    - Documentation: README.md, MODEL_CARD.md, SECURITY.md (if not found)
+    - Hardware: GPU/TPU libraries (if no hardware detected despite having models)
+    - Infrastructure: Docker, Kubernetes, cloud configs (if not found)
+    - Governance: Model governance docs (if models but no governance found)
+    - Data Pipeline: Data processing libraries (if models but no data libs found)
+  - Each entry shows: Category, Item name, What we scanned, AIBOM benefit
+  - Suggested improvements with actionable file recommendations
+  - Philosophy: "Looked for but didn't find" vs "fundamentally undetectable"
 
 #### Limitations Acknowledged
 - Cannot detect runtime-only behaviors

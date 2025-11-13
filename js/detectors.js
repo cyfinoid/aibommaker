@@ -62,6 +62,7 @@ async function dependenciesDetector({ tree, getFileContent, owner, repo, token }
         
         if (llmDeps.length > 0) {
             console.log(`[Detector: Dependencies] ✓ Found ${llmDeps.length} LLM dependencies via SBOM API`);
+            const sbomUrl = `https://github.com/${owner}/${repo}/network/dependencies`;
             llmDeps.forEach(dep => {
                 findings.push({
                     id: `dep-${dep.ecosystem}-${dep.name.replace(/[^a-zA-Z0-9]/g, '-')}`,
@@ -72,7 +73,8 @@ async function dependenciesDetector({ tree, getFileContent, owner, repo, token }
                     description: `LLM-related dependency: ${dep.name}${dep.version ? ` (version: ${dep.version})` : ''}`,
                     evidence: [{
                         file: 'GitHub Dependency Graph (SBOM)',
-                        snippet: `SPDX Package: ${dep.name}@${dep.version}`
+                        snippet: `SPDX Package: ${dep.name}@${dep.version}`,
+                        url: sbomUrl
                     }],
                     dependencyInfo: {
                         name: dep.name,
@@ -1598,38 +1600,27 @@ async function promptsDetector({ tree, getFileContent }) {
         }
     }
     
+    // Log prompt-related information for analysis, but don't create findings
+    // Prompts are not components in AIBOM specifications (CycloneDX, SPDX)
+    // They are inputs/configuration, not part of the bill of materials
     if (promptDirs.size > 0) {
-        console.log(`[Detector: Prompts] ✓ Found ${promptDirs.size} prompt/AI directories`);
-        findings.push({
-            id: 'prompts-directories',
-            title: 'Prompt/AI Directories Detected',
-            category: 'prompts',
-            severity: 'medium',
-            weight: Math.min(promptDirs.size + 1, 4),
-            description: `Found ${promptDirs.size} directory/directories with prompt templates`,
-            evidence: Array.from(promptDirs).slice(0, 5).map(dir => ({ 
-                file: dir, snippet: 'Directory contains AI/prompt-related files' 
-            }))
-        });
+        console.log(`[Detector: Prompts] ℹ️  Found ${promptDirs.size} prompt/AI directories: ${Array.from(promptDirs).join(', ')}`);
+        console.log(`[Detector: Prompts] Note: Directory names are logged but not included as AIBOM findings`);
+        console.log(`[Detector: Prompts] Reason: Prompts are not components in AIBOM specifications - they are inputs/configuration, not BOM components`);
     }
     
     if (foundPrompts.length > 0) {
-        console.log(`[Detector: Prompts] ✓ Found ${foundPrompts.length} files with prompt indicators`);
-        findings.push({
-            id: 'prompts-templates',
-            title: 'Prompt Templates Found',
-            category: 'prompts',
-            severity: 'medium',
-            weight: Math.min(foundPrompts.length + 1, 5),
-            description: `Found ${foundPrompts.length} file(s) with prompt templates`,
-            evidence: foundPrompts.slice(0, 5).map(p => ({ 
-                file: p.file, snippet: `Indicators: ${p.indicators.join(', ')}` 
-            }))
-        });
+        console.log(`[Detector: Prompts] ℹ️  Found ${foundPrompts.length} files with prompt indicators`);
+        console.log(`[Detector: Prompts] Note: Prompt templates are logged but not included as AIBOM findings`);
+        console.log(`[Detector: Prompts] Reason: Prompts are not components in AIBOM specifications - they are inputs/configuration, not BOM components`);
+    }
+    
+    if (promptDirs.size === 0 && foundPrompts.length === 0) {
+        console.log('[Detector: Prompts] No prompt directories or templates found');
     }
     
     console.log(`[Detector: Prompts] Complete. Findings: ${findings.length}`);
-    return findings;
+    return findings; // Returns empty array - prompts are not AIBOM components
 }
 
 // ============================================================================
@@ -1688,6 +1679,9 @@ async function hardwareDetector({ tree, getFileContent, allFindings = [] }) {
     }
     
     // Scan code files for hardware usage patterns
+    // GPU: Scan Python, JavaScript/TypeScript (for TensorFlow.js, WebGL)
+    // TPU: Only scan Python files (TPU is Python/TensorFlow/JAX specific)
+    // Specialized: Scan Python primarily, some JS for ONNX Runtime Web
     const codeFiles = tree.filter(entry => 
         entry.path.match(/\.(py|js|ts|ipynb)$/) && entry.type === 'blob'
     );
@@ -1698,7 +1692,10 @@ async function hardwareDetector({ tree, getFileContent, allFindings = [] }) {
         const content = await getFileContent(file.path);
         if (!content) continue;
         
-        // Check GPU patterns
+        const isPythonFile = file.path.match(/\.(py|ipynb)$/);
+        const isJsFile = file.path.match(/\.(js|ts|jsx|tsx)$/);
+        
+        // Check GPU patterns (all file types - GPU is used in Python, JS via TensorFlow.js, WebGL)
         for (const pattern of HARDWARE_PATTERNS.gpu.patterns) {
             if (pattern.pattern.test(content)) {
                 hardwareInfo.gpu.add(pattern.type);
@@ -1711,21 +1708,28 @@ async function hardwareDetector({ tree, getFileContent, allFindings = [] }) {
             }
         }
         
-        // Check TPU patterns
-        for (const pattern of HARDWARE_PATTERNS.tpu.patterns) {
-            if (pattern.pattern.test(content)) {
-                hardwareInfo.tpu.add(pattern.type);
-                const match = content.match(pattern.pattern);
-                hardwareInfo.evidence.push({
-                    file: file.path,
-                    snippet: match ? match[0].substring(0, 100) : 'TPU usage detected',
-                    type: 'TPU'
-                });
+        // Check TPU patterns (Python files ONLY - TPU is TensorFlow/JAX specific)
+        if (isPythonFile) {
+            for (const pattern of HARDWARE_PATTERNS.tpu.patterns) {
+                if (pattern.pattern.test(content)) {
+                    hardwareInfo.tpu.add(pattern.type);
+                    const match = content.match(pattern.pattern);
+                    hardwareInfo.evidence.push({
+                        file: file.path,
+                        snippet: match ? match[0].substring(0, 100) : 'TPU usage detected',
+                        type: 'TPU'
+                    });
+                }
             }
         }
         
-        // Check specialized hardware patterns
+        // Check specialized hardware patterns (primarily Python, some JS for ONNX Runtime Web)
         for (const pattern of HARDWARE_PATTERNS.specialized.patterns) {
+            // TensorRT, OpenVINO: Python only
+            if (pattern.type === 'TensorRT' || pattern.type === 'OpenVINO') {
+                if (!isPythonFile) continue;
+            }
+            
             if (pattern.pattern.test(content)) {
                 hardwareInfo.specialized.add(pattern.type);
                 const match = content.match(pattern.pattern);
@@ -1809,6 +1813,7 @@ async function infrastructureDetector({ tree, getFileContent, allFindings = [] }
     };
     
     // Check for containerization files (Docker)
+    // Only report ML-specific containerization (GPU, ML frameworks) - generic Docker isn't an AIBOM component
     const dockerFiles = tree.filter(entry => 
         INFRASTRUCTURE_PATTERNS.containerization.files.some(f => 
             entry.path.toLowerCase().endsWith(f.toLowerCase()) || 
@@ -1822,11 +1827,12 @@ async function infrastructureDetector({ tree, getFileContent, allFindings = [] }
         const content = await getFileContent(file.path);
         if (!content) continue;
         
-        infraInfo.containerization.add('Docker');
-        
-        // Check specific Docker patterns
+        // Only detect ML-specific containerization patterns (GPU, ML frameworks)
+        // Generic Docker isn't a component in AIBOM - it's deployment infrastructure
+        let foundMLPattern = false;
         for (const pattern of INFRASTRUCTURE_PATTERNS.containerization.patterns) {
             if (pattern.pattern.test(content)) {
+                foundMLPattern = true;
                 infraInfo.containerization.add(pattern.platform);
                 const match = content.match(pattern.pattern);
                 infraInfo.evidence.push({
@@ -1836,9 +1842,16 @@ async function infrastructureDetector({ tree, getFileContent, allFindings = [] }
                 });
             }
         }
+        
+        // Log generic Docker for analysis, but don't create finding
+        if (!foundMLPattern) {
+            console.log(`[Detector: Infrastructure] ℹ️  Found Dockerfile but no ML-specific patterns: ${file.path}`);
+            console.log(`[Detector: Infrastructure] Note: Generic Docker is deployment infrastructure, not an AIBOM component`);
+        }
     }
     
     // Check for orchestration files (Kubernetes)
+    // Only report ML-specific orchestration (GPU scheduling) - generic Kubernetes isn't an AIBOM component
     const k8sFiles = tree.filter(entry => 
         INFRASTRUCTURE_PATTERNS.orchestration.files.some(f => 
             entry.path.toLowerCase().includes(f.toLowerCase())
@@ -1851,15 +1864,24 @@ async function infrastructureDetector({ tree, getFileContent, allFindings = [] }
         const content = await getFileContent(file.path);
         if (!content) continue;
         
+        // Only detect ML-specific orchestration patterns (GPU scheduling)
+        // Generic Kubernetes (Deployment, Service, Pod) is deployment infrastructure, not an AIBOM component
         for (const pattern of INFRASTRUCTURE_PATTERNS.orchestration.patterns) {
             if (pattern.pattern.test(content)) {
-                infraInfo.orchestration.add(pattern.platform);
-                const match = content.match(pattern.pattern);
-                infraInfo.evidence.push({
-                    file: file.path,
-                    snippet: match ? match[0].substring(0, 100) : pattern.platform,
-                    type: 'orchestration'
-                });
+                // Only report GPU-specific Kubernetes (hardware requirement)
+                // Generic Kubernetes patterns are logged but not reported as findings
+                if (pattern.platform.includes('GPU')) {
+                    infraInfo.orchestration.add(pattern.platform);
+                    const match = content.match(pattern.pattern);
+                    infraInfo.evidence.push({
+                        file: file.path,
+                        snippet: match ? match[0].substring(0, 100) : pattern.platform,
+                        type: 'orchestration'
+                    });
+                } else {
+                    console.log(`[Detector: Infrastructure] ℹ️  Found generic Kubernetes pattern in ${file.path}: ${pattern.platform}`);
+                    console.log(`[Detector: Infrastructure] Note: Generic Kubernetes is deployment infrastructure, not an AIBOM component`);
+                }
             }
         }
     }

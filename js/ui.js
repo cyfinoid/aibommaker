@@ -20,158 +20,119 @@ function renderAnalysisNotes(findings, analysisResult) {
     const container = document.getElementById('analysis-notes-list');
     container.innerHTML = '';
     
-    // Extract analysis notes using the same logic as Extended AIBOM generator
+    // Scan-specific: What we looked for but didn't find in THIS repository
+    const notFound = [];
+    
     const allFiles = findings.flatMap(f => f.evidence?.map(e => e.file) || []);
+    const hasDependencies = findings.some(f => f.category === 'dependencies');
     const hasModels = findings.some(f => f.modelInfo);
     const hasHardware = findings.some(f => f.category === 'hardware');
+    const hasInfrastructure = findings.some(f => f.category === 'infrastructure');
     const hasGovernance = findings.some(f => f.category === 'governance');
+    const hasDataPipeline = findings.some(f => 
+        f.dependencyInfo?.name?.match(/datasets|pandas|numpy|sklearn|spacy|nltk/)
+    );
     
-    const missingDocs = [];
-    const detectionLimitations = [];
-    
-    // Check for missing documentation
+    // Documentation we scanned for but didn't find
     if (!allFiles.some(f => f && f.toLowerCase().includes('readme'))) {
-        missingDocs.push({
-            file: 'README.md',
-            purpose: 'Project overview and usage instructions',
-            impact: 'Difficult to understand project purpose and usage'
+        notFound.push({
+            category: 'Documentation',
+            item: 'README.md',
+            searched: 'Scanned repository root and subdirectories',
+            benefit: 'Would provide project overview, usage instructions, and model documentation'
         });
     }
     
-    if (!allFiles.some(f => f && f.toLowerCase().includes('model'))) {
-        missingDocs.push({
-            file: 'MODEL_CARD.md',
-            purpose: 'Model documentation including intended use, limitations, and performance',
-            impact: 'Incomplete model governance and transparency'
+    if (hasModels && !allFiles.some(f => f && f.toLowerCase().includes('model'))) {
+        notFound.push({
+            category: 'Documentation',
+            item: 'MODEL_CARD.md',
+            searched: 'Scanned for model card files in repository',
+            benefit: 'Would document model intended use, limitations, performance, and ethical considerations'
         });
     }
     
     if (!allFiles.some(f => f && f.toLowerCase().includes('security'))) {
-        missingDocs.push({
-            file: 'SECURITY.md',
-            purpose: 'Security policy and vulnerability reporting procedures',
-            impact: 'No clear security disclosure process'
+        notFound.push({
+            category: 'Documentation',
+            item: 'SECURITY.md',
+            searched: 'Scanned repository root for security policy',
+            benefit: 'Would provide vulnerability reporting procedures and security contacts'
         });
     }
     
-    // Detection limitations
+    // Hardware we scanned for but didn't find
+    if (!hasHardware && hasDependencies) {
+        notFound.push({
+            category: 'Hardware',
+            item: 'GPU/TPU/Specialized Compute',
+            searched: 'Scanned dependencies and code for CUDA, TensorRT, TPU patterns',
+            benefit: 'Would document compute requirements and infrastructure needs'
+        });
+    }
+    
+    // Infrastructure we scanned for but didn't find
+    if (!hasInfrastructure && (hasModels || hasDependencies)) {
+        notFound.push({
+            category: 'Infrastructure',
+            item: 'Deployment Configuration',
+            searched: 'Scanned for Dockerfile, docker-compose.yml, Kubernetes configs, cloud platform usage',
+            benefit: 'Would document deployment environment and operational requirements'
+        });
+    }
+    
+    // Governance we scanned for but didn't find
     if (hasModels && !hasGovernance) {
-        detectionLimitations.push({
-            area: 'Model Governance',
-            limitation: 'Models detected but no governance documentation found',
-            note: 'Governance documentation may exist but not in standard file names'
+        notFound.push({
+            category: 'Governance',
+            item: 'Model Governance Documentation',
+            searched: 'Scanned for limitations, ethical considerations, bias/fairness documentation',
+            benefit: 'Would document responsible AI practices and model constraints'
         });
     }
     
-    if (hasModels && !hasHardware) {
-        detectionLimitations.push({
-            area: 'Hardware Requirements',
-            limitation: 'Models detected but no specific hardware requirements found',
-            note: 'May use CPU-only inference or hardware not explicitly declared in dependencies'
+    // Data pipeline we scanned for but didn't find
+    if (hasModels && !hasDataPipeline) {
+        notFound.push({
+            category: 'Data Pipeline',
+            item: 'Data Processing Libraries',
+            searched: 'Scanned dependencies for data loading, preprocessing, feature engineering tools',
+            benefit: 'Would document data transformation and feature engineering process'
         });
     }
     
-    // If nothing to report, show a positive message
-    if (missingDocs.length === 0 && detectionLimitations.length === 0) {
+    // If everything was found, show a positive message
+    if (notFound.length === 0) {
         container.innerHTML = `
             <div class="info-message" style="padding: 2rem; text-align: center; color: var(--text-secondary);">
-                <p style="font-size: 1.1rem; margin-bottom: 0.5rem;">✅ Documentation appears complete</p>
-                <p style="font-size: 0.9rem;">All expected documentation files were found and the analysis was comprehensive.</p>
+                <p style="font-size: 1.1rem; margin-bottom: 0.5rem;">✅ Comprehensive detection achieved</p>
+                <p style="font-size: 0.9rem;">All detectable components were found in this repository.</p>
             </div>
         `;
         return;
     }
     
-    // Render missing documentation
-    if (missingDocs.length > 0) {
-        const missingSection = document.createElement('div');
-        missingSection.className = 'analysis-note-section';
-        missingSection.innerHTML = `
-            <h3 class="subheading" style="margin-bottom: 1rem;">📄 Missing Documentation</h3>
-            <p class="caption" style="margin-bottom: 1rem;">The following standard documentation files were not found in the repository:</p>
-            <div class="analysis-notes-grid">
-                ${missingDocs.map(doc => `
-                    <div class="analysis-note-card">
-                        <div class="analysis-note-header">
-                            <strong>${doc.file}</strong>
-                        </div>
-                        <div class="analysis-note-body">
-                            <p><strong>Purpose:</strong> ${doc.purpose}</p>
-                            <p><strong>Impact:</strong> ${doc.impact}</p>
-                        </div>
-                    </div>
-                `).join('')}
-            </div>
-        `;
-        container.appendChild(missingSection);
-    }
-    
-    // Render detection limitations
-    if (detectionLimitations.length > 0) {
-        const limitSection = document.createElement('div');
-        limitSection.className = 'analysis-note-section';
-        limitSection.style.marginTop = '2rem';
-        limitSection.innerHTML = `
-            <h3 class="subheading" style="margin-bottom: 1rem;">⚠️ Detection Limitations</h3>
-            <p class="caption" style="margin-bottom: 1rem;">Based on what was detected, these components were expected but not found:</p>
-            <div class="analysis-notes-grid">
-                ${detectionLimitations.map(limit => `
-                    <div class="analysis-note-card">
-                        <div class="analysis-note-header">
-                            <strong>${limit.area}</strong>
-                        </div>
-                        <div class="analysis-note-body">
-                            <p><strong>Observation:</strong> ${limit.limitation}</p>
-                            <p><strong>Note:</strong> ${limit.note}</p>
-                        </div>
-                    </div>
-                `).join('')}
-            </div>
-        `;
-        container.appendChild(limitSection);
-    }
-    
-    // Always include undetectable components info
-    const undetectableSection = document.createElement('div');
-    undetectableSection.className = 'analysis-note-section';
-    undetectableSection.style.marginTop = '2rem';
-    undetectableSection.innerHTML = `
-        <h3 class="subheading" style="margin-bottom: 1rem;">🔍 Undetectable Components</h3>
-        <p class="caption" style="margin-bottom: 1rem;">These components cannot be detected from repository analysis (inherent limitations):</p>
+    // Render what we looked for but didn't find in THIS scan
+    const notFoundSection = document.createElement('div');
+    notFoundSection.className = 'analysis-note-section';
+    notFoundSection.innerHTML = `
+        <h3 class="subheading" style="margin-bottom: 1rem;">🔍 Components Not Found in This Scan</h3>
+        <p class="caption" style="margin-bottom: 1rem;">We scanned for these components but did not find them in this repository. If present, they would enhance the AIBOM:</p>
         <div class="analysis-notes-grid">
-            <div class="analysis-note-card">
-                <div class="analysis-note-header"><strong>Training Data</strong></div>
-                <div class="analysis-note-body">
-                    <p>Training datasets are typically not stored in code repositories</p>
+            ${notFound.map(item => `
+                <div class="analysis-note-card">
+                    <div class="analysis-note-header">
+                        <strong>${item.category}: ${item.item}</strong>
+                    </div>
+                    <div class="analysis-note-body">
+                        <p><strong>What We Scanned:</strong> ${item.searched}</p>
+                        <p><strong>AIBOM Benefit:</strong> ${item.benefit}</p>
+                    </div>
                 </div>
-            </div>
-            <div class="analysis-note-card">
-                <div class="analysis-note-header"><strong>Model Weights</strong></div>
-                <div class="analysis-note-body">
-                    <p>Model weights are usually too large for git repositories</p>
-                </div>
-            </div>
-            <div class="analysis-note-card">
-                <div class="analysis-note-header"><strong>Runtime Performance</strong></div>
-                <div class="analysis-note-body">
-                    <p>Performance metrics require running the model</p>
-                </div>
-            </div>
-            <div class="analysis-note-card">
-                <div class="analysis-note-header"><strong>Actual Training Infrastructure</strong></div>
-                <div class="analysis-note-body">
-                    <p>Training may happen on different infrastructure than deployment</p>
-                </div>
-            </div>
-            <div class="analysis-note-card">
-                <div class="analysis-note-header"><strong>Model Bias/Fairness Metrics</strong></div>
-                <div class="analysis-note-body">
-                    <p>Bias metrics require evaluation on representative data</p>
-                </div>
-            </div>
+            `).join('')}
         </div>
     `;
-    container.appendChild(undetectableSection);
+    container.appendChild(notFoundSection);
 }
 
 function renderFindings(findings, repoUrl) {

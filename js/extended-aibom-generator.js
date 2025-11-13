@@ -416,119 +416,124 @@ function generateSummary(metadata, findings) {
 }
 
 /**
- * Extract analysis notes about missing or undetectable components
+ * Extract analysis notes about components not found in this scan
+ * PRACTICAL: What we scanned for but didn't find (scan-specific)
+ * NOT: Philosophical limitations that apply to all scans
  */
 function extractAnalysisNotes(findings, analysisResult) {
     const notes = {
-        missing_documentation: [],
-        undetectable_components: [],
-        detection_limitations: [],
+        not_found_in_scan: [],
         suggested_improvements: []
     };
     
-    // Check for missing documentation files from risk detector logs
+    // Check what we scanned for but didn't find
     const allFiles = findings.flatMap(f => f.evidence?.map(e => e.file) || []);
+    const hasDependencies = findings.some(f => f.category === 'dependencies');
+    const hasModels = findings.some(f => f.modelInfo);
+    const hasHardware = findings.some(f => f.category === 'hardware');
+    const hasInfrastructure = findings.some(f => f.category === 'infrastructure');
+    const hasGovernance = findings.some(f => f.category === 'governance');
+    const hasDataPipeline = findings.some(f => 
+        f.dependencyInfo?.name?.match(/datasets|pandas|numpy|sklearn|spacy|nltk/)
+    );
     
+    // Documentation we scanned for but didn't find
     if (!allFiles.some(f => f && f.toLowerCase().includes('readme'))) {
-        notes.missing_documentation.push({
-            file: 'README.md',
-            purpose: 'Project overview and usage instructions',
-            impact: 'Difficult to understand project purpose and usage'
+        notes.not_found_in_scan.push({
+            category: 'Documentation',
+            item: 'README.md',
+            searched: 'Scanned repository root and subdirectories',
+            benefit: 'Would provide project overview, usage instructions, and model documentation'
         });
     }
     
-    if (!allFiles.some(f => f && f.toLowerCase().includes('model'))) {
-        notes.missing_documentation.push({
-            file: 'MODEL_CARD.md',
-            purpose: 'Model documentation including intended use, limitations, and performance',
-            impact: 'Incomplete model governance and transparency'
+    if (hasModels && !allFiles.some(f => f && f.toLowerCase().includes('model'))) {
+        notes.not_found_in_scan.push({
+            category: 'Documentation',
+            item: 'MODEL_CARD.md',
+            searched: 'Scanned for model card files in repository',
+            benefit: 'Would document model intended use, limitations, performance, and ethical considerations'
         });
     }
     
     if (!allFiles.some(f => f && f.toLowerCase().includes('security'))) {
-        notes.missing_documentation.push({
-            file: 'SECURITY.md',
-            purpose: 'Security policy and vulnerability reporting procedures',
-            impact: 'No clear security disclosure process'
+        notes.not_found_in_scan.push({
+            category: 'Documentation',
+            item: 'SECURITY.md',
+            searched: 'Scanned repository root for security policy',
+            benefit: 'Would provide vulnerability reporting procedures and security contacts'
         });
     }
     
-    // Undetectable components (always true for code-based analysis)
-    notes.undetectable_components = [
-        {
-            component: 'Training Data',
-            reason: 'Training datasets are typically not stored in code repositories',
-            alternative: 'May be referenced in documentation or configuration files'
-        },
-        {
-            component: 'Model Weights',
-            reason: 'Model weights are usually too large for git repositories',
-            alternative: 'Check for model file references or download scripts'
-        },
-        {
-            component: 'Runtime Performance',
-            reason: 'Performance metrics require running the model',
-            alternative: 'Look for performance benchmarks in documentation'
-        },
-        {
-            component: 'Actual Training Infrastructure',
-            reason: 'Training may happen on different infrastructure than deployment',
-            alternative: 'Deployment infrastructure detected from configs'
-        },
-        {
-            component: 'Model Bias/Fairness Metrics',
-            reason: 'Bias metrics require evaluation on representative data',
-            alternative: 'Documented bias considerations may be found in model cards'
-        }
-    ];
+    // Hardware we scanned for but didn't find
+    if (!hasHardware && hasDependencies) {
+        notes.not_found_in_scan.push({
+            category: 'Hardware',
+            item: 'GPU/TPU/Specialized Compute',
+            searched: 'Scanned dependencies and code for CUDA, TensorRT, TPU patterns',
+            benefit: 'Would document compute requirements and infrastructure needs'
+        });
+    }
     
-    // Detection limitations based on what we found
-    const hasModels = findings.some(f => f.modelInfo);
-    const hasHardware = findings.some(f => f.category === 'hardware');
-    const hasInfra = findings.some(f => f.category === 'infrastructure');
-    const hasGovernance = findings.some(f => f.category === 'governance');
+    // Infrastructure we scanned for but didn't find
+    if (!hasInfrastructure && (hasModels || hasDependencies)) {
+        notes.not_found_in_scan.push({
+            category: 'Infrastructure',
+            item: 'Deployment Configuration',
+            searched: 'Scanned for Dockerfile, docker-compose.yml, Kubernetes configs, cloud platform usage',
+            benefit: 'Would document deployment environment and operational requirements'
+        });
+    }
     
+    // Governance we scanned for but didn't find
     if (hasModels && !hasGovernance) {
-        notes.detection_limitations.push({
-            area: 'Model Governance',
-            limitation: 'Models detected but no governance documentation found',
-            note: 'Governance documentation may exist but not in standard file names'
+        notes.not_found_in_scan.push({
+            category: 'Governance',
+            item: 'Model Governance Documentation',
+            searched: 'Scanned for limitations, ethical considerations, bias/fairness documentation',
+            benefit: 'Would document responsible AI practices and model constraints'
         });
     }
     
-    if (hasModels && !hasHardware) {
-        notes.detection_limitations.push({
-            area: 'Hardware Requirements',
-            limitation: 'Models detected but no specific hardware requirements found',
-            note: 'May use CPU-only inference or hardware not explicitly declared in dependencies'
+    // Data pipeline we scanned for but didn't find
+    if (hasModels && !hasDataPipeline) {
+        notes.not_found_in_scan.push({
+            category: 'Data Pipeline',
+            item: 'Data Processing Libraries',
+            searched: 'Scanned dependencies for data loading, preprocessing, feature engineering tools',
+            benefit: 'Would document data transformation and feature engineering process'
         });
     }
     
-    // Generate suggested improvements
-    if (notes.missing_documentation.length > 0) {
+    // Generate suggested improvements based on what wasn't found
+    const missingDocs = notes.not_found_in_scan.filter(n => n.category === 'Documentation');
+    const missingGovernance = notes.not_found_in_scan.find(n => n.category === 'Governance');
+    const missingInfra = notes.not_found_in_scan.find(n => n.category === 'Infrastructure');
+    
+    if (missingDocs.length > 0) {
         notes.suggested_improvements.push({
             priority: 'high',
             action: 'Add missing documentation files',
-            files: notes.missing_documentation.map(d => d.file),
+            files: missingDocs.map(d => d.item),
             benefit: 'Improves transparency and enables more complete AIBOM generation'
         });
     }
     
-    if (hasModels && !hasGovernance) {
+    if (missingGovernance) {
         notes.suggested_improvements.push({
             priority: 'high',
             action: 'Create model documentation',
-            files: ['MODEL_CARD.md'],
+            files: ['MODEL_CARD.md', 'LIMITATIONS.md'],
             benefit: 'Documents intended use, limitations, ethical considerations, and bias mitigation'
         });
     }
     
-    if (hasModels && notes.missing_documentation.some(d => d.file === 'SECURITY.md')) {
+    if (missingInfra && hasModels) {
         notes.suggested_improvements.push({
             priority: 'medium',
-            action: 'Establish security policy',
-            files: ['SECURITY.md'],
-            benefit: 'Provides clear process for reporting AI-related security issues'
+            action: 'Add deployment configuration',
+            files: ['Dockerfile', 'docker-compose.yml'],
+            benefit: 'Documents runtime environment and makes deployment reproducible'
         });
     }
     

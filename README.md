@@ -150,13 +150,16 @@ A comprehensive format that enhances standard BOMs with industry best practices 
 - Category breakdown
 - Risk level assessment
 
-**Analysis Notes:** *Transparency about limitations*
-- Missing documentation (with purpose and impact)
-- Undetectable components (training data, model weights, runtime metrics)
-- Detection limitations (context-specific gaps)
-- Suggested improvements (actionable recommendations)
+**Analysis Notes:** *Scan-specific gaps*
+- Components scanned for but not found in this repository
+- Documentation: README, MODEL_CARD, SECURITY files (if missing)
+- Hardware: GPU/TPU libraries (if not detected)
+- Infrastructure: Docker, Kubernetes, cloud configs (if not found)
+- Governance: Model documentation (if models present but no governance)
+- Data Pipeline: Data processing libraries (if not detected)
+- Actionable suggestions for improving AIBOM completeness
 
-> **Note:** Analysis notes document what could NOT be detected, providing transparency without treating gaps as "findings". This helps users understand AIBOM completeness and plan improvements.
+> **Note:** Analysis notes are **scan-specific** - they list what we actively searched for in THIS repository but didn't find. Not philosophical limitations, but practical gaps that could be filled.
 
 ## 🚀 How It Works
 
