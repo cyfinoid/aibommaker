@@ -611,19 +611,18 @@ body {
 }
 
 .code-preview {
-    /* background-color: var(--bg-primary);
-    border: 1px solid var(--text-secondary);
-    border-radius: 4px;
-    padding: 1.5rem; */
+    display: block;
     font-family: 'Courier New', 'Monaco', 'Menlo', monospace;
     font-size: 13px;
     color: var(--text-light);
     overflow-x: auto;
-    max-height: 1000px;
     overflow-y: auto;
     white-space: pre;
-    line-height: 1;
-    /* tab-size: 2; */
+    line-height: 1.4;
+    padding: 1rem;
+    margin: 0;
+    max-height: 600px;
+    height: auto;
     
     /* Custom scrollbar for better visibility */
     scrollbar-width: thin;
@@ -668,8 +667,11 @@ body {
     background-color: var(--bg-secondary);
     border: 1px solid rgba(80, 200, 120, 0.2);
     border-radius: 6px;
-    padding: 1rem;
+    padding: 0;
+    margin: 0;
     box-shadow: inset 0 2px 8px rgba(0, 0, 0, 0.3);
+    max-height: 600px;
+    overflow: hidden;
 }
 
 /* Light mode scrollbar adjustments */
@@ -689,6 +691,77 @@ body {
 
 [data-theme="light"] .tab-content pre {
     box-shadow: inset 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+/* Analysis Notes Section */
+.analysis-note-section {
+    margin-bottom: 2rem;
+}
+
+.analysis-notes-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+    gap: 1rem;
+    margin-top: 1rem;
+}
+
+.analysis-note-card {
+    background-color: var(--bg-secondary);
+    border: 1px solid rgba(80, 200, 120, 0.2);
+    border-radius: 8px;
+    padding: 1.25rem;
+    transition: all 0.2s ease;
+}
+
+.analysis-note-card:hover {
+    border-color: var(--text-primary);
+    box-shadow: 0 2px 8px rgba(80, 200, 120, 0.15);
+}
+
+.analysis-note-header {
+    color: var(--text-primary);
+    font-size: 1rem;
+    margin-bottom: 0.75rem;
+    padding-bottom: 0.5rem;
+    border-bottom: 1px solid rgba(80, 200, 120, 0.2);
+}
+
+.analysis-note-body p {
+    margin: 0.5rem 0;
+    font-size: 0.9rem;
+    color: var(--text-secondary);
+    line-height: 1.5;
+}
+
+.analysis-note-body strong {
+    color: var(--text-light);
+    font-weight: 600;
+}
+
+.info-message {
+    background-color: var(--bg-secondary);
+    border: 1px solid rgba(80, 200, 120, 0.3);
+    border-radius: 8px;
+    padding: 2rem;
+    text-align: center;
+}
+
+[data-theme="light"] .analysis-note-card {
+    background-color: var(--bg-primary);
+    border-color: rgba(45, 122, 79, 0.3);
+}
+
+[data-theme="light"] .analysis-note-card:hover {
+    border-color: var(--accent-green);
+    box-shadow: 0 2px 8px rgba(45, 122, 79, 0.15);
+}
+
+[data-theme="light"] .analysis-note-header {
+    border-bottom-color: rgba(45, 122, 79, 0.3);
+}
+
+[data-theme="light"] .info-message {
+    border-color: rgba(45, 122, 79, 0.3);
 }
 
 /* Syntax Highlighting */

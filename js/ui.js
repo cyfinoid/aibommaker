@@ -16,6 +16,164 @@ function renderScoreBadge(score, confidence) {
     badge.textContent = `Score: ${score} - ${confidence.label}`;
 }
 
+function renderAnalysisNotes(findings, analysisResult) {
+    const container = document.getElementById('analysis-notes-list');
+    container.innerHTML = '';
+    
+    // Extract analysis notes using the same logic as Extended AIBOM generator
+    const allFiles = findings.flatMap(f => f.evidence?.map(e => e.file) || []);
+    const hasModels = findings.some(f => f.modelInfo);
+    const hasHardware = findings.some(f => f.category === 'hardware');
+    const hasGovernance = findings.some(f => f.category === 'governance');
+    
+    const missingDocs = [];
+    const detectionLimitations = [];
+    
+    // Check for missing documentation
+    if (!allFiles.some(f => f && f.toLowerCase().includes('readme'))) {
+        missingDocs.push({
+            file: 'README.md',
+            purpose: 'Project overview and usage instructions',
+            impact: 'Difficult to understand project purpose and usage'
+        });
+    }
+    
+    if (!allFiles.some(f => f && f.toLowerCase().includes('model'))) {
+        missingDocs.push({
+            file: 'MODEL_CARD.md',
+            purpose: 'Model documentation including intended use, limitations, and performance',
+            impact: 'Incomplete model governance and transparency'
+        });
+    }
+    
+    if (!allFiles.some(f => f && f.toLowerCase().includes('security'))) {
+        missingDocs.push({
+            file: 'SECURITY.md',
+            purpose: 'Security policy and vulnerability reporting procedures',
+            impact: 'No clear security disclosure process'
+        });
+    }
+    
+    // Detection limitations
+    if (hasModels && !hasGovernance) {
+        detectionLimitations.push({
+            area: 'Model Governance',
+            limitation: 'Models detected but no governance documentation found',
+            note: 'Governance documentation may exist but not in standard file names'
+        });
+    }
+    
+    if (hasModels && !hasHardware) {
+        detectionLimitations.push({
+            area: 'Hardware Requirements',
+            limitation: 'Models detected but no specific hardware requirements found',
+            note: 'May use CPU-only inference or hardware not explicitly declared in dependencies'
+        });
+    }
+    
+    // If nothing to report, show a positive message
+    if (missingDocs.length === 0 && detectionLimitations.length === 0) {
+        container.innerHTML = `
+            <div class="info-message" style="padding: 2rem; text-align: center; color: var(--text-secondary);">
+                <p style="font-size: 1.1rem; margin-bottom: 0.5rem;">✅ Documentation appears complete</p>
+                <p style="font-size: 0.9rem;">All expected documentation files were found and the analysis was comprehensive.</p>
+            </div>
+        `;
+        return;
+    }
+    
+    // Render missing documentation
+    if (missingDocs.length > 0) {
+        const missingSection = document.createElement('div');
+        missingSection.className = 'analysis-note-section';
+        missingSection.innerHTML = `
+            <h3 class="subheading" style="margin-bottom: 1rem;">📄 Missing Documentation</h3>
+            <p class="caption" style="margin-bottom: 1rem;">The following standard documentation files were not found in the repository:</p>
+            <div class="analysis-notes-grid">
+                ${missingDocs.map(doc => `
+                    <div class="analysis-note-card">
+                        <div class="analysis-note-header">
+                            <strong>${doc.file}</strong>
+                        </div>
+                        <div class="analysis-note-body">
+                            <p><strong>Purpose:</strong> ${doc.purpose}</p>
+                            <p><strong>Impact:</strong> ${doc.impact}</p>
+                        </div>
+                    </div>
+                `).join('')}
+            </div>
+        `;
+        container.appendChild(missingSection);
+    }
+    
+    // Render detection limitations
+    if (detectionLimitations.length > 0) {
+        const limitSection = document.createElement('div');
+        limitSection.className = 'analysis-note-section';
+        limitSection.style.marginTop = '2rem';
+        limitSection.innerHTML = `
+            <h3 class="subheading" style="margin-bottom: 1rem;">⚠️ Detection Limitations</h3>
+            <p class="caption" style="margin-bottom: 1rem;">Based on what was detected, these components were expected but not found:</p>
+            <div class="analysis-notes-grid">
+                ${detectionLimitations.map(limit => `
+                    <div class="analysis-note-card">
+                        <div class="analysis-note-header">
+                            <strong>${limit.area}</strong>
+                        </div>
+                        <div class="analysis-note-body">
+                            <p><strong>Observation:</strong> ${limit.limitation}</p>
+                            <p><strong>Note:</strong> ${limit.note}</p>
+                        </div>
+                    </div>
+                `).join('')}
+            </div>
+        `;
+        container.appendChild(limitSection);
+    }
+    
+    // Always include undetectable components info
+    const undetectableSection = document.createElement('div');
+    undetectableSection.className = 'analysis-note-section';
+    undetectableSection.style.marginTop = '2rem';
+    undetectableSection.innerHTML = `
+        <h3 class="subheading" style="margin-bottom: 1rem;">🔍 Undetectable Components</h3>
+        <p class="caption" style="margin-bottom: 1rem;">These components cannot be detected from repository analysis (inherent limitations):</p>
+        <div class="analysis-notes-grid">
+            <div class="analysis-note-card">
+                <div class="analysis-note-header"><strong>Training Data</strong></div>
+                <div class="analysis-note-body">
+                    <p>Training datasets are typically not stored in code repositories</p>
+                </div>
+            </div>
+            <div class="analysis-note-card">
+                <div class="analysis-note-header"><strong>Model Weights</strong></div>
+                <div class="analysis-note-body">
+                    <p>Model weights are usually too large for git repositories</p>
+                </div>
+            </div>
+            <div class="analysis-note-card">
+                <div class="analysis-note-header"><strong>Runtime Performance</strong></div>
+                <div class="analysis-note-body">
+                    <p>Performance metrics require running the model</p>
+                </div>
+            </div>
+            <div class="analysis-note-card">
+                <div class="analysis-note-header"><strong>Actual Training Infrastructure</strong></div>
+                <div class="analysis-note-body">
+                    <p>Training may happen on different infrastructure than deployment</p>
+                </div>
+            </div>
+            <div class="analysis-note-card">
+                <div class="analysis-note-header"><strong>Model Bias/Fairness Metrics</strong></div>
+                <div class="analysis-note-body">
+                    <p>Bias metrics require evaluation on representative data</p>
+                </div>
+            </div>
+        </div>
+    `;
+    container.appendChild(undetectableSection);
+}
+
 function renderFindings(findings, repoUrl) {
     const container = document.getElementById('findings-list');
     container.innerHTML = '';
@@ -61,12 +219,49 @@ function renderFindings(findings, repoUrl) {
             <p class="finding-description">${finding.description}</p>
             ${finding.evidence && finding.evidence.length > 0 ? `
                 <div class="finding-evidence">
-                    ${finding.evidence.slice(0, 5).map(ev => `
+                    ${finding.evidence.slice(0, 5).map(ev => {
+                        // Build GitHub link with line number anchor
+                        let fileUrl = ev.url;
+                        
+                        // If we have a direct URL from GitHub API, use it (preserves commit SHA)
+                        if (!fileUrl) {
+                            // Build URL from repo URL and file path (fallback)
+                            fileUrl = `${repoUrl}/blob/main/${ev.file}`;
+                        }
+                        
+                        // Ensure URL has line anchor if we have line number
+                        if (ev.line && ev.line > 0) {
+                            // Remove existing line anchor if present, add correct one
+                            fileUrl = fileUrl.replace(/#L\d+$/, '') + `#L${ev.line}`;
+                        }
+                        
+                        const fileDisplay = ev.line && ev.line > 0 
+                            ? `${ev.file}:${ev.line}` 
+                            : ev.file;
+                        
+                        // Use snippet if available - show actual code, not generic message
+                        let snippetText = null;
+                        if (ev.snippet) {
+                            // Only show snippet if it's actual code (not generic messages)
+                            if (ev.snippet !== 'Found via GitHub Code Search' && 
+                                ev.snippet !== 'Found at line ' + ev.line &&
+                                ev.snippet.trim().length > 0) {
+                                snippetText = ev.snippet;
+                            }
+                        }
+                        
+                        // If no snippet but we have line number, show that
+                        if (!snippetText && ev.line) {
+                            snippetText = `Found at line ${ev.line}`;
+                        }
+                        
+                        return `
                         <div class="evidence-item">
-                            <a class="evidence-file" href="${repoUrl}/blob/main/${ev.file}" target="_blank">${ev.file}</a>
-                            ${ev.snippet ? `<pre class="evidence-snippet">${escapeHtml(ev.snippet)}</pre>` : ''}
+                            <a class="evidence-file" href="${fileUrl}" target="_blank">${fileDisplay}</a>
+                            ${snippetText ? `<pre class="evidence-snippet">${escapeHtml(snippetText)}</pre>` : ''}
                         </div>
-                    `).join('')}
+                    `;
+                    }).join('')}
                 </div>
             ` : ''}
         `;
@@ -292,7 +487,6 @@ document.addEventListener('DOMContentLoaded', () => {
             console.log('✅'.repeat(40));
             console.log(`📦 Repository:     ${result.repository.fullName}`);
             console.log(`⏱️  Total Duration: ${scanDuration}ms (${scanDurationSec}s)`);
-            console.log(`🎯 Score:          ${result.score} - ${result.confidence.label}`);
             console.log(`📝 Findings:       ${result.findings.length} total`);
             console.log(`🏷️  Categories:     ${new Set(result.findings.map(f => f.category)).size} unique`);
             console.log(`⏰ Completed:      ${scanEndTime.toLocaleTimeString()}`);
@@ -301,10 +495,13 @@ document.addEventListener('DOMContentLoaded', () => {
             hide(document.getElementById('loading-state'));
             show(form);
             show(document.getElementById('findings-section'));
+            show(document.getElementById('analysis-notes-section'));
             show(document.getElementById('bom-section'));
             
-            renderScoreBadge(result.score, result.confidence);
+            // Score badge removed - AIBOM focuses on what's found, not scoring
+            // renderScoreBadge(result.score, result.confidence);
             renderFindings(result.findings, result.repository.htmlUrl);
+            renderAnalysisNotes(result.findings, result);
             regenerateBOMs();
             
             document.getElementById('findings-section').scrollIntoView({ behavior: 'smooth' });
@@ -358,8 +555,16 @@ document.addEventListener('DOMContentLoaded', () => {
             if (content) {
                 const repo = currentAnalysis.repository.repo;
                 const date = new Date().toISOString().split('T')[0];
-                const ext = format.includes('xml') ? 'xml' : 'json';
-                const name = format.includes('spdx') ? 'spdx' : 'cyclonedx';
+                let ext, name;
+                
+                if (format === 'extended-aibom') {
+                    ext = 'json';
+                    name = 'extended-aibom';
+                } else {
+                    ext = format.includes('xml') ? 'xml' : 'json';
+                    name = format.includes('spdx') ? 'spdx' : 'cyclonedx';
+                }
+                
                 downloadFile(content, `${repo}-aibom-${name}-${date}.${ext}`, 
                            ext === 'xml' ? 'application/xml' : 'application/json');
                 showToast('Downloaded!');
@@ -389,6 +594,13 @@ document.addEventListener('DOMContentLoaded', () => {
         const content = document.getElementById('findings-content');
         content.classList.toggle('collapsed');
         this.textContent = content.classList.contains('collapsed') ? 'Expand Section' : 'Collapse All';
+    });
+    
+    // Collapse/Expand Analysis Notes section
+    document.getElementById('collapse-analysis-notes').addEventListener('click', function() {
+        const content = document.getElementById('analysis-notes-content');
+        content.classList.toggle('collapsed');
+        this.textContent = content.classList.contains('collapsed') ? 'Expand' : 'Collapse';
     });
     
     // Collapse/Expand BOM section
@@ -437,6 +649,12 @@ function regenerateBOMs() {
         renderBOMPreview('spdx', generatedBOMs['spdx']);
         const spdxSize = (generatedBOMs['spdx'].length / 1024).toFixed(2);
         console.log(`[BOM] ✓ SPDX generated (${spdxSize} KB)`);
+        
+        console.log('[BOM] Generating Extended AIBOM...');
+        generatedBOMs['extended-aibom'] = generateExtendedAIBOM(currentAnalysis, selected);
+        renderBOMPreview('extended-aibom', generatedBOMs['extended-aibom']);
+        const extendedSize = (generatedBOMs['extended-aibom'].length / 1024).toFixed(2);
+        console.log(`[BOM] ✓ Extended AIBOM generated (${extendedSize} KB)`);
         
         const elapsed = (performance.now() - startTime).toFixed(2);
         console.log(`\n[BOM] ⏱️  Generation time: ${elapsed}ms`);

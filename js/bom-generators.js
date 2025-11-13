@@ -53,7 +53,71 @@ function generateCycloneDXJson(analysisResult, selectedFindings) {
     
     // Group findings to create proper ML model components
     console.log('[BOM Generator] Creating components from findings...');
-    const { components: modelComponents, modelRefs, libraryRefs } = createMLModelComponents(selectedFindings);
+    const { components: modelComponents, modelRefs, libraryRefs, hardwareInfo, infraInfo, governanceInfo } = createMLModelComponents(selectedFindings);
+    
+    // Add hardware and infrastructure properties to main component
+    if (hardwareInfo.detected) {
+        bom.metadata.component.properties.push({
+            name: 'aibom:hardware:detected',
+            value: 'true'
+        });
+        if (hardwareInfo.types.length > 0) {
+            bom.metadata.component.properties.push({
+                name: 'aibom:hardware:types',
+                value: hardwareInfo.types.join(', ')
+            });
+        }
+        if (hardwareInfo.libraries.length > 0) {
+            bom.metadata.component.properties.push({
+                name: 'aibom:hardware:libraries',
+                value: hardwareInfo.libraries.join(', ')
+            });
+        }
+    }
+    
+    if (infraInfo.detected) {
+        bom.metadata.component.properties.push({
+            name: 'aibom:infrastructure:detected',
+            value: 'true'
+        });
+        const allPlatforms = [
+            ...infraInfo.platforms.containerization,
+            ...infraInfo.platforms.orchestration,
+            ...infraInfo.platforms.cloud,
+            ...infraInfo.platforms.mlops
+        ];
+        if (allPlatforms.length > 0) {
+            bom.metadata.component.properties.push({
+                name: 'aibom:infrastructure:platforms',
+                value: allPlatforms.join(', ')
+            });
+        }
+    }
+    
+    if (governanceInfo.count > 0) {
+        bom.metadata.component.properties.push({
+            name: 'aibom:governance:documented',
+            value: 'true'
+        });
+        if (governanceInfo.hasLimitations) {
+            bom.metadata.component.properties.push({
+                name: 'aibom:governance:limitations',
+                value: 'documented'
+            });
+        }
+        if (governanceInfo.hasBiasFairness) {
+            bom.metadata.component.properties.push({
+                name: 'aibom:governance:bias-fairness',
+                value: 'documented'
+            });
+        }
+        if (governanceInfo.hasEthical) {
+            bom.metadata.component.properties.push({
+                name: 'aibom:governance:ethical',
+                value: 'documented'
+            });
+        }
+    }
     
     console.log(`[BOM Generator] Created ${modelRefs.length} ML model components`);
     console.log(`[BOM Generator] Created ${libraryRefs.length} library components`);
@@ -116,6 +180,11 @@ function createMLModelComponents(findings) {
     const components = [];
     const modelMap = new Map();
     const libraryDeps = new Set(); // Track required libraries
+    
+    // Extract hardware and infrastructure info for metadata
+    const hardwareInfo = extractHardwareInfo(findings);
+    const infraInfo = extractInfraInfo(findings);
+    const governanceInfo = extractGovernanceInfo(findings);
     
     for (const finding of findings) {
         // Extract actual model information
@@ -307,19 +376,58 @@ function createMLModelComponents(findings) {
                         modelCard.considerations.useCases = useCaseTags;
                     }
                 } else {
-                    // Generic task for commercial models
-                    if (modelName.includes('gpt') || modelName.includes('claude') || modelName.includes('gemini')) {
+                    // Use explicit modelType from finding for better accuracy
+                    if (modelType === 'text-generation') {
                         modelCard.modelParameters.tasks.push({ task: 'text-generation' });
                         modelCard.modelParameters.inputs = [{ format: 'text' }];
                         modelCard.modelParameters.outputs = [{ format: 'text' }];
-                    } else if (modelName.includes('embedding')) {
+                        // Add architecture family if we can detect it from model name
+                        if (modelName.includes('llama')) {
+                            modelCard.modelParameters.architectureFamily = 'llama';
+                        } else if (modelName.includes('mistral') || modelName.includes('mixtral')) {
+                            modelCard.modelParameters.architectureFamily = 'mistral';
+                        } else if (modelName.includes('gemma')) {
+                            modelCard.modelParameters.architectureFamily = 'gemma';
+                        } else if (modelName.includes('phi')) {
+                            modelCard.modelParameters.architectureFamily = 'phi';
+                        } else if (modelName.includes('qwen')) {
+                            modelCard.modelParameters.architectureFamily = 'qwen';
+                        } else if (modelName.includes('deepseek')) {
+                            modelCard.modelParameters.architectureFamily = 'deepseek';
+                        }
+                    } else if (modelType === 'embeddings') {
                         modelCard.modelParameters.tasks.push({ task: 'feature-extraction' });
                         modelCard.modelParameters.inputs = [{ format: 'text' }];
                         modelCard.modelParameters.outputs = [{ format: 'vector' }];
+                    } else if (modelType === 'text-to-image') {
+                        modelCard.modelParameters.tasks.push({ task: 'text-to-image' });
+                        modelCard.modelParameters.inputs = [{ format: 'text' }];
+                        modelCard.modelParameters.outputs = [{ format: 'image' }];
+                    } else if (modelType === 'multimodal') {
+                        modelCard.modelParameters.tasks.push({ task: 'multimodal' });
+                        modelCard.modelParameters.inputs = [{ format: 'text' }, { format: 'image' }];
+                        modelCard.modelParameters.outputs = [{ format: 'text' }, { format: 'image' }];
+                    } else {
+                        // Fallback to name-based detection if type is unknown
+                        if (modelName.includes('gpt') || modelName.includes('claude') || modelName.includes('gemini') || 
+                            modelName.includes('llama') || modelName.includes('mistral') || modelName.includes('qwen')) {
+                            modelCard.modelParameters.tasks.push({ task: 'text-generation' });
+                            modelCard.modelParameters.inputs = [{ format: 'text' }];
+                            modelCard.modelParameters.outputs = [{ format: 'text' }];
+                        } else if (modelName.includes('embedding')) {
+                            modelCard.modelParameters.tasks.push({ task: 'feature-extraction' });
+                            modelCard.modelParameters.inputs = [{ format: 'text' }];
+                            modelCard.modelParameters.outputs = [{ format: 'vector' }];
+                        }
                     }
                 }
                 
-                component.modelCard = modelCard;
+                // Only add modelCard if it has content
+                if (modelCard.modelParameters.tasks.length > 0 || 
+                    Object.keys(modelCard.considerations).length > 0 ||
+                    modelCard.modelParameters.architectureFamily) {
+                    component.modelCard = modelCard;
+                }
                 
                 // Add detection metadata to properties
                 component.properties.push(
@@ -406,7 +514,14 @@ function createMLModelComponents(findings) {
     const libraryComponents = createLibraryComponents(libraryDeps, findings);
     components.push(...libraryComponents);
     
-    return { components, modelRefs: Array.from(modelMap.values()), libraryRefs: libraryComponents };
+    return { 
+        components, 
+        modelRefs: Array.from(modelMap.values()), 
+        libraryRefs: libraryComponents,
+        hardwareInfo,
+        infraInfo,
+        governanceInfo
+    };
 }
 
 function createLibraryComponents(libraryDeps, findings) {
@@ -884,6 +999,89 @@ function generateSPDXId() {
     const array = new Uint8Array(12);
     crypto.getRandomValues(array);
     return Array.from(array, byte => byte.toString(36)).join('').substring(0, 15);
+}
+
+/**
+ * Extract hardware information from findings
+ */
+function extractHardwareInfo(findings) {
+    const hardwareFindings = findings.filter(f => f.category === 'hardware');
+    const info = {
+        detected: hardwareFindings.length > 0,
+        types: [],
+        libraries: []
+    };
+    
+    for (const finding of hardwareFindings) {
+        if (finding.hardwareInfo) {
+            info.types.push(finding.hardwareInfo.type);
+            if (finding.hardwareInfo.libraries) {
+                info.libraries.push(...finding.hardwareInfo.libraries);
+            }
+        }
+    }
+    
+    info.types = [...new Set(info.types)];
+    info.libraries = [...new Set(info.libraries)];
+    
+    return info;
+}
+
+/**
+ * Extract infrastructure information from findings
+ */
+function extractInfraInfo(findings) {
+    const infraFindings = findings.filter(f => f.category === 'infrastructure');
+    const info = {
+        detected: infraFindings.length > 0,
+        platforms: {
+            containerization: [],
+            orchestration: [],
+            cloud: [],
+            mlops: []
+        }
+    };
+    
+    for (const finding of infraFindings) {
+        if (finding.infraInfo) {
+            const type = finding.infraInfo.type;
+            const platforms = finding.infraInfo.platforms || [];
+            
+            if (type in info.platforms) {
+                info.platforms[type].push(...platforms);
+            }
+        }
+    }
+    
+    // Deduplicate
+    for (const key in info.platforms) {
+        info.platforms[key] = [...new Set(info.platforms[key])];
+    }
+    
+    return info;
+}
+
+/**
+ * Extract governance information from findings
+ */
+function extractGovernanceInfo(findings) {
+    const governanceFindings = findings.filter(f => f.category === 'governance');
+    const info = {
+        hasLimitations: false,
+        hasBiasFairness: false,
+        hasEthical: false,
+        count: governanceFindings.length
+    };
+    
+    for (const finding of governanceFindings) {
+        if (finding.riskInfo) {
+            if (finding.riskInfo.type === 'limitations') info.hasLimitations = true;
+            if (finding.riskInfo.type === 'bias-fairness') info.hasBiasFairness = true;
+            if (finding.riskInfo.type === 'ethical') info.hasEthical = true;
+        }
+    }
+    
+    return info;
 }
 
 function escapeXml(str) {

@@ -18,14 +18,12 @@ async function metadataDetector({ repoMeta }) {
     const description = (repoMeta.description || '').toLowerCase();
     const topics = (repoMeta.topics || []).map(t => t.toLowerCase());
     const foundKeywords = new Set();
-    const evidence = [];
     
     console.log(`[Detector: Metadata] Checking ${keywords.length} keywords against description and ${topics.length} topics`);
     
     for (const keyword of keywords) {
         if (description.includes(keyword)) {
             foundKeywords.add(keyword);
-            evidence.push({ file: 'Repository Description', snippet: `Contains "${keyword}"` });
         }
     }
     
@@ -33,22 +31,15 @@ async function metadataDetector({ repoMeta }) {
         for (const keyword of keywords) {
             if (topic.includes(keyword)) {
                 foundKeywords.add(keyword);
-                evidence.push({ file: 'Repository Topics', snippet: `Topic: ${topic}` });
             }
         }
     }
     
     if (foundKeywords.size > 0) {
-        console.log(`[Detector: Metadata] ✓ Found ${foundKeywords.size} AI keywords:`, Array.from(foundKeywords));
-        findings.push({
-            id: 'metadata-ai-keywords',
-            title: 'AI/LLM Keywords in Metadata',
-            category: 'metadata',
-            severity: 'low',
-            weight: Math.min(foundKeywords.size, 3),
-            description: `Found ${foundKeywords.size} AI/LLM keywords: ${Array.from(foundKeywords).join(', ')}`,
-            evidence: evidence.slice(0, 5)
-        });
+        console.log(`[Detector: Metadata] ℹ️  Found ${foundKeywords.size} AI keywords in metadata:`, Array.from(foundKeywords));
+        console.log(`[Detector: Metadata] Note: Metadata keywords are logged but not included as AIBOM findings`);
+        console.log(`[Detector: Metadata] Reason: Repository metadata is already captured in BOM metadata, keywords don't represent actual components`);
+        // Don't create a finding - metadata is interesting for analysis but not a component
     } else {
         console.log('[Detector: Metadata] No AI keywords found in metadata');
     }
@@ -407,7 +398,7 @@ async function codeDetector({ tree, getFileContent, owner, repo, token, resumeSt
         const languages = repoMeta?.languages || [];
         
         // Pass SBOM intelligence to search function for optimization
-        const searchResult = await searchCodeViaAPI(owner, repo, token, resumeState, languages, sbomAvailable, detectedDependencies);
+        const searchResult = await searchCodeViaAPI(owner, repo, token, resumeState, languages, sbomAvailable, detectedDependencies, getFileContent);
         
         if (searchResult) {
             findings.push(...searchResult.findings);
@@ -525,7 +516,7 @@ async function codeDetector({ tree, getFileContent, owner, repo, token, resumeSt
     return { findings, paused: false, aiFilesFound };
 }
 
-async function searchCodeViaAPI(owner, repo, token, resumeState = null, languages = [], sbomAvailable = false, detectedDependencies = []) {
+async function searchCodeViaAPI(owner, repo, token, resumeState = null, languages = [], sbomAvailable = false, detectedDependencies = [], getFileContent = null) {
     const findings = resumeState?.findings || [];
     const sdkFindings = resumeState?.sdkFindings || new Map();
     
@@ -609,10 +600,31 @@ async function searchCodeViaAPI(owner, repo, token, resumeState = null, language
         }
         
         if (depNames.some(n => n.includes('langchain'))) {
+            // Generic LangChain import
             providerSearches['LangChain'].push(
-                { query: `from langchain ${codeExtensions}`, provider: 'LangChain' },
-                { query: `ChatOpenAI ${codeExtensions}`, provider: 'LangChain' }
+                { query: `from langchain ${codeExtensions}`, provider: 'LangChain' }
             );
+            
+            // Only search for ChatOpenAI if langchain-openai is installed
+            if (depNames.some(n => n.includes('langchain-openai') || n.includes('langchain_openai'))) {
+                providerSearches['LangChain'].push(
+                    { query: `ChatOpenAI ${codeExtensions}`, provider: 'LangChain-OpenAI' }
+                );
+            }
+            
+            // Only search for ChatGoogle if langchain-google is installed
+            if (depNames.some(n => n.includes('langchain-google') || n.includes('langchain_google'))) {
+                providerSearches['LangChain'].push(
+                    { query: `ChatGoogleGenerativeAI ${codeExtensions}`, provider: 'LangChain-Google' }
+                );
+            }
+            
+            // Only search for ChatAnthropic if langchain-anthropic is installed
+            if (depNames.some(n => n.includes('langchain-anthropic') || n.includes('langchain_anthropic'))) {
+                providerSearches['LangChain'].push(
+                    { query: `ChatAnthropic ${codeExtensions}`, provider: 'LangChain-Anthropic' }
+                );
+            }
         }
         
         if (depNames.some(n => n.includes('google') || n.includes('generativeai') || n.includes('gemini'))) {
@@ -752,9 +764,56 @@ async function searchCodeViaAPI(owner, repo, token, resumeState = null, language
             sdkFindings.set(key, { provider, files: new Set() });
         }
         
-        result.items.forEach(item => {
-            sdkFindings.get(key).files.add(item.path);
-        });
+        // Process items and fetch line numbers if we have snippets but no line numbers
+        for (const item of result.items) {
+            let lineNumber = item.line_number;
+            let snippet = item.snippet;
+            
+            // If we have a snippet but no line number, fetch the file to find the exact line
+            if (snippet && !lineNumber && item.path && getFileContent) {
+                try {
+                    const fileContent = await getFileContent(item.path);
+                    if (fileContent) {
+                        const lines = fileContent.split('\n');
+                        // Search for the snippet in the file
+                        for (let i = 0; i < lines.length; i++) {
+                            // Check if this line contains the matched text from snippet
+                            const line = lines[i];
+                            if (snippet && line.includes(snippet.substring(0, Math.min(30, snippet.length)))) {
+                                lineNumber = i + 1; // Line numbers are 1-indexed
+                                // Update snippet to be the actual line
+                                snippet = line.trim();
+                                break;
+                            }
+                        }
+                    }
+                } catch (error) {
+                    console.warn(`[Code Search] Could not fetch ${item.path} for line number:`, error.message);
+                }
+            }
+            
+            // Build GitHub URL with line anchor
+            // GitHub Search API returns html_url with commit SHA (e.g., .../blob/abc123/path)
+            let url = item.html_url || null;
+            if (url && lineNumber) {
+                // Remove existing line anchor if present, add new one
+                url = url.replace(/#L\d+$/, '') + `#L${lineNumber}`;
+            } else if (!url && lineNumber) {
+                // Build URL if we don't have one (fallback - use main branch)
+                url = `https://github.com/${owner}/${repo}/blob/main/${item.path}#L${lineNumber}`;
+            } else if (url && !lineNumber) {
+                // Keep original URL even without line number (it has commit SHA which is better than branch)
+            }
+            
+            // Store file path with line number and snippet
+            const fileInfo = {
+                path: item.path,
+                line: lineNumber,
+                url: url,
+                snippet: snippet
+            };
+            sdkFindings.get(key).files.add(JSON.stringify(fileInfo));
+        }
         
         console.log(`[Code Search] Found ${result.items.length} results for ${provider}`);
     }
@@ -777,6 +836,16 @@ function convertSearchToFindings(sdkFindings) {
             continue;
         }
         
+        // Parse file info (stored as JSON strings)
+        const fileInfos = Array.from(data.files).slice(0, 5).map(fileStr => {
+            try {
+                return JSON.parse(fileStr);
+            } catch {
+                // Fallback for old format (just path string)
+                return { path: fileStr, line: null, url: null };
+            }
+        });
+        
         findings.push({
             id: `code-sdk-search-${key}`,
             title: `${data.provider} SDK Usage Detected (via Search API)`,
@@ -784,9 +853,11 @@ function convertSearchToFindings(sdkFindings) {
             severity: 'high',
             weight: 5,
             description: `Found ${data.provider} SDK usage in ${data.files.size} file(s) using GitHub Search API`,
-            evidence: Array.from(data.files).slice(0, 5).map(file => ({
-                file,
-                snippet: 'Found via GitHub Code Search'
+            evidence: fileInfos.map(fileInfo => ({
+                file: fileInfo.path,
+                line: fileInfo.line,
+                url: fileInfo.url,
+                snippet: fileInfo.snippet || null // Don't add fallback text - let UI handle it
             })),
             filesFound: data.files.size // Track for filtering
         });
@@ -1190,13 +1261,40 @@ async function modelsIdentifierDetector({ tree, getFileContent, owner, repo, tok
         // Exclude known Google models that use org/model format
         { pattern: /["']([a-zA-Z0-9_-]+\/[a-zA-Z0-9_.-]+)["']/gi, provider: 'HuggingFace', model: 'extract', type: 'unknown' },
         
+        // HuggingFace explicit URL patterns (hf.co/)
+        { pattern: /["']?hf\.co\/([a-zA-Z0-9_-]+\/[a-zA-Z0-9_.-]+)(?::[a-zA-Z0-9_-]+)?["']?/gi, provider: 'HuggingFace', model: 'extract', type: 'unknown' },
+        
         // Mistral models
         { pattern: /["']?(mistral-large)["']?/gi, provider: 'Mistral', model: 'mistral-large', type: 'text-generation' },
         { pattern: /["']?(mixtral-8x7b)["']?/gi, provider: 'Mistral', model: 'mixtral-8x7b', type: 'text-generation' },
         
         // Cohere models
         { pattern: /["']?(command-r-plus)["']?/gi, provider: 'Cohere', model: 'command-r-plus', type: 'text-generation' },
-        { pattern: /["']?(command-r)["']?/gi, provider: 'Cohere', model: 'command-r', type: 'text-generation' }
+        { pattern: /["']?(command-r)["']?/gi, provider: 'Cohere', model: 'command-r', type: 'text-generation' },
+        { pattern: /["']?(command-a)["']?/gi, provider: 'Cohere', model: 'command-a', type: 'text-generation' },
+        
+        // Ollama/Local models
+        { pattern: /["']?(llama3\.3)["']?/gi, provider: 'Meta', model: 'llama3.3', type: 'text-generation' },
+        { pattern: /["']?(llama3\.2)["']?/gi, provider: 'Meta', model: 'llama3.2', type: 'text-generation' },
+        { pattern: /["']?(llama3\.1)["']?/gi, provider: 'Meta', model: 'llama3.1', type: 'text-generation' },
+        { pattern: /["']?(llama3)["']?/gi, provider: 'Meta', model: 'llama3', type: 'text-generation' },
+        { pattern: /["']?(codellama)["']?/gi, provider: 'Meta', model: 'codellama', type: 'text-generation' },
+        { pattern: /["']?(deepseek-coder-v2)["']?/gi, provider: 'DeepSeek', model: 'deepseek-coder-v2', type: 'text-generation' },
+        { pattern: /["']?(deepseek-r1)["']?/gi, provider: 'DeepSeek', model: 'deepseek-r1', type: 'text-generation' },
+        { pattern: /["']?(deepseek-v3)["']?/gi, provider: 'DeepSeek', model: 'deepseek-v3', type: 'text-generation' },
+        { pattern: /["']?(qwen2\.5)["']?/gi, provider: 'Alibaba', model: 'qwen2.5', type: 'text-generation' },
+        { pattern: /["']?(qwen2\.5-coder)["']?/gi, provider: 'Alibaba', model: 'qwen2.5-coder', type: 'text-generation' },
+        { pattern: /["']?(qwq)["']?/gi, provider: 'Alibaba', model: 'qwq', type: 'text-generation' },
+        { pattern: /["']?(gemma2)["']?/gi, provider: 'Google', model: 'gemma2', type: 'text-generation' },
+        { pattern: /["']?(gemma3)["']?/gi, provider: 'Google', model: 'gemma3', type: 'text-generation' },
+        { pattern: /["']?(phi4)["']?/gi, provider: 'Microsoft', model: 'phi4', type: 'text-generation' },
+        { pattern: /["']?(phi3)["']?/gi, provider: 'Microsoft', model: 'phi3', type: 'text-generation' },
+        { pattern: /["']?(mistral)["']?/gi, provider: 'Mistral', model: 'mistral', type: 'text-generation' },
+        { pattern: /["']?(medllama2)["']?/gi, provider: 'Meta', model: 'medllama2', type: 'text-generation' },
+        { pattern: /["']?(meditron)["']?/gi, provider: 'EPFL', model: 'meditron', type: 'text-generation' },
+        { pattern: /["']?(mathstral)["']?/gi, provider: 'Mistral', model: 'mathstral', type: 'text-generation' },
+        { pattern: /["']?(yi)["']?/gi, provider: '01.AI', model: 'yi', type: 'text-generation' },
+        { pattern: /["']?(athene-v2)["']?/gi, provider: 'Nexusflow', model: 'athene-v2', type: 'text-generation' }
     ];
     
     // Define exclusion list for non-code files
@@ -1532,6 +1630,627 @@ async function promptsDetector({ tree, getFileContent }) {
     
     console.log(`[Detector: Prompts] Complete. Findings: ${findings.length}`);
     return findings;
+}
+
+// ============================================================================
+// HARDWARE DETECTION
+// ============================================================================
+async function hardwareDetector({ tree, getFileContent, allFindings = [] }) {
+    console.log('[Detector: Hardware] Starting hardware detection...');
+    const findings = [];
+    const hardwareInfo = {
+        gpu: new Set(),
+        tpu: new Set(),
+        specialized: new Set(),
+        evidence: []
+    };
+    
+    // Check dependencies for hardware libraries
+    const depFindings = allFindings.filter(f => f.category === 'dependencies');
+    for (const depFinding of depFindings) {
+        const depName = depFinding.dependencyInfo?.name?.toLowerCase() || depFinding.title.toLowerCase();
+        
+        // Check GPU dependencies
+        for (const gpuDep of HARDWARE_PATTERNS.gpu.dependencies) {
+            if (depName.includes(gpuDep.toLowerCase())) {
+                hardwareInfo.gpu.add(gpuDep);
+                hardwareInfo.evidence.push({
+                    file: 'Dependencies',
+                    snippet: `GPU library: ${depFinding.dependencyInfo?.name || depFinding.title}`,
+                    type: 'GPU'
+                });
+            }
+        }
+        
+        // Check TPU dependencies
+        for (const tpuDep of HARDWARE_PATTERNS.tpu.dependencies) {
+            if (depName.includes(tpuDep.toLowerCase())) {
+                hardwareInfo.tpu.add(tpuDep);
+                hardwareInfo.evidence.push({
+                    file: 'Dependencies',
+                    snippet: `TPU library: ${depFinding.dependencyInfo?.name || depFinding.title}`,
+                    type: 'TPU'
+                });
+            }
+        }
+        
+        // Check specialized hardware dependencies
+        for (const specDep of HARDWARE_PATTERNS.specialized.dependencies) {
+            if (depName.includes(specDep.toLowerCase())) {
+                hardwareInfo.specialized.add(specDep);
+                hardwareInfo.evidence.push({
+                    file: 'Dependencies',
+                    snippet: `Specialized hardware: ${depFinding.dependencyInfo?.name || depFinding.title}`,
+                    type: 'specialized'
+                });
+            }
+        }
+    }
+    
+    // Scan code files for hardware usage patterns
+    const codeFiles = tree.filter(entry => 
+        entry.path.match(/\.(py|js|ts|ipynb)$/) && entry.type === 'blob'
+    );
+    
+    console.log(`[Detector: Hardware] Scanning ${Math.min(codeFiles.length, 50)} code files for hardware patterns...`);
+    
+    for (const file of codeFiles.slice(0, 50)) {
+        const content = await getFileContent(file.path);
+        if (!content) continue;
+        
+        // Check GPU patterns
+        for (const pattern of HARDWARE_PATTERNS.gpu.patterns) {
+            if (pattern.pattern.test(content)) {
+                hardwareInfo.gpu.add(pattern.type);
+                const match = content.match(pattern.pattern);
+                hardwareInfo.evidence.push({
+                    file: file.path,
+                    snippet: match ? match[0].substring(0, 100) : 'GPU usage detected',
+                    type: 'GPU'
+                });
+            }
+        }
+        
+        // Check TPU patterns
+        for (const pattern of HARDWARE_PATTERNS.tpu.patterns) {
+            if (pattern.pattern.test(content)) {
+                hardwareInfo.tpu.add(pattern.type);
+                const match = content.match(pattern.pattern);
+                hardwareInfo.evidence.push({
+                    file: file.path,
+                    snippet: match ? match[0].substring(0, 100) : 'TPU usage detected',
+                    type: 'TPU'
+                });
+            }
+        }
+        
+        // Check specialized hardware patterns
+        for (const pattern of HARDWARE_PATTERNS.specialized.patterns) {
+            if (pattern.pattern.test(content)) {
+                hardwareInfo.specialized.add(pattern.type);
+                const match = content.match(pattern.pattern);
+                hardwareInfo.evidence.push({
+                    file: file.path,
+                    snippet: match ? match[0].substring(0, 100) : `${pattern.type} usage detected`,
+                    type: 'specialized'
+                });
+            }
+        }
+    }
+    
+    // Create findings
+    if (hardwareInfo.gpu.size > 0) {
+        console.log(`[Detector: Hardware] ✓ Found GPU usage: ${Array.from(hardwareInfo.gpu).join(', ')}`);
+        findings.push({
+            id: 'hardware-gpu',
+            title: 'GPU Hardware Detected',
+            category: 'hardware',
+            severity: 'high',
+            weight: 4,
+            description: `GPU compute detected: ${Array.from(hardwareInfo.gpu).join(', ')}`,
+            evidence: hardwareInfo.evidence.filter(e => e.type === 'GPU').slice(0, 5),
+            hardwareInfo: {
+                type: 'GPU',
+                libraries: Array.from(hardwareInfo.gpu)
+            }
+        });
+    }
+    
+    if (hardwareInfo.tpu.size > 0) {
+        console.log(`[Detector: Hardware] ✓ Found TPU usage: ${Array.from(hardwareInfo.tpu).join(', ')}`);
+        findings.push({
+            id: 'hardware-tpu',
+            title: 'TPU Hardware Detected',
+            category: 'hardware',
+            severity: 'high',
+            weight: 4,
+            description: `TPU compute detected: ${Array.from(hardwareInfo.tpu).join(', ')}`,
+            evidence: hardwareInfo.evidence.filter(e => e.type === 'TPU').slice(0, 5),
+            hardwareInfo: {
+                type: 'TPU',
+                libraries: Array.from(hardwareInfo.tpu)
+            }
+        });
+    }
+    
+    if (hardwareInfo.specialized.size > 0) {
+        console.log(`[Detector: Hardware] ✓ Found specialized hardware: ${Array.from(hardwareInfo.specialized).join(', ')}`);
+        findings.push({
+            id: 'hardware-specialized',
+            title: 'Specialized Hardware Detected',
+            category: 'hardware',
+            severity: 'medium',
+            weight: 3,
+            description: `Specialized compute: ${Array.from(hardwareInfo.specialized).join(', ')}`,
+            evidence: hardwareInfo.evidence.filter(e => e.type === 'specialized').slice(0, 5),
+            hardwareInfo: {
+                type: 'specialized',
+                libraries: Array.from(hardwareInfo.specialized)
+            }
+        });
+    }
+    
+    console.log(`[Detector: Hardware] Complete. Findings: ${findings.length}`);
+    return findings;
+}
+
+// ============================================================================
+// INFRASTRUCTURE DETECTION
+// ============================================================================
+async function infrastructureDetector({ tree, getFileContent, allFindings = [] }) {
+    console.log('[Detector: Infrastructure] Starting infrastructure detection...');
+    const findings = [];
+    const infraInfo = {
+        containerization: new Set(),
+        orchestration: new Set(),
+        cloud: new Set(),
+        mlops: new Set(),
+        evidence: []
+    };
+    
+    // Check for containerization files (Docker)
+    const dockerFiles = tree.filter(entry => 
+        INFRASTRUCTURE_PATTERNS.containerization.files.some(f => 
+            entry.path.toLowerCase().endsWith(f.toLowerCase()) || 
+            entry.path.toLowerCase().includes(f.toLowerCase())
+        )
+    );
+    
+    console.log(`[Detector: Infrastructure] Found ${dockerFiles.length} containerization files`);
+    
+    for (const file of dockerFiles) {
+        const content = await getFileContent(file.path);
+        if (!content) continue;
+        
+        infraInfo.containerization.add('Docker');
+        
+        // Check specific Docker patterns
+        for (const pattern of INFRASTRUCTURE_PATTERNS.containerization.patterns) {
+            if (pattern.pattern.test(content)) {
+                infraInfo.containerization.add(pattern.platform);
+                const match = content.match(pattern.pattern);
+                infraInfo.evidence.push({
+                    file: file.path,
+                    snippet: match ? match[0].substring(0, 100) : pattern.platform,
+                    type: 'containerization'
+                });
+            }
+        }
+    }
+    
+    // Check for orchestration files (Kubernetes)
+    const k8sFiles = tree.filter(entry => 
+        INFRASTRUCTURE_PATTERNS.orchestration.files.some(f => 
+            entry.path.toLowerCase().includes(f.toLowerCase())
+        )
+    );
+    
+    console.log(`[Detector: Infrastructure] Found ${k8sFiles.length} orchestration files`);
+    
+    for (const file of k8sFiles) {
+        const content = await getFileContent(file.path);
+        if (!content) continue;
+        
+        for (const pattern of INFRASTRUCTURE_PATTERNS.orchestration.patterns) {
+            if (pattern.pattern.test(content)) {
+                infraInfo.orchestration.add(pattern.platform);
+                const match = content.match(pattern.pattern);
+                infraInfo.evidence.push({
+                    file: file.path,
+                    snippet: match ? match[0].substring(0, 100) : pattern.platform,
+                    type: 'orchestration'
+                });
+            }
+        }
+    }
+    
+    // Check for cloud patterns in code and config files
+    const configFiles = tree.filter(entry => 
+        entry.path.match(/\.(py|js|ts|yaml|yml|json|toml|ini|cfg)$/) && entry.type === 'blob'
+    );
+    
+    console.log(`[Detector: Infrastructure] Scanning ${Math.min(configFiles.length, 100)} files for cloud patterns...`);
+    
+    for (const file of configFiles.slice(0, 100)) {
+        const content = await getFileContent(file.path);
+        if (!content) continue;
+        
+        // Check cloud patterns
+        for (const pattern of INFRASTRUCTURE_PATTERNS.cloud.patterns) {
+            if (pattern.pattern.test(content)) {
+                infraInfo.cloud.add(pattern.platform);
+                const match = content.match(pattern.pattern);
+                infraInfo.evidence.push({
+                    file: file.path,
+                    snippet: match ? match[0].substring(0, 100) : pattern.platform,
+                    type: 'cloud'
+                });
+            }
+        }
+        
+        // Check MLOps patterns
+        for (const pattern of INFRASTRUCTURE_PATTERNS.mlops.patterns) {
+            if (pattern.pattern.test(content)) {
+                infraInfo.mlops.add(pattern.platform);
+                const match = content.match(pattern.pattern);
+                infraInfo.evidence.push({
+                    file: file.path,
+                    snippet: match ? match[0].substring(0, 100) : pattern.platform,
+                    type: 'mlops'
+                });
+            }
+        }
+    }
+    
+    // Check dependencies for MLOps tools
+    const depFindings = allFindings.filter(f => f.category === 'dependencies');
+    for (const depFinding of depFindings) {
+        const depName = depFinding.dependencyInfo?.name?.toLowerCase() || depFinding.title.toLowerCase();
+        
+        for (const mlopsDep of INFRASTRUCTURE_PATTERNS.mlops.dependencies) {
+            if (depName.includes(mlopsDep.toLowerCase())) {
+                infraInfo.mlops.add(mlopsDep);
+                infraInfo.evidence.push({
+                    file: 'Dependencies',
+                    snippet: `MLOps tool: ${depFinding.dependencyInfo?.name || depFinding.title}`,
+                    type: 'mlops'
+                });
+            }
+        }
+    }
+    
+    // Create findings
+    if (infraInfo.containerization.size > 0) {
+        console.log(`[Detector: Infrastructure] ✓ Found containerization: ${Array.from(infraInfo.containerization).join(', ')}`);
+        findings.push({
+            id: 'infra-containerization',
+            title: 'Containerization Detected',
+            category: 'infrastructure',
+            severity: 'medium',
+            weight: 3,
+            description: `Containerization platforms: ${Array.from(infraInfo.containerization).join(', ')}`,
+            evidence: infraInfo.evidence.filter(e => e.type === 'containerization').slice(0, 5),
+            infraInfo: {
+                type: 'containerization',
+                platforms: Array.from(infraInfo.containerization)
+            }
+        });
+    }
+    
+    if (infraInfo.orchestration.size > 0) {
+        console.log(`[Detector: Infrastructure] ✓ Found orchestration: ${Array.from(infraInfo.orchestration).join(', ')}`);
+        findings.push({
+            id: 'infra-orchestration',
+            title: 'Orchestration Detected',
+            category: 'infrastructure',
+            severity: 'medium',
+            weight: 3,
+            description: `Orchestration platforms: ${Array.from(infraInfo.orchestration).join(', ')}`,
+            evidence: infraInfo.evidence.filter(e => e.type === 'orchestration').slice(0, 5),
+            infraInfo: {
+                type: 'orchestration',
+                platforms: Array.from(infraInfo.orchestration)
+            }
+        });
+    }
+    
+    if (infraInfo.cloud.size > 0) {
+        console.log(`[Detector: Infrastructure] ✓ Found cloud platforms: ${Array.from(infraInfo.cloud).join(', ')}`);
+        findings.push({
+            id: 'infra-cloud',
+            title: 'Cloud Platform Detected',
+            category: 'infrastructure',
+            severity: 'high',
+            weight: 4,
+            description: `Cloud platforms: ${Array.from(infraInfo.cloud).join(', ')}`,
+            evidence: infraInfo.evidence.filter(e => e.type === 'cloud').slice(0, 5),
+            infraInfo: {
+                type: 'cloud',
+                platforms: Array.from(infraInfo.cloud)
+            }
+        });
+    }
+    
+    if (infraInfo.mlops.size > 0) {
+        console.log(`[Detector: Infrastructure] ✓ Found MLOps tools: ${Array.from(infraInfo.mlops).join(', ')}`);
+        findings.push({
+            id: 'infra-mlops',
+            title: 'MLOps Tools Detected',
+            category: 'infrastructure',
+            severity: 'medium',
+            weight: 3,
+            description: `MLOps platforms: ${Array.from(infraInfo.mlops).join(', ')}`,
+            evidence: infraInfo.evidence.filter(e => e.type === 'mlops').slice(0, 5),
+            infraInfo: {
+                type: 'mlops',
+                platforms: Array.from(infraInfo.mlops)
+            }
+        });
+    }
+    
+    console.log(`[Detector: Infrastructure] Complete. Findings: ${findings.length}`);
+    return findings;
+}
+
+// ============================================================================
+// DOCUMENTATION PARSER
+// ============================================================================
+async function documentationParser({ tree, getFileContent }) {
+    console.log('[Detector: Documentation] Starting documentation analysis...');
+    const parsedDocs = {
+        intendedUse: [],
+        limitations: [],
+        ethicalConsiderations: [],
+        biasInformation: [],
+        securityNotes: [],
+        files: []
+    };
+    
+    // Find documentation files
+    const docFiles = tree.filter(entry => 
+        DOCUMENTATION_FILES.some(docFile => 
+            entry.path.toLowerCase().endsWith(docFile.toLowerCase()) ||
+            entry.path.toLowerCase() === docFile.toLowerCase()
+        )
+    );
+    
+    console.log(`[Detector: Documentation] Found ${docFiles.length} documentation files`);
+    
+    for (const file of docFiles.slice(0, 20)) {
+        const content = await getFileContent(file.path);
+        if (!content) continue;
+        
+        parsedDocs.files.push(file.path);
+        const lowerContent = content.toLowerCase();
+        
+        // Extract sections by headers
+        const lines = content.split('\n');
+        let currentSection = '';
+        let currentContent = [];
+        
+        for (const line of lines) {
+            // Check for markdown headers
+            if (line.match(/^#{1,3}\s+/)) {
+                // Save previous section
+                if (currentSection && currentContent.length > 0) {
+                    const sectionText = currentContent.join(' ').substring(0, 500);
+                    
+                    if (currentSection.includes('intent') || currentSection.includes('purpose') || currentSection.includes('use case')) {
+                        parsedDocs.intendedUse.push({ file: file.path, text: sectionText });
+                    }
+                    if (currentSection.includes('limit') || currentSection.includes('constraint') || currentSection.includes('known issue')) {
+                        parsedDocs.limitations.push({ file: file.path, text: sectionText });
+                    }
+                    if (currentSection.includes('ethic') || currentSection.includes('responsible') || currentSection.includes('privacy')) {
+                        parsedDocs.ethicalConsiderations.push({ file: file.path, text: sectionText });
+                    }
+                    if (currentSection.includes('bias') || currentSection.includes('fairness') || currentSection.includes('demographic')) {
+                        parsedDocs.biasInformation.push({ file: file.path, text: sectionText });
+                    }
+                    if (currentSection.includes('security') || currentSection.includes('vulnerability') || currentSection.includes('cve')) {
+                        parsedDocs.securityNotes.push({ file: file.path, text: sectionText });
+                    }
+                }
+                
+                currentSection = line.toLowerCase();
+                currentContent = [];
+            } else if (line.trim()) {
+                currentContent.push(line.trim());
+            }
+        }
+        
+        // Check for keyword presence if no clear sections found
+        if (lowerContent.includes('intended use') || lowerContent.includes('purpose')) {
+            const match = content.match(/(?:intended use|purpose)[:\s]+(.*?)(?:\n\n|$)/is);
+            if (match && parsedDocs.intendedUse.length === 0) {
+                parsedDocs.intendedUse.push({ file: file.path, text: match[1].substring(0, 500) });
+            }
+        }
+    }
+    
+    console.log(`[Detector: Documentation] Extracted: ${parsedDocs.intendedUse.length} intended use, ${parsedDocs.limitations.length} limitations, ${parsedDocs.ethicalConsiderations.length} ethical considerations`);
+    
+    return parsedDocs;
+}
+
+// ============================================================================
+// RISK DETECTION
+// ============================================================================
+async function riskDetector({ tree, getFileContent, allFindings = [], parsedDocs = null }) {
+    console.log('[Detector: Risk] Starting risk assessment...');
+    const findings = [];
+    const risks = {
+        vulnerabilities: [],
+        deprecation: [],
+        bias: [],
+        limitations: [],
+        ethical: [],
+        missingDocs: []
+    };
+    
+    // Get parsed documentation if not provided
+    if (!parsedDocs) {
+        parsedDocs = await documentationParser({ tree, getFileContent });
+    }
+    
+    // Track missing critical documentation (for analysis notes, not findings)
+    const hasReadme = parsedDocs.files.some(f => f.toLowerCase().includes('readme'));
+    const hasModelCard = parsedDocs.files.some(f => f.toLowerCase().includes('model'));
+    const hasSecurity = parsedDocs.files.some(f => f.toLowerCase().includes('security'));
+    
+    if (!hasReadme) {
+        risks.missingDocs.push('No README.md found');
+    }
+    if (!hasModelCard) {
+        risks.missingDocs.push('No MODEL_CARD.md found');
+    }
+    if (!hasSecurity) {
+        risks.missingDocs.push('No SECURITY.md found');
+    }
+    
+    // Check dependencies for known issues
+    const depFindings = allFindings.filter(f => f.category === 'dependencies');
+    for (const depFinding of depFindings) {
+        const depName = depFinding.dependencyInfo?.name || '';
+        const depVersion = depFinding.dependencyInfo?.version || '';
+        
+        // Check for deprecated packages (heuristic - would need actual vulnerability DB)
+        if (depName.includes('deprecated') || depName.includes('legacy')) {
+            risks.deprecation.push({
+                package: depName,
+                version: depVersion,
+                note: 'Package name suggests deprecation'
+            });
+        }
+    }
+    
+    // Scan documentation for risk keywords
+    const allDocText = [
+        ...parsedDocs.intendedUse.map(d => d.text),
+        ...parsedDocs.limitations.map(d => d.text),
+        ...parsedDocs.ethicalConsiderations.map(d => d.text),
+        ...parsedDocs.biasInformation.map(d => d.text),
+        ...parsedDocs.securityNotes.map(d => d.text)
+    ].join(' ').toLowerCase();
+    
+    // Check for vulnerability mentions
+    for (const keyword of RISK_KEYWORDS.vulnerabilities) {
+        if (allDocText.includes(keyword.toLowerCase())) {
+            risks.vulnerabilities.push({
+                keyword,
+                found: 'Documentation mentions security concerns'
+            });
+        }
+    }
+    
+    // Check for deprecation mentions
+    for (const keyword of RISK_KEYWORDS.deprecation) {
+        if (allDocText.includes(keyword.toLowerCase())) {
+            risks.deprecation.push({
+                keyword,
+                found: 'Documentation mentions deprecation'
+            });
+        }
+    }
+    
+    // Check for bias/fairness mentions
+    for (const keyword of RISK_KEYWORDS.bias) {
+        if (allDocText.includes(keyword.toLowerCase())) {
+            risks.bias.push({
+                keyword,
+                found: 'Documentation discusses bias/fairness'
+            });
+        }
+    }
+    
+    // Check for limitation mentions
+    for (const keyword of RISK_KEYWORDS.limitations) {
+        if (allDocText.includes(keyword.toLowerCase())) {
+            risks.limitations.push({
+                keyword,
+                found: 'Documentation lists limitations'
+            });
+        }
+    }
+    
+    // Check for ethical mentions
+    for (const keyword of RISK_KEYWORDS.ethical) {
+        if (allDocText.includes(keyword.toLowerCase())) {
+            risks.ethical.push({
+                keyword,
+                found: 'Documentation addresses ethical considerations'
+            });
+        }
+    }
+    
+    // Log missing documentation but don't create findings (AIBOM documents what IS found, not what's missing)
+    if (risks.missingDocs.length > 0) {
+        console.log(`[Detector: Risk] ℹ️  Missing documentation noted (not a finding): ${risks.missingDocs.join(', ')}`);
+    }
+    
+    // Create findings only for POSITIVE indicators (what we found)
+    if (parsedDocs.limitations.length > 0) {
+        console.log(`[Detector: Risk] ✓ Found ${parsedDocs.limitations.length} documented limitations`);
+        findings.push({
+            id: 'risk-limitations-documented',
+            title: 'Limitations Documented',
+            category: 'governance',
+            severity: 'info',
+            weight: 0,
+            description: `Model limitations are documented in ${parsedDocs.limitations.length} location(s)`,
+            evidence: parsedDocs.limitations.slice(0, 3).map(l => ({ 
+                file: l.file, 
+                snippet: l.text.substring(0, 200) 
+            })),
+            riskInfo: {
+                type: 'limitations',
+                count: parsedDocs.limitations.length
+            }
+        });
+    }
+    
+    if (parsedDocs.biasInformation.length > 0) {
+        console.log(`[Detector: Risk] ✓ Found ${parsedDocs.biasInformation.length} bias/fairness discussions`);
+        findings.push({
+            id: 'risk-bias-documented',
+            title: 'Bias/Fairness Documented',
+            category: 'governance',
+            severity: 'info',
+            weight: 0,
+            description: `Bias and fairness considerations documented in ${parsedDocs.biasInformation.length} location(s)`,
+            evidence: parsedDocs.biasInformation.slice(0, 3).map(b => ({ 
+                file: b.file, 
+                snippet: b.text.substring(0, 200) 
+            })),
+            riskInfo: {
+                type: 'bias-fairness',
+                count: parsedDocs.biasInformation.length
+            }
+        });
+    }
+    
+    if (parsedDocs.ethicalConsiderations.length > 0) {
+        console.log(`[Detector: Risk] ✓ Found ${parsedDocs.ethicalConsiderations.length} ethical considerations`);
+        findings.push({
+            id: 'risk-ethics-documented',
+            title: 'Ethical Considerations Documented',
+            category: 'governance',
+            severity: 'info',
+            weight: 0,
+            description: `Ethical considerations documented in ${parsedDocs.ethicalConsiderations.length} location(s)`,
+            evidence: parsedDocs.ethicalConsiderations.slice(0, 3).map(e => ({ 
+                file: e.file, 
+                snippet: e.text.substring(0, 200) 
+            })),
+            riskInfo: {
+                type: 'ethical',
+                count: parsedDocs.ethicalConsiderations.length
+            }
+        });
+    }
+    
+    console.log(`[Detector: Risk] Complete. Findings: ${findings.length}`);
+    return { findings, risks, parsedDocs };
 }
 
 // ============================================================================

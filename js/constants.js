@@ -152,3 +152,132 @@ const MODEL_FILE_PATTERNS = [
     { filename: 'model_index.json', description: 'Model index file' }
 ];
 
+// Hardware detection patterns for GPU/TPU/specialized compute
+const HARDWARE_PATTERNS = {
+    gpu: {
+        dependencies: ['torch', 'tensorflow-gpu', 'cuda', 'cudnn', 'cupy', 'pycuda', 'cupy-cuda'],
+        patterns: [
+            { pattern: /cuda|gpu|nvidia/i, type: 'GPU', weight: 3 },
+            { pattern: /device\s*=\s*['"]cuda['"]/i, type: 'GPU', weight: 5 },
+            { pattern: /\.to\(['"]cuda['"]\)/i, type: 'GPU', weight: 5 },
+            { pattern: /\.cuda\(\)/i, type: 'GPU', weight: 5 },
+            { pattern: /torch\.cuda/i, type: 'GPU', weight: 5 },
+            { pattern: /tf\.config\.experimental\.list_physical_devices\(['"]GPU['"]\)/i, type: 'GPU', weight: 5 }
+        ]
+    },
+    tpu: {
+        dependencies: ['tensorflow', 'jax', 'cloud-tpu-client'],
+        patterns: [
+            { pattern: /tpu/i, type: 'TPU', weight: 4 },
+            { pattern: /tf\.distribute\.TPUStrategy/i, type: 'TPU', weight: 5 },
+            { pattern: /jax\.devices\(['"]tpu['"]\)/i, type: 'TPU', weight: 5 }
+        ]
+    },
+    specialized: {
+        dependencies: ['tensorrt', 'openvino', 'onnxruntime-gpu', 'onnxruntime', 'coreml'],
+        patterns: [
+            { pattern: /tensorrt/i, type: 'TensorRT', weight: 4 },
+            { pattern: /openvino/i, type: 'OpenVINO', weight: 4 },
+            { pattern: /onnxruntime/i, type: 'ONNX Runtime', weight: 4 },
+            { pattern: /coreml/i, type: 'CoreML', weight: 4 }
+        ]
+    }
+};
+
+// Infrastructure and deployment patterns
+const INFRASTRUCTURE_PATTERNS = {
+    containerization: {
+        files: ['Dockerfile', 'docker-compose.yml', 'docker-compose.yaml', '.dockerignore'],
+        patterns: [
+            { pattern: /FROM\s+nvidia\/cuda/i, platform: 'Docker + NVIDIA CUDA', weight: 5 },
+            { pattern: /FROM\s+pytorch\/pytorch/i, platform: 'Docker + PyTorch', weight: 5 },
+            { pattern: /FROM\s+tensorflow\/tensorflow/i, platform: 'Docker + TensorFlow', weight: 5 },
+            { pattern: /FROM\s+huggingface/i, platform: 'Docker + HuggingFace', weight: 5 },
+            { pattern: /--gpus/i, platform: 'Docker GPU', weight: 4 },
+            { pattern: /runtime:\s*nvidia/i, platform: 'Docker NVIDIA Runtime', weight: 5 }
+        ]
+    },
+    orchestration: {
+        files: ['deployment.yaml', 'deployment.yml', 'service.yaml', 'service.yml', 
+                'pod.yaml', 'pod.yml', 'kustomization.yaml', 'helm-chart.yaml'],
+        patterns: [
+            { pattern: /kind:\s*Deployment/i, platform: 'Kubernetes', weight: 5 },
+            { pattern: /kind:\s*Service/i, platform: 'Kubernetes', weight: 4 },
+            { pattern: /kind:\s*Pod/i, platform: 'Kubernetes', weight: 4 },
+            { pattern: /nvidia\.com\/gpu/i, platform: 'Kubernetes GPU', weight: 5 }
+        ]
+    },
+    cloud: {
+        patterns: [
+            { pattern: /sagemaker/i, platform: 'AWS SageMaker', weight: 5 },
+            { pattern: /aws\.sagemaker/i, platform: 'AWS SageMaker', weight: 5 },
+            { pattern: /vertex-ai|vertexai/i, platform: 'GCP Vertex AI', weight: 5 },
+            { pattern: /google\.cloud\.aiplatform/i, platform: 'GCP AI Platform', weight: 5 },
+            { pattern: /azureml|azure-ml/i, platform: 'Azure ML', weight: 5 },
+            { pattern: /from\s+azureml/i, platform: 'Azure ML', weight: 5 },
+            { pattern: /bedrock/i, platform: 'AWS Bedrock', weight: 5 },
+            { pattern: /modal\.com|modal\.run/i, platform: 'Modal', weight: 4 },
+            { pattern: /replicate\.com/i, platform: 'Replicate', weight: 4 }
+        ]
+    },
+    mlops: {
+        dependencies: ['mlflow', 'wandb', 'tensorboard', 'clearml', 'neptune-client', 'comet-ml'],
+        patterns: [
+            { pattern: /mlflow/i, platform: 'MLflow', weight: 4 },
+            { pattern: /wandb/i, platform: 'Weights & Biases', weight: 4 },
+            { pattern: /tensorboard/i, platform: 'TensorBoard', weight: 3 },
+            { pattern: /clearml/i, platform: 'ClearML', weight: 4 }
+        ]
+    }
+};
+
+// Documentation files for governance and model cards
+const DOCUMENTATION_FILES = [
+    'README.md', 'readme.md', 'Readme.md',
+    'MODEL_CARD.md', 'model-card.md', 'ModelCard.md', 'model_card.md',
+    'SECURITY.md', 'security.md', 'Security.md',
+    'LIMITATIONS.md', 'limitations.md', 'Limitations.md',
+    'ETHICS.md', 'ethics.md', 'Ethics.md',
+    'FAIRNESS.md', 'fairness.md',
+    'BIAS.md', 'bias.md',
+    'CONTRIBUTING.md', 'contributing.md',
+    'CODE_OF_CONDUCT.md', 'code_of_conduct.md'
+];
+
+// Data pipeline and preprocessing patterns
+const DATA_PIPELINE_PATTERNS = {
+    loading: {
+        dependencies: ['datasets', 'huggingface-datasets', 'pandas', 'numpy', 'dask', 'ray'],
+        patterns: [
+            { pattern: /datasets\.load_dataset/i, tool: 'HuggingFace Datasets', weight: 4 },
+            { pattern: /pd\.read_csv|pd\.read_json|pd\.read_parquet/i, tool: 'Pandas', weight: 3 },
+            { pattern: /np\.load|np\.loadtxt/i, tool: 'NumPy', weight: 2 }
+        ]
+    },
+    preprocessing: {
+        dependencies: ['scikit-learn', 'sklearn', 'nltk', 'spacy', 'transformers', 'torchvision', 'albumentations'],
+        patterns: [
+            { pattern: /from\s+sklearn\.preprocessing/i, tool: 'scikit-learn preprocessing', weight: 3 },
+            { pattern: /AutoTokenizer|Tokenizer/i, tool: 'Tokenization', weight: 4 },
+            { pattern: /transforms\.|Compose\(/i, tool: 'Data augmentation', weight: 3 },
+            { pattern: /ImageDataGenerator|augment/i, tool: 'Image augmentation', weight: 3 }
+        ]
+    },
+    feature_engineering: {
+        patterns: [
+            { pattern: /FeatureExtractor|feature_extraction/i, tool: 'Feature extraction', weight: 3 },
+            { pattern: /TfidfVectorizer|CountVectorizer/i, tool: 'Text vectorization', weight: 3 },
+            { pattern: /PCA|TSNE|UMAP/i, tool: 'Dimensionality reduction', weight: 3 }
+        ]
+    }
+};
+
+// Risk and security keywords
+const RISK_KEYWORDS = {
+    vulnerabilities: ['vulnerability', 'CVE', 'security advisory', 'exploit', 'patch'],
+    deprecation: ['deprecated', 'unmaintained', 'obsolete', 'end of life', 'EOL'],
+    bias: ['bias', 'fairness', 'discrimination', 'equity', 'demographic parity'],
+    limitations: ['limitation', 'constraint', 'does not support', 'not recommended', 'known issue'],
+    ethical: ['ethical', 'privacy', 'consent', 'harmful', 'misuse', 'dual use']
+};
+

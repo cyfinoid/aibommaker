@@ -75,7 +75,6 @@
                 </div>
                 <div style="display: flex; align-items: center; gap: 1rem;">
                     <button id="collapse-all-findings" class="section-collapse-btn">Collapse All</button>
-                    <div id="score-badge" class="score-badge"></div>
                 </div>
             </div>
             
@@ -95,12 +94,31 @@
                             <option value="ci">CI/CD</option>
                             <option value="models">Models</option>
                             <option value="prompts">Prompts</option>
-                            <option value="metadata">Metadata</option>
+                            <option value="hardware">Hardware</option>
+                            <option value="infrastructure">Infrastructure</option>
+                            <option value="governance">Governance</option>
                         </select>
                     </div>
                 </div>
 
                 <div id="findings-list" class="findings-list"></div>
+            </div>
+        </section>
+
+        <!-- Analysis Notes Section -->
+        <section id="analysis-notes-section" class="card hidden">
+            <div class="findings-header">
+                <div>
+                    <h2 class="heading">Analysis Notes</h2>
+                    <p class="caption" style="margin-top: 0.5rem;">Information about what could not be detected or is missing from the repository</p>
+                </div>
+                <div style="display: flex; align-items: center; gap: 1rem;">
+                    <button id="collapse-analysis-notes" class="section-collapse-btn">Collapse</button>
+                </div>
+            </div>
+            
+            <div class="collapsible-content" id="analysis-notes-content">
+                <div id="analysis-notes-list"></div>
             </div>
         </section>
 
@@ -116,6 +134,7 @@
                     <button class="tab-btn active" data-tab="cyclonedx-json">CycloneDX JSON</button>
                     <button class="tab-btn" data-tab="cyclonedx-xml">CycloneDX XML</button>
                     <button class="tab-btn" data-tab="spdx">SPDX</button>
+                    <button class="tab-btn" data-tab="extended-aibom">Extended AIBOM</button>
                 </div>
 
                 <div class="bom-content">
@@ -153,6 +172,23 @@
                         </button>
                     </div>
                     <pre><code id="spdx-preview" class="code-preview"></code></pre>
+                </div>
+                
+                <div id="extended-aibom" class="tab-content">
+                    <div class="bom-actions">
+                        <button class="btn btn-secondary" data-action="copy" data-format="extended-aibom">
+                            Copy to Clipboard
+                        </button>
+                        <button class="btn btn-primary" data-action="download" data-format="extended-aibom">
+                            Download Extended AIBOM
+                        </button>
+                    </div>
+                    <div class="extended-info" style="margin-bottom: 1rem; padding: 1rem; background: var(--bg-secondary); border-radius: 8px;">
+                        <p style="margin: 0; color: var(--text-secondary); font-size: 0.9rem;">
+                            📋 <strong>Extended AIBOM Format:</strong> Comprehensive AI Bill of Materials including hardware, infrastructure, model governance, risk assessment, and data pipeline information based on industry best practices from Snyk and Trail of Bits.
+                        </p>
+                    </div>
+                    <pre><code id="extended-aibom-preview" class="code-preview"></code></pre>
                 </div>
             </div>
             </div>
@@ -227,6 +263,7 @@
     <script src="js/detectors.js"></script>
     <script src="js/analyzer.js"></script>
     <script src="js/bom-generators.js"></script>
+    <script src="js/extended-aibom-generator.js"></script>
     <script src="js/ui.js"></script>
 </body>
 </html>

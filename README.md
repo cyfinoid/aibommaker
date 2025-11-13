@@ -66,6 +66,33 @@ SDK imports and API calls with precise line numbers
 ### Configuration
 Model names and API keys in config files
 
+### Hardware Requirements
+Detects specialized compute requirements:
+- **GPU**: CUDA, cuDNN, PyTorch GPU, TensorFlow GPU
+- **TPU**: TensorFlow TPU, JAX TPU configurations
+- **Specialized**: TensorRT, OpenVINO, ONNX Runtime
+
+### Infrastructure & Deployment
+Identifies deployment platforms and tools:
+- **Containerization**: Docker, Docker Compose, GPU-enabled containers
+- **Orchestration**: Kubernetes deployments and services
+- **Cloud Platforms**: AWS SageMaker, GCP Vertex AI, Azure ML, AWS Bedrock
+- **MLOps**: MLflow, Weights & Biases, TensorBoard, ClearML
+
+### Governance & Documentation
+Analyzes model documentation for responsible AI:
+- **Intended Use**: Purpose and use case documentation
+- **Limitations**: Known constraints and limitations
+- **Ethical Considerations**: Privacy, consent, responsible use
+- **Bias & Fairness**: Demographic parity, fairness assessments
+
+### Risk Assessment
+Evaluates security and compliance risks:
+- **Missing Documentation**: README, MODEL_CARD, SECURITY files
+- **Vulnerabilities**: Deprecated packages, known issues
+- **Compliance**: Documentation completeness scoring
+- **Recommendations**: Actionable improvement suggestions
+
 ## 🎓 AI-Assisted Development
 
 This project was developed with **Cursor IDE** and **Claude Code**. All AI-generated code has been reviewed and validated to ensure quality and correctness. 
@@ -83,6 +110,53 @@ This project was developed with **Cursor IDE** and **Claude Code**. All AI-gener
 - Provider attribution and model types
 - Detection method provenance
 - Standards-compliant relationships
+
+### Extended AIBOM Format (JSON)
+A comprehensive format that enhances standard BOMs with industry best practices from [Snyk](https://snyk.io/articles/ai-security/ai-bill-of-materials-aibom/) and [Trail of Bits](https://blog.trailofbits.com/2024/02/28/our-response-to-the-us-armys-rfi-on-developing-aibom-tools/):
+
+**Hardware Detection:**
+- GPU/TPU/specialized compute requirements
+- CUDA, TensorRT, OpenVINO detection
+- Hardware libraries and dependencies
+
+**Infrastructure & Deployment:**
+- Containerization (Docker, container images)
+- Orchestration (Kubernetes)
+- Cloud platforms (AWS SageMaker, GCP Vertex AI, Azure ML)
+- MLOps tools (MLflow, Weights & Biases, TensorBoard)
+
+**Model Governance:**
+- Documented intended use
+- Limitations and constraints
+- Ethical considerations
+- Bias and fairness assessments
+- Model provenance
+
+**Risk Assessment:**
+- Missing documentation warnings
+- Security considerations
+- Deprecated dependencies
+- Overall risk level evaluation
+- Actionable recommendations
+
+**Data Pipeline:**
+- Data loading libraries
+- Preprocessing frameworks
+- Feature engineering tools
+- ML frameworks
+
+**Summary Statistics:**
+- Documentation completeness score
+- Category breakdown
+- Risk level assessment
+
+**Analysis Notes:** *Transparency about limitations*
+- Missing documentation (with purpose and impact)
+- Undetectable components (training data, model weights, runtime metrics)
+- Detection limitations (context-specific gaps)
+- Suggested improvements (actionable recommendations)
+
+> **Note:** Analysis notes document what could NOT be detected, providing transparency without treating gaps as "findings". This helps users understand AIBOM completeness and plan improvements.
 
 ## 🚀 How It Works
 

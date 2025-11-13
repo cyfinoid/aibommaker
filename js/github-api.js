@@ -109,9 +109,15 @@ async function searchCodeInRepo(owner, repo, query, token = null) {
     
     try {
         const searchQuery = encodeURIComponent(`${query} repo:${owner}/${repo}`);
+        // Request text_matches to get line numbers and code snippets
         const response = await fetch(
             `${GITHUB_API_BASE}/search/code?q=${searchQuery}&per_page=100`,
-            { headers }
+            { 
+                headers: {
+                    ...headers,
+                    'Accept': 'application/vnd.github.v3.text-match+json' // Request text matches
+                }
+            }
         );
         
         // Check rate limit headers
@@ -135,9 +141,68 @@ async function searchCodeInRepo(owner, repo, query, token = null) {
         
         const data = await response.json();
         
+        // Enhance items with line numbers and snippets from text_matches
+        // Note: GitHub Search API fragments don't include line numbers, so we extract snippets
+        // and will fetch file content later if line numbers are needed
+        const enhancedItems = (data.items || []).map((item) => {
+            let snippet = null;
+            const matchedText = item.text_matches && item.text_matches.length > 0 
+                ? (item.text_matches[0].matches && item.text_matches[0].matches.length > 0 
+                    ? item.text_matches[0].matches[0].text 
+                    : null)
+                : null;
+            
+            // Extract code snippet from fragment
+            if (item.text_matches && item.text_matches.length > 0) {
+                const match = item.text_matches[0];
+                const fragment = match.fragment || '';
+                
+                if (fragment) {
+                    const lines = fragment.split('\n');
+                    
+                    // Find the line containing the matched text
+                    for (let i = 0; i < lines.length; i++) {
+                        const line = lines[i].trim();
+                        // Skip empty lines and line number markers
+                        if (!line || line.match(/^\d+:$/)) continue;
+                        
+                        // If this line contains the matched text, use it
+                        if (matchedText && line.includes(matchedText)) {
+                            snippet = line;
+                            break;
+                        }
+                    }
+                    
+                    // If no match found, use the first substantial line
+                    if (!snippet) {
+                        snippet = lines.find(l => {
+                            const trimmed = l.trim();
+                            return trimmed && !trimmed.match(/^\d+:$/) && trimmed.length > 5;
+                        })?.trim();
+                    }
+                    
+                    // Last resort: use fragment directly (truncated)
+                    if (!snippet) {
+                        snippet = fragment.replace(/\n/g, ' ').substring(0, 150).trim();
+                    }
+                }
+            }
+            
+            // Use matched text as fallback snippet
+            if (!snippet && matchedText) {
+                snippet = matchedText;
+            }
+            
+            return {
+                ...item,
+                line_number: null, // Will be fetched later if needed
+                snippet: snippet
+            };
+        });
+        
         // Return both results and rate limit info
         return {
-            items: data.items || [],
+            items: enhancedItems,
             rateLimit: {
                 remaining,
                 limit,
