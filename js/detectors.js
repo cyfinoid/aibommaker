@@ -1884,7 +1884,7 @@ async function infrastructureDetector({ tree, getFileContent, allFindings = [] }
                         file: file.path,
                         snippet: match ? match[0].substring(0, 100) : pattern.platform,
                         type: 'orchestration'
-                    });
+        });
                 } else {
                     console.log(`[Detector: Infrastructure] ℹ️  Found generic Kubernetes pattern in ${file.path}: ${pattern.platform}`);
                     console.log(`[Detector: Infrastructure] Note: Generic Kubernetes is deployment infrastructure, not an AIBOM component`);

@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.0.1] - 2025-01-XX
+
 ### Added
 
 #### Enhanced Model Detection
@@ -162,6 +164,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Score badge removed from Analysis Results header
   - Console logging simplified to remove scoring metrics
   - Focus shifted from scoring to comprehensive documentation
+- **Fixed insecure URL substring validation in Go module detection**
+  - Replaced `includes('github.com/')` with proper regex validation
+  - Prevents false positives from malicious URLs (e.g., `malicious.com/github.com/package`)
+  - Now validates that `github.com` is the actual domain, not just a substring
+  - Supports Go module formats: `github.com/owner/repo`, `https://github.com/owner/repo`, `git@github.com:owner/repo`
+- **Added GitHub SBOM download link to dependency findings**
+  - Evidence for dependencies detected via GitHub SBOM API now includes clickable link
+  - Links to `https://github.com/{owner}/{repo}/network/dependencies` for SBOM download
+  - Improves user experience by providing direct access to GitHub's dependency graph
 
 ### Technical Details
 

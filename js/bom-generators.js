@@ -411,13 +411,13 @@ function createMLModelComponents(findings) {
                         // Fallback to name-based detection if type is unknown
                         if (modelName.includes('gpt') || modelName.includes('claude') || modelName.includes('gemini') || 
                             modelName.includes('llama') || modelName.includes('mistral') || modelName.includes('qwen')) {
-                            modelCard.modelParameters.tasks.push({ task: 'text-generation' });
-                            modelCard.modelParameters.inputs = [{ format: 'text' }];
-                            modelCard.modelParameters.outputs = [{ format: 'text' }];
-                        } else if (modelName.includes('embedding')) {
-                            modelCard.modelParameters.tasks.push({ task: 'feature-extraction' });
-                            modelCard.modelParameters.inputs = [{ format: 'text' }];
-                            modelCard.modelParameters.outputs = [{ format: 'vector' }];
+                        modelCard.modelParameters.tasks.push({ task: 'text-generation' });
+                        modelCard.modelParameters.inputs = [{ format: 'text' }];
+                        modelCard.modelParameters.outputs = [{ format: 'text' }];
+                    } else if (modelName.includes('embedding')) {
+                        modelCard.modelParameters.tasks.push({ task: 'feature-extraction' });
+                        modelCard.modelParameters.inputs = [{ format: 'text' }];
+                        modelCard.modelParameters.outputs = [{ format: 'vector' }];
                         }
                     }
                 }
@@ -426,7 +426,7 @@ function createMLModelComponents(findings) {
                 if (modelCard.modelParameters.tasks.length > 0 || 
                     Object.keys(modelCard.considerations).length > 0 ||
                     modelCard.modelParameters.architectureFamily) {
-                    component.modelCard = modelCard;
+                component.modelCard = modelCard;
                 }
                 
                 // Add detection metadata to properties
