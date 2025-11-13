@@ -256,7 +256,14 @@ function detectEcosystemFromSPDX(pkg) {
     // Fallback: try to infer from package name patterns
     const pkgName = pkg.name || '';
     if (pkgName.startsWith('@')) return 'node'; // Scoped NPM package
-    if (pkgName.includes('github.com/')) return 'go'; // Go module
+    
+    // Go module detection: properly validate github.com domain (not just substring)
+    // Go modules: github.com/owner/repo (no protocol) or https://github.com/owner/repo
+    // Must ensure github.com is the actual domain, not a substring in malicious URLs
+    if (/^(github\.com\/|https?:\/\/github\.com\/|git@github\.com:)/.test(pkgName)) {
+        return 'go'; // Go module
+    }
+    
     if (pkgName.includes(':')) return 'java'; // Maven coordinate
     
     return 'unknown';
