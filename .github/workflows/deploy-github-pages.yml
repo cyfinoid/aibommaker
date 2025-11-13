@@ -51,14 +51,11 @@ jobs:
           cp styles.css _site/
           echo "✅ Copied styles.css"
           
-          # Copy main JavaScript
-          cp app.js _site/
-          echo "✅ Copied app.js"
+          # Copy JavaScript modules (js/ folder)
+          cp -r js _site/
+          echo "✅ Copied js/ directory"
           
-          # Copy directories
-          cp -r src _site/
-          echo "✅ Copied src/ directory"
-          
+          # Copy library files (syntax highlighting)
           cp -r lib _site/
           echo "✅ Copied lib/ directory"
           
@@ -69,13 +66,15 @@ jobs:
           echo ""
           echo "📊 Deployment summary:"
           echo "  - HTML files: $(ls -1 _site/*.html 2>/dev/null | wc -l)"
-          echo "  - Main JS: app.js"
           echo "  - CSS files: $(ls -1 _site/*.css 2>/dev/null | wc -l)"
-          echo "  - Source modules: $(find _site/src -name '*.js' 2>/dev/null | wc -l)"
+          echo "  - JS modules: $(find _site/js -name '*.js' 2>/dev/null | wc -l)"
           echo "  - Library files: $(find _site/lib -name '*.js' 2>/dev/null | wc -l)"
           echo ""
           echo "📁 Contents of _site/:"
           ls -la _site/
+          echo ""
+          echo "📁 Contents of _site/js/:"
+          ls -la _site/js/
           
       - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
@@ -95,9 +94,15 @@ jobs:
           echo "🔗 URL: ${{ steps.deployment.outputs.page_url }}" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "### Files Deployed" >> $GITHUB_STEP_SUMMARY
-          echo "- index.html" >> $GITHUB_STEP_SUMMARY
-          echo "- app.js" >> $GITHUB_STEP_SUMMARY
-          echo "- styles.css" >> $GITHUB_STEP_SUMMARY
-          echo "- src/ (detection modules)" >> $GITHUB_STEP_SUMMARY
+          echo "- index.html (main application)" >> $GITHUB_STEP_SUMMARY
+          echo "- styles.css (Cyfinoid branding)" >> $GITHUB_STEP_SUMMARY
+          echo "- js/ (7 modular JavaScript files)" >> $GITHUB_STEP_SUMMARY
+          echo "  - constants.js (detection patterns)" >> $GITHUB_STEP_SUMMARY
+          echo "  - utils.js (helper functions)" >> $GITHUB_STEP_SUMMARY
+          echo "  - github-api.js (API integration)" >> $GITHUB_STEP_SUMMARY
+          echo "  - detectors.js (AI detection logic)" >> $GITHUB_STEP_SUMMARY
+          echo "  - analyzer.js (orchestration)" >> $GITHUB_STEP_SUMMARY
+          echo "  - bom-generators.js (CycloneDX/SPDX)" >> $GITHUB_STEP_SUMMARY
+          echo "  - ui.js (UI rendering)" >> $GITHUB_STEP_SUMMARY
           echo "- lib/ (syntax highlighting)" >> $GITHUB_STEP_SUMMARY
 
