@@ -1044,6 +1044,13 @@ async function modelsDetector({ tree }) {
 function isValidModelName(name, provider) {
     if (!name || typeof name !== 'string') return false;
     
+    // Filter out common false positives for short model names
+    // "yi" model name can appear in "yield" (Python keyword)
+    const falsePositives = ['yield', 'lying', 'dying', 'tying', 'flying', 'trying'];
+    if (falsePositives.includes(name.toLowerCase())) {
+        return false;
+    }
+    
     // For non-HuggingFace providers, assume pattern matching is accurate enough
     if (provider !== 'HuggingFace') return true;
     
@@ -1277,9 +1284,11 @@ async function modelsIdentifierDetector({ tree, getFileContent, owner, repo, tok
         { pattern: /["']?(mistral-large)["']?/gi, provider: 'Mistral', model: 'mistral-large', type: 'text-generation' },
         { pattern: /["']?(mixtral-8x7b)["']?/gi, provider: 'Mistral', model: 'mixtral-8x7b', type: 'text-generation' },
         
-        // Cohere models
+        // Cohere models (order matters: more specific patterns first to prevent partial matches)
+        { pattern: /["']?(command-r7b-arabic)["']?/gi, provider: 'Cohere', model: 'command-r7b-arabic', type: 'text-generation' },
         { pattern: /["']?(command-r-plus)["']?/gi, provider: 'Cohere', model: 'command-r-plus', type: 'text-generation' },
-        { pattern: /["']?(command-r)["']?/gi, provider: 'Cohere', model: 'command-r', type: 'text-generation' },
+        // Match "command-r" only when not followed by more alphanumeric characters (to avoid matching inside "command-r7b-arabic")
+        { pattern: /["']?(command-r)(?![a-z0-9-])["']?/gi, provider: 'Cohere', model: 'command-r', type: 'text-generation' },
         { pattern: /["']?(command-a)["']?/gi, provider: 'Cohere', model: 'command-a', type: 'text-generation' },
         
         // Ollama/Local models
@@ -1302,7 +1311,9 @@ async function modelsIdentifierDetector({ tree, getFileContent, owner, repo, tok
         { pattern: /["']?(medllama2)["']?/gi, provider: 'Meta', model: 'medllama2', type: 'text-generation' },
         { pattern: /["']?(meditron)["']?/gi, provider: 'EPFL', model: 'meditron', type: 'text-generation' },
         { pattern: /["']?(mathstral)["']?/gi, provider: 'Mistral', model: 'mathstral', type: 'text-generation' },
-        { pattern: /["']?(yi)["']?/gi, provider: '01.AI', model: 'yi', type: 'text-generation' },
+        // Use word boundaries to prevent false matches in "yield", "lying", etc.
+        // Match: "yi", 'yi', or yi as standalone word (not inside other words)
+        { pattern: /["']yi["']|\byi\b/gi, provider: '01.AI', model: 'yi', type: 'text-generation' },
         { pattern: /["']?(athene-v2)["']?/gi, provider: 'Nexusflow', model: 'athene-v2', type: 'text-generation' }
     ];
     
@@ -1495,6 +1506,25 @@ async function modelsIdentifierDetector({ tree, getFileContent, owner, repo, tok
                 if (hfInfo.verified && hfInfo.pipeline_tag) {
                     data.modelType = hfInfo.pipeline_tag;
                 }
+                
+                // Parse ModelCard YAML if available and merge with cardData
+                if (hfInfo.modelCardContent) {
+                    try {
+                        const parsedCard = parseModelCardYAML(hfInfo.modelCardContent);
+                        if (Object.keys(parsedCard).length > 0) {
+                            data.modelCardData = parsedCard;
+                            // Merge parsed YAML data into cardData for easier access
+                            if (hfInfo.cardData) {
+                                hfInfo.cardData = { ...hfInfo.cardData, ...parsedCard };
+                            } else {
+                                hfInfo.cardData = { ...parsedCard };
+                            }
+                            console.log(`[Detector: AI Models] ✓ Parsed ModelCard YAML for ${data.modelName} (${Object.keys(parsedCard).length} fields)`);
+                        }
+                    } catch (e) {
+                        console.log(`[Detector: AI Models] Could not parse ModelCard YAML for ${data.modelName}: ${e.message}`);
+                    }
+                }
             }
         } else if (data.isHuggingFace && !shouldCheckHuggingFace) {
             console.log(`[Detector: AI Models] Skipping HuggingFace API check for ${data.modelName} (no HuggingFace libraries detected)`);
@@ -1559,6 +1589,7 @@ async function modelsIdentifierDetector({ tree, getFileContent, owner, repo, tok
                 locations: data.locations, // Use locations with line numbers
                 files: data.locations.map(loc => loc.file), // Also keep files array for backward compatibility
                 ...(data.hfDetails && { huggingface: data.hfDetails }),
+                ...(data.modelCardData && { modelCardData: data.modelCardData }),
                 ...(data.detectionSource && { detectionSource: data.detectionSource }),
                 ...(data.relatedModels && { relatedModels: data.relatedModels })
             }
@@ -1637,7 +1668,8 @@ async function hardwareDetector({ tree, getFileContent, allFindings = [] }) {
     console.log('[Detector: Hardware] Starting hardware detection...');
     const findings = [];
     const hardwareInfo = {
-        gpu: new Set(),
+        gpu: new Set(),           // Generic GPU detection (CUDA, GPU libraries)
+        gpuModels: new Set(),     // Specific GPU models (A10G, H100, T4, etc.)
         tpu: new Set(),
         specialized: new Set(),
         evidence: []
@@ -1705,13 +1737,28 @@ async function hardwareDetector({ tree, getFileContent, allFindings = [] }) {
         // Check GPU patterns (all file types - GPU is used in Python, JS via TensorFlow.js, WebGL)
         for (const pattern of HARDWARE_PATTERNS.gpu.patterns) {
             if (pattern.pattern.test(content)) {
-                hardwareInfo.gpu.add(pattern.type);
                 const match = content.match(pattern.pattern);
-                hardwareInfo.evidence.push({
-                    file: file.path,
-                    snippet: match ? match[0].substring(0, 100) : 'GPU usage detected',
-                    type: 'GPU'
-                });
+                
+                // Extract specific GPU model if pattern has extractModel flag
+                if (pattern.extractModel && match && match[1]) {
+                    const gpuModel = match[1].trim();
+                    hardwareInfo.gpuModels.add(gpuModel);
+                    hardwareInfo.evidence.push({
+                        file: file.path,
+                        snippet: match[0].substring(0, 100),
+                        type: 'GPU',
+                        gpuModel: gpuModel
+                    });
+                    console.log(`[Detector: Hardware] ✓ Found specific GPU model: ${gpuModel} in ${file.path}`);
+                } else {
+                    // Generic GPU detection
+                    hardwareInfo.gpu.add(pattern.type);
+                    hardwareInfo.evidence.push({
+                        file: file.path,
+                        snippet: match ? match[0].substring(0, 100) : 'GPU usage detected',
+                        type: 'GPU'
+                    });
+                }
             }
         }
         
@@ -1750,18 +1797,31 @@ async function hardwareDetector({ tree, getFileContent, allFindings = [] }) {
     }
     
     // Create findings
-    if (hardwareInfo.gpu.size > 0) {
-        console.log(`[Detector: Hardware] ✓ Found GPU usage: ${Array.from(hardwareInfo.gpu).join(', ')}`);
+    if (hardwareInfo.gpu.size > 0 || hardwareInfo.gpuModels.size > 0) {
+        const gpuParts = [];
+        if (hardwareInfo.gpuModels.size > 0) {
+            gpuParts.push(`Models: ${Array.from(hardwareInfo.gpuModels).join(', ')}`);
+        }
+        if (hardwareInfo.gpu.size > 0) {
+            gpuParts.push(`Libraries: ${Array.from(hardwareInfo.gpu).join(', ')}`);
+        }
+        
+        const description = hardwareInfo.gpuModels.size > 0 
+            ? `GPU compute detected: ${Array.from(hardwareInfo.gpuModels).join(', ')}${hardwareInfo.gpu.size > 0 ? ` (${Array.from(hardwareInfo.gpu).join(', ')})` : ''}`
+            : `GPU compute detected: ${Array.from(hardwareInfo.gpu).join(', ')}`;
+        
+        console.log(`[Detector: Hardware] ✓ Found GPU usage: ${gpuParts.join('; ')}`);
         findings.push({
             id: 'hardware-gpu',
             title: 'GPU Hardware Detected',
             category: 'hardware',
             severity: 'high',
             weight: 4,
-            description: `GPU compute detected: ${Array.from(hardwareInfo.gpu).join(', ')}`,
+            description: description,
             evidence: hardwareInfo.evidence.filter(e => e.type === 'GPU').slice(0, 5),
             hardwareInfo: {
                 type: 'GPU',
+                models: Array.from(hardwareInfo.gpuModels),
                 libraries: Array.from(hardwareInfo.gpu)
             }
         });

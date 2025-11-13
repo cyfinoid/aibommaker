@@ -53,6 +53,10 @@ const SDK_PATTERNS = {
         { pattern: /from\s+langchain/i, provider: 'LangChain', weight: 4 },
         { pattern: /import\s+langchain/i, provider: 'LangChain', weight: 4 },
         
+        { pattern: /import\s+litellm/i, provider: 'LiteLLM', weight: 5 },
+        { pattern: /from\s+litellm\s+import/i, provider: 'LiteLLM', weight: 5 },
+        { pattern: /litellm\./i, provider: 'LiteLLM', weight: 4 },
+        
         { pattern: /from\s+llama_index/i, provider: 'LlamaIndex', weight: 4 },
         { pattern: /import\s+llama_index/i, provider: 'LlamaIndex', weight: 4 }
     ],
@@ -157,6 +161,17 @@ const HARDWARE_PATTERNS = {
     gpu: {
         dependencies: ['torch', 'tensorflow-gpu', 'cuda', 'cudnn', 'cupy', 'pycuda', 'cupy-cuda'],
         patterns: [
+            // Specific GPU model detection (check first for accuracy)
+            // Modal, RunPod, and other platforms: gpu="A10G", gpu="H100:1", etc.
+            { pattern: /gpu\s*=\s*["']([A-Z0-9]+(?::\d+)?)["']/i, type: 'GPU', weight: 5, extractModel: true },
+            // AWS SageMaker: instance_type="ml.g5.xlarge" (contains GPU)
+            { pattern: /instance_type\s*=\s*["'](ml\.(g5|p3|p4|p5)[\w.-]+)["']/i, type: 'GPU', weight: 5, extractModel: true },
+            // GCP Vertex AI: machine_type="n1-standard-4", accelerator_type="NVIDIA_TESLA_T4"
+            { pattern: /accelerator_type\s*=\s*["'](NVIDIA_[\w_]+)["']/i, type: 'GPU', weight: 5, extractModel: true },
+            // Azure ML: compute_target with GPU SKUs
+            { pattern: /vm_size\s*=\s*["'](NC\d+|ND\d+|NV\d+[\w-]*)["']/i, type: 'GPU', weight: 5, extractModel: true },
+            // Generic GPU model patterns: GPU="A100", gpu_type="H100"
+            { pattern: /gpu[_-]?type\s*=\s*["']([A-Z0-9]+(?::\d+)?)["']/i, type: 'GPU', weight: 4, extractModel: true },
             // Use word boundaries and specific contexts to avoid false positives
             { pattern: /\b(cuda|nvidia)\b/i, type: 'GPU', weight: 3 },
             { pattern: /\bgpu\b/i, type: 'GPU', weight: 3 },

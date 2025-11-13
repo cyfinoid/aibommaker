@@ -67,6 +67,12 @@ function generateCycloneDXJson(analysisResult, selectedFindings) {
                 value: hardwareInfo.types.join(', ')
             });
         }
+        if (hardwareInfo.models.length > 0) {
+            bom.metadata.component.properties.push({
+                name: 'aibom:hardware:models',
+                value: hardwareInfo.models.join(', ')
+            });
+        }
         if (hardwareInfo.libraries.length > 0) {
             bom.metadata.component.properties.push({
                 name: 'aibom:hardware:libraries',
@@ -92,6 +98,33 @@ function generateCycloneDXJson(analysisResult, selectedFindings) {
                 value: allPlatforms.join(', ')
             });
         }
+    }
+    
+    // Add AI-specific metadata properties from detected models
+    const modelMetadata = extractModelMetadata(selectedFindings);
+    if (modelMetadata.primaryPurpose) {
+        bom.metadata.component.properties.push({
+            name: 'aibom:primaryPurpose',
+            value: modelMetadata.primaryPurpose
+        });
+    }
+    if (modelMetadata.suppliedBy) {
+        bom.metadata.component.properties.push({
+            name: 'aibom:suppliedBy',
+            value: modelMetadata.suppliedBy
+        });
+    }
+    if (modelMetadata.typeOfModel) {
+        bom.metadata.component.properties.push({
+            name: 'aibom:typeOfModel',
+            value: modelMetadata.typeOfModel
+        });
+    }
+    if (modelMetadata.domain) {
+        bom.metadata.component.properties.push({
+            name: 'aibom:domain',
+            value: modelMetadata.domain
+        });
     }
     
     if (governanceInfo.count > 0) {
@@ -190,7 +223,7 @@ function createMLModelComponents(findings) {
         // Extract actual model information
         if (finding.modelInfo) {
             // This is a specific model finding
-            const { provider, modelName, modelType, huggingface, files, detectionSource, relatedModels } = finding.modelInfo;
+            const { provider, modelName, modelType, huggingface, files, detectionSource, relatedModels, modelCardData } = finding.modelInfo;
             const key = `${provider}-${modelName}`;
             
             if (!modelMap.has(key)) {
@@ -333,8 +366,14 @@ function createMLModelComponents(findings) {
                     modelParameters: {
                         tasks: []
                     },
-                    considerations: {}
+                    considerations: {},
+                    properties: []
                 };
+                
+                // Extract enhanced data from HuggingFace
+                const cardData = huggingface?.cardData || {};
+                const config = huggingface?.config || {};
+                const evalResults = cardData.eval_results || modelCardData?.eval_results || null;
                 
                 if (huggingface) {
                     // Tasks
@@ -344,13 +383,36 @@ function createMLModelComponents(findings) {
                         });
                     }
                     
-                    // Architecture
+                    // Architecture from config or cardData
+                    const modelType = config.model_type || cardData.model_type || huggingface.typeOfModel || 'transformer';
+                    const architectures = config.architectures || huggingface.architectures || [];
+                    
                     modelCard.modelParameters.architectureFamily = huggingface.library_name || 'transformers';
-                    if (huggingface.tags) {
+                    if (architectures.length > 0) {
+                        modelCard.modelParameters.modelArchitecture = architectures[0];
+                    } else if (huggingface.tags) {
                         const archTag = huggingface.tags.find(t => t.includes('gpt') || t.includes('bert') || t.includes('llama'));
                         if (archTag) {
                             modelCard.modelParameters.modelArchitecture = archTag;
                         }
+                    }
+                    
+                    // Add model type
+                    if (modelType) {
+                        modelCard.modelParameters.modelType = modelType;
+                    }
+                    
+                    // Datasets from cardData or ModelCard
+                    const datasets = cardData.datasets || modelCardData?.datasets || [];
+                    if (datasets.length > 0) {
+                        modelCard.modelParameters.datasets = Array.isArray(datasets) 
+                            ? datasets.map(ds => typeof ds === 'string' ? { type: 'dataset', name: ds } : ds)
+                            : [{ type: 'dataset', name: String(datasets) }];
+                    }
+                    
+                    // Base model
+                    if (cardData.base_model || modelCardData?.base_model) {
+                        modelCard.modelParameters.baseModel = cardData.base_model || modelCardData.base_model;
                     }
                     
                     // Inputs/Outputs based on pipeline
@@ -374,6 +436,125 @@ function createMLModelComponents(findings) {
                     
                     if (useCaseTags.length > 0) {
                         modelCard.considerations.useCases = useCaseTags;
+                    }
+                    
+                    // Enhanced ModelCard properties from cardData and ModelCard YAML
+                    // Energy consumption
+                    if (modelCardData?.energyConsumption || modelCardData?.energy_consumption) {
+                        modelCard.properties.push({
+                            name: 'energyConsumption',
+                            value: String(modelCardData.energyConsumption || modelCardData.energy_consumption)
+                        });
+                    }
+                    if (modelCardData?.energyQuantity || modelCardData?.energy_quantity) {
+                        modelCard.properties.push({
+                            name: 'energyQuantity',
+                            value: String(modelCardData.energyQuantity || modelCardData.energy_quantity)
+                        });
+                    }
+                    if (modelCardData?.energyUnit || modelCardData?.energy_unit) {
+                        modelCard.properties.push({
+                            name: 'energyUnit',
+                            value: String(modelCardData.energyUnit || modelCardData.energy_unit)
+                        });
+                    }
+                    
+                    // Hyperparameters
+                    if (modelCardData?.hyperparameter || modelCardData?.hyperparameters || config.hyperparameters) {
+                        const hyperparams = modelCardData?.hyperparameter || modelCardData?.hyperparameters || config.hyperparameters;
+                        modelCard.properties.push({
+                            name: 'hyperparameter',
+                            value: typeof hyperparams === 'object' ? JSON.stringify(hyperparams) : String(hyperparams)
+                        });
+                    }
+                    
+                    // Training information
+                    if (modelCardData?.informationAboutTraining || modelCardData?.training_info) {
+                        modelCard.properties.push({
+                            name: 'informationAboutTraining',
+                            value: String(modelCardData.informationAboutTraining || modelCardData.training_info)
+                        });
+                    }
+                    
+                    // Data preprocessing
+                    if (modelCardData?.modelDataPreprocessing || modelCardData?.data_preprocessing) {
+                        modelCard.properties.push({
+                            name: 'modelDataPreprocessing',
+                            value: String(modelCardData.modelDataPreprocessing || modelCardData.data_preprocessing)
+                        });
+                    }
+                    
+                    // Safety and risk assessment
+                    if (modelCardData?.safetyRiskAssessment || modelCardData?.safety_risk_assessment) {
+                        modelCard.properties.push({
+                            name: 'safetyRiskAssessment',
+                            value: String(modelCardData.safetyRiskAssessment || modelCardData.safety_risk_assessment)
+                        });
+                    }
+                    
+                    // Sensitive personal information
+                    if (modelCardData?.useSensitivePersonalInformation || modelCardData?.sensitive_data) {
+                        modelCard.properties.push({
+                            name: 'useSensitivePersonalInformation',
+                            value: String(modelCardData.useSensitivePersonalInformation || modelCardData.sensitive_data)
+                        });
+                    }
+                    
+                    // Model explainability
+                    if (modelCardData?.modelExplainability || modelCardData?.explainability) {
+                        modelCard.properties.push({
+                            name: 'modelExplainability',
+                            value: String(modelCardData.modelExplainability || modelCardData.explainability)
+                        });
+                    }
+                    
+                    // Application information
+                    if (modelCardData?.informationAboutApplication || modelCardData?.application_info) {
+                        modelCard.properties.push({
+                            name: 'informationAboutApplication',
+                            value: String(modelCardData.informationAboutApplication || modelCardData.application_info)
+                        });
+                    }
+                    
+                    // Metrics and decision thresholds
+                    if (modelCardData?.metric || modelCardData?.metrics) {
+                        const metrics = modelCardData.metric || modelCardData.metrics;
+                        modelCard.properties.push({
+                            name: 'metric',
+                            value: typeof metrics === 'object' ? JSON.stringify(metrics) : String(metrics)
+                        });
+                    }
+                    if (modelCardData?.metricDecisionThreshold || modelCardData?.decision_threshold) {
+                        modelCard.properties.push({
+                            name: 'metricDecisionThreshold',
+                            value: String(modelCardData.metricDecisionThreshold || modelCardData.decision_threshold)
+                        });
+                    }
+                    
+                    // Limitations from ModelCard considerations
+                    if (modelCardData?.limitations || modelCardData?.limitation) {
+                        const limitations = modelCardData.limitations || modelCardData.limitation;
+                        if (Array.isArray(limitations)) {
+                            modelCard.considerations.limitations = limitations;
+                        } else {
+                            modelCard.considerations.limitations = [String(limitations)];
+                        }
+                    }
+                    
+                    // Ethical considerations
+                    if (modelCardData?.ethical_considerations || modelCardData?.ethics) {
+                        modelCard.considerations.ethical = modelCardData.ethical_considerations || modelCardData.ethics;
+                    }
+                    
+                    // Quantitative Analysis section with performance metrics
+                    if (evalResults) {
+                        const performanceMetrics = parseEvalResults(evalResults);
+                        if (performanceMetrics.length > 0) {
+                            modelCard.quantitativeAnalysis = {
+                                performanceMetrics: performanceMetrics,
+                                graphics: {}
+                            };
+                        }
                     }
                 } else {
                     // Use explicit modelType from finding for better accuracy
@@ -425,8 +606,14 @@ function createMLModelComponents(findings) {
                 // Only add modelCard if it has content
                 if (modelCard.modelParameters.tasks.length > 0 || 
                     Object.keys(modelCard.considerations).length > 0 ||
-                    modelCard.modelParameters.architectureFamily) {
-                component.modelCard = modelCard;
+                    modelCard.modelParameters.architectureFamily ||
+                    (modelCard.properties && modelCard.properties.length > 0) ||
+                    modelCard.quantitativeAnalysis) {
+                    // Remove empty properties array if no properties were added
+                    if (modelCard.properties && modelCard.properties.length === 0) {
+                        delete modelCard.properties;
+                    }
+                    component.modelCard = modelCard;
                 }
                 
                 // Add detection metadata to properties
@@ -441,6 +628,52 @@ function createMLModelComponents(findings) {
                         { name: 'huggingface:downloads', value: huggingface.downloads?.toString() || '0' },
                         { name: 'huggingface:likes', value: huggingface.likes?.toString() || '0' }
                     );
+                    
+                    // Add enhanced metadata properties
+                    if (huggingface.primaryPurpose) {
+                        component.properties.push({
+                            name: 'primaryPurpose',
+                            value: huggingface.primaryPurpose
+                        });
+                    }
+                    if (huggingface.suppliedBy) {
+                        component.properties.push({
+                            name: 'suppliedBy',
+                            value: huggingface.suppliedBy
+                        });
+                    }
+                    if (huggingface.typeOfModel) {
+                        component.properties.push({
+                            name: 'typeOfModel',
+                            value: huggingface.typeOfModel
+                        });
+                    }
+                    
+                    // Extract domain from tags or description
+                    const cardData = huggingface.cardData || {};
+                    const modelSummary = cardData.model_summary || '';
+                    const tags = huggingface.tags || [];
+                    
+                    // Infer domain from tags (e.g., medical, finance, legal)
+                    const domainTags = tags.filter(t => 
+                        ['medical', 'healthcare', 'finance', 'legal', 'education', 'research', 'nlp', 'cv', 'multimodal'].some(d => 
+                            t.toLowerCase().includes(d)
+                        )
+                    );
+                    if (domainTags.length > 0) {
+                        component.properties.push({
+                            name: 'domain',
+                            value: domainTags[0]
+                        });
+                    }
+                    
+                    // Language from cardData
+                    if (cardData.language) {
+                        component.properties.push({
+                            name: 'language',
+                            value: Array.isArray(cardData.language) ? cardData.language.join(', ') : String(cardData.language)
+                        });
+                    }
                 }
                 
                 // Add evidence with file locations and line numbers
@@ -1002,6 +1235,45 @@ function generateSPDXId() {
 }
 
 /**
+ * Extract model metadata from findings for main component properties
+ */
+function extractModelMetadata(findings) {
+    const modelFindings = findings.filter(f => f.modelInfo && f.modelInfo.huggingface);
+    const metadata = {
+        primaryPurpose: null,
+        suppliedBy: null,
+        typeOfModel: null,
+        domain: null
+    };
+    
+    if (modelFindings.length === 0) {
+        return metadata;
+    }
+    
+    // Extract from first HuggingFace model (most representative)
+    const firstModel = modelFindings[0].modelInfo.huggingface;
+    
+    if (firstModel) {
+        metadata.primaryPurpose = firstModel.primaryPurpose || firstModel.pipeline_tag || 'text-generation';
+        metadata.suppliedBy = firstModel.suppliedBy || firstModel.author;
+        metadata.typeOfModel = firstModel.typeOfModel || firstModel.config?.model_type || 'transformer';
+        
+        // Extract domain from tags
+        const tags = firstModel.tags || [];
+        const domainTags = tags.filter(t => 
+            ['medical', 'healthcare', 'finance', 'legal', 'education', 'research', 'nlp', 'cv', 'multimodal'].some(d => 
+                t.toLowerCase().includes(d)
+            )
+        );
+        if (domainTags.length > 0) {
+            metadata.domain = domainTags[0];
+        }
+    }
+    
+    return metadata;
+}
+
+/**
  * Extract hardware information from findings
  */
 function extractHardwareInfo(findings) {
@@ -1009,7 +1281,8 @@ function extractHardwareInfo(findings) {
     const info = {
         detected: hardwareFindings.length > 0,
         types: [],
-        libraries: []
+        libraries: [],
+        models: []  // Specific GPU/TPU models (A10G, H100, etc.)
     };
     
     for (const finding of hardwareFindings) {
@@ -1018,10 +1291,14 @@ function extractHardwareInfo(findings) {
             if (finding.hardwareInfo.libraries) {
                 info.libraries.push(...finding.hardwareInfo.libraries);
             }
+            if (finding.hardwareInfo.models) {
+                info.models.push(...finding.hardwareInfo.models);
+            }
         }
     }
     
     info.types = [...new Set(info.types)];
+    info.models = [...new Set(info.models)];
     info.libraries = [...new Set(info.libraries)];
     
     return info;

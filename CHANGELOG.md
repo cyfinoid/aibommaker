@@ -7,6 +7,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+- **Fixed incorrect evidence attribution for OpenAI dependencies**
+  - "OpenAI-compatible" API endpoint findings (from `/v1/chat/completions`) no longer incorrectly matched to `openai` dependency
+  - These endpoints are often used through `litellm` or other libraries, not the OpenAI SDK directly
+  - Added `litellm` SDK detection patterns so `litellm` code usage is properly matched to `litellm` dependency
+  - Evidence now correctly shows which library is actually being used in code
+- **Fixed false positive detection for "yi" model**
+  - Pattern now uses word boundaries to prevent matching "yi" inside common words like "yield", "lying", "dying"
+  - Pattern matches: `"yi"`, `'yi'`, or `yi` as standalone word (not substring)
+  - Added false positive filter in `isValidModelName` to exclude common words containing "yi"
+  - Prevents false matches in Python `yield` statements and other common code patterns
+- **Fixed incomplete model name detection for Cohere models**
+  - Added missing pattern for "command-r7b-arabic" model
+  - Reordered Cohere model patterns: more specific patterns (command-r7b-arabic, command-r-plus) checked before general pattern (command-r)
+  - Updated "command-r" pattern to use negative lookahead to prevent matching inside "command-r7b-arabic"
+  - Model findings now show full model name (e.g., "command-r7b-arabic" instead of truncated "command-r")
+- **Enhanced GPU hardware detection to capture specific GPU models**
+  - Added patterns to detect specific GPU models from code (A10G, H100, T4, V100, A100, etc.)
+  - Detects GPU models from Modal (`gpu="A10G"`), AWS SageMaker (`instance_type="ml.g5.xlarge"`), GCP Vertex AI (`accelerator_type="NVIDIA_TESLA_T4"`), Azure ML (`vm_size="NC6"`), and generic patterns
+  - Hardware findings now show specific GPU models in description (e.g., "GPU compute detected: A10G, H100:1")
+  - GPU models included in `hardwareInfo.models` and added to BOM as `aibom:hardware:models` property
+  - Evidence includes specific GPU model information for better traceability
+
 ## [0.0.1] - 2025-01-XX
 
 ### Added

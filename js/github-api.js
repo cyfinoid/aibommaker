@@ -280,6 +280,41 @@ async function fetchHuggingFaceModelInfo(modelId) {
         const data = await response.json();
         console.log(`[HuggingFace API] ✓ Found model: ${data.id}`);
         
+        // Fetch additional data: config.json and ModelCard README
+        let configData = null;
+        let modelCardContent = null;
+        let evalResults = null;
+        
+        try {
+            // Fetch config.json for model architecture details
+            const configResponse = await fetch(`https://huggingface.co/${modelId}/resolve/main/config.json`);
+            if (configResponse.ok) {
+                configData = await configResponse.json();
+                console.log(`[HuggingFace API] ✓ Fetched config.json for ${modelId}`);
+            }
+        } catch (e) {
+            console.log(`[HuggingFace API] Could not fetch config.json for ${modelId}: ${e.message}`);
+        }
+        
+        try {
+            // Fetch README.md for ModelCard YAML frontmatter
+            const readmeResponse = await fetch(`https://huggingface.co/${modelId}/resolve/main/README.md`);
+            if (readmeResponse.ok) {
+                modelCardContent = await readmeResponse.text();
+                console.log(`[HuggingFace API] ✓ Fetched README.md for ${modelId}`);
+            }
+        } catch (e) {
+            console.log(`[HuggingFace API] Could not fetch README.md for ${modelId}: ${e.message}`);
+        }
+        
+        // Extract eval_results from cardData if available
+        if (data.cardData?.eval_results) {
+            evalResults = data.cardData.eval_results;
+        }
+        
+        // Extract cardData fields
+        const cardData = data.cardData || {};
+        
         return {
             verified: true,
             id: data.id,
@@ -289,8 +324,26 @@ async function fetchHuggingFaceModelInfo(modelId) {
             tags: data.tags || [],
             pipeline_tag: data.pipeline_tag,
             library_name: data.library_name,
-            license: data.cardData?.license,
-            modelSize: data.safetensors?.total || null
+            license: cardData.license || data.cardData?.license,
+            modelSize: data.safetensors?.total || null,
+            // Enhanced fields
+            cardData: {
+                license: cardData.license,
+                language: cardData.language,
+                base_model: cardData.base_model,
+                datasets: cardData.datasets,
+                model_summary: cardData.model_summary || cardData.description,
+                model_type: cardData.model_type,
+                eval_results: evalResults
+            },
+            config: configData,
+            modelCardContent: modelCardContent,
+            // Extract metadata
+            primaryPurpose: data.pipeline_tag || 'text-generation',
+            suppliedBy: data.author || modelId.split('/')[0],
+            typeOfModel: configData?.model_type || cardData.model_type || 'transformer',
+            architectures: configData?.architectures || [],
+            safetensors: data.safetensors
         };
     } catch (error) {
         console.warn(`[HuggingFace API] ⚠️  Exception fetching ${modelId}:`, error.message);

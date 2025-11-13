@@ -25,6 +25,12 @@ function mergeDependencyAndCodeFindings(findings, repoMeta) {
         if (finding.category === 'code' && finding.title) {
             const title = finding.title.toLowerCase();
             
+            // Skip "OpenAI-compatible" findings - these are API endpoints, not SDK usage
+            // They might be used through litellm or other libraries, not the OpenAI SDK directly
+            if (title.includes('openai-compatible') || title.includes('compatible')) {
+                return; // Don't match compatible API endpoints to SDK dependencies
+            }
+            
             // Try to match against all dependency names
             dependencyMap.forEach((depFinding, depPkgName) => {
                 const depNameLower = depPkgName.toLowerCase();
@@ -32,14 +38,18 @@ function mergeDependencyAndCodeFindings(findings, repoMeta) {
                 // Match if code finding title mentions the package name
                 // e.g., "LangChain SDK Usage" matches "langchain", "langchain-google-genai"
                 // e.g., "Google SDK Usage" matches "langchain-google-genai", "google-generativeai"
+                // IMPORTANT: Only match direct SDK usage, not compatible API endpoints
                 const matches = 
                     (title.includes('langchain') && depNameLower.includes('langchain')) ||
-                    (title.includes('openai') && depNameLower.includes('openai')) ||
+                    // Only match "OpenAI SDK Usage", not "OpenAI-compatible" (which uses litellm)
+                    (title.includes('openai') && !title.includes('compatible') && depNameLower.includes('openai')) ||
                     (title.includes('anthropic') && depNameLower.includes('anthropic')) ||
                     (title.includes('google') && depNameLower.includes('google')) ||
                     (title.includes('cohere') && depNameLower.includes('cohere')) ||
                     (title.includes('mistral') && depNameLower.includes('mistral')) ||
-                    (title.includes('huggingface') && (depNameLower.includes('transformers') || depNameLower.includes('huggingface')));
+                    (title.includes('huggingface') && (depNameLower.includes('transformers') || depNameLower.includes('huggingface'))) ||
+                    // Match litellm code findings to litellm dependency (not openai)
+                    (title.includes('litellm') && depNameLower.includes('litellm'));
                 
                 if (matches) {
                     if (!codeMap.has(depPkgName)) {
