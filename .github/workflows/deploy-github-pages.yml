@@ -96,13 +96,14 @@ jobs:
           echo "### Files Deployed" >> $GITHUB_STEP_SUMMARY
           echo "- index.html (main application)" >> $GITHUB_STEP_SUMMARY
           echo "- styles.css (Cyfinoid branding)" >> $GITHUB_STEP_SUMMARY
-          echo "- js/ (7 modular JavaScript files)" >> $GITHUB_STEP_SUMMARY
+          echo "- js/ (8 modular JavaScript files)" >> $GITHUB_STEP_SUMMARY
           echo "  - constants.js (detection patterns)" >> $GITHUB_STEP_SUMMARY
           echo "  - utils.js (helper functions)" >> $GITHUB_STEP_SUMMARY
           echo "  - github-api.js (API integration)" >> $GITHUB_STEP_SUMMARY
           echo "  - detectors.js (AI detection logic)" >> $GITHUB_STEP_SUMMARY
           echo "  - analyzer.js (orchestration)" >> $GITHUB_STEP_SUMMARY
           echo "  - bom-generators.js (CycloneDX/SPDX)" >> $GITHUB_STEP_SUMMARY
+          echo "  - extended-aibom-generator.js (Extended AIBOM format)" >> $GITHUB_STEP_SUMMARY
           echo "  - ui.js (UI rendering)" >> $GITHUB_STEP_SUMMARY
           echo "- lib/ (syntax highlighting)" >> $GITHUB_STEP_SUMMARY
 
