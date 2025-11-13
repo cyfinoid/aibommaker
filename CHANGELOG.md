@@ -7,6 +7,40 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.0.2] - 2025-11-14
+
+### Added
+
+#### Enhanced HuggingFace Model Metadata Extraction
+- **Comprehensive HuggingFace API integration**
+  - Fetches `config.json` for model architecture details (model_type, architectures, vocab_size, etc.)
+  - Fetches `README.md` for ModelCard YAML frontmatter parsing
+  - Extracts `cardData` fields: license, language, base_model, datasets, model_summary, model_type
+  - Extracts `eval_results` for performance metrics
+  - Adds metadata fields: `primaryPurpose`, `suppliedBy`, `typeOfModel`, `architectures`
+- **ModelCard YAML parser**
+  - Parses HuggingFace ModelCard YAML frontmatter from README.md
+  - Extracts structured metadata: license, language, datasets, base_model, model_type, etc.
+  - Handles arrays, nested objects, and multi-line values
+  - Merges parsed YAML data with API cardData for comprehensive metadata
+- **Enhanced ModelCard properties in BOM**
+  - Energy consumption: `energyConsumption`, `energyQuantity`, `energyUnit`
+  - Training information: `hyperparameter`, `informationAboutTraining`, `modelDataPreprocessing`
+  - Safety & ethics: `safetyRiskAssessment`, `useSensitivePersonalInformation`
+  - Explainability: `modelExplainability`
+  - Metrics: `metric`, `metricDecisionThreshold`
+  - Application: `informationAboutApplication`
+  - Limitations and ethical considerations from ModelCard
+- **Quantitative Analysis section**
+  - Adds `quantitativeAnalysis` section to modelCard with `performanceMetrics` from eval_results
+  - Converts HuggingFace eval_results to CycloneDX performanceMetrics format
+  - Includes graphics placeholder for future visualization support
+- **Enhanced metadata properties**
+  - Component-level properties: `primaryPurpose`, `suppliedBy`, `typeOfModel`, `domain`, `language`
+  - Main BOM component metadata via `extractModelMetadata()` function
+  - Domain inference from model tags (medical, healthcare, finance, legal, education, etc.)
+  - All metadata properties added to CycloneDX BOM main component
+
 ### Fixed
 - **Fixed incorrect evidence attribution for OpenAI dependencies**
   - "OpenAI-compatible" API endpoint findings (from `/v1/chat/completions`) no longer incorrectly matched to `openai` dependency
@@ -30,7 +64,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - GPU models included in `hardwareInfo.models` and added to BOM as `aibom:hardware:models` property
   - Evidence includes specific GPU model information for better traceability
 
-## [0.0.1] - 2025-01-XX
+## [0.0.1] - 2025-11-13
 
 ### Added
 
