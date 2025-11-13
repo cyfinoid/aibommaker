@@ -33,9 +33,9 @@ async function analyzeRepository(input, onProgress = null) {
     const detectorInput = { repoMeta, tree, getFileContent, owner, repo, token };
     
     const detectors = [
-        { name: 'Code', fn: codeDetector, canResume: true }, // Run first, can be paused
+        { name: 'Dependencies', fn: dependenciesDetector }, // Run SBOM first to know what's installed
+        { name: 'Code', fn: codeDetector, canResume: true, needsDependencies: true }, // Use SBOM info for targeted search
         { name: 'Metadata', fn: metadataDetector },
-        { name: 'Dependencies', fn: dependenciesDetector },
         { name: 'AI Models', fn: modelsIdentifierDetector, needsAIFiles: true },
         { name: 'Configuration', fn: configDetector },
         { name: 'CI/CD', fn: ciDetector },
@@ -43,11 +43,13 @@ async function analyzeRepository(input, onProgress = null) {
         { name: 'Prompts', fn: promptsDetector }
     ];
     
-    console.log(`[Analyzer] Running ${detectors.length} detectors (Code detector first)...`);
+    console.log(`[Analyzer] Running ${detectors.length} detectors (Dependencies first for SBOM intelligence)...`);
     const allFindings = [];
     let codeResumeState = null;
     let codeDetectorPaused = false;
     let aiFilesFound = []; // Track files with AI usage
+    let sbomAvailable = false; // Track if SBOM was successfully retrieved
+    let detectedDependencies = []; // Track what dependencies were found
     
     for (let i = 0; i < detectors.length; i++) {
         const detector = detectors[i];
@@ -65,10 +67,18 @@ async function analyzeRepository(input, onProgress = null) {
         }
         
         try {
+            // Build detector input with context from previous detectors
+            let input = { ...detectorInput };
+            
             // Pass aiFilesFound and allFindings to detectors that need it
-            const input = detector.needsAIFiles 
-                ? { ...detectorInput, aiFilesFound, allFindings }
-                : detectorInput;
+            if (detector.needsAIFiles) {
+                input = { ...input, aiFilesFound, allFindings };
+            }
+            
+            // Pass SBOM info and dependencies to Code detector for targeted search
+            if (detector.needsDependencies) {
+                input = { ...input, sbomAvailable, detectedDependencies };
+            }
             
             const result = await detector.fn(input);
             const detectorTime = (performance.now() - detectorStart).toFixed(2);
@@ -82,6 +92,17 @@ async function analyzeRepository(input, onProgress = null) {
                 if (result.aiFilesFound) {
                     aiFilesFound = result.aiFilesFound;
                     console.log(`[Analyzer] 📁 Captured ${aiFilesFound.length} files with AI usage for later analysis`);
+                }
+                
+                // Capture SBOM availability from Dependencies detector
+                if (detector.name === 'Dependencies' && result.sbomAvailable !== undefined) {
+                    sbomAvailable = result.sbomAvailable;
+                    detectedDependencies = result.dependencies || [];
+                    if (sbomAvailable) {
+                        console.log(`[Analyzer] ✅ SBOM available with ${detectedDependencies.length} dependencies - Code search will be optimized`);
+                    } else {
+                        console.log(`[Analyzer] ⚠️  SBOM not available - Code search will use broad pattern matching`);
+                    }
                 }
                 
                 // Check if paused

@@ -1,4 +1,14 @@
-// AI/LLM Detection functions
+// ============================================================================
+// AI/LLM DETECTION FUNCTIONS
+// ============================================================================
+// Detection Strategy:
+// 1. Dependencies: SBOM API first (GitHub Dependency Graph)
+//    - Falls back to manual parsing only if SBOM API fails (404, disabled, etc.)
+// 2. Code: GitHub Search API for patterns, fallback to file scanning
+// 3. Models: Pattern matching in code files with HuggingFace API verification
+// 4. Config/CI/Prompts: File-based detection with pattern matching
+// ============================================================================
+
 async function metadataDetector({ repoMeta }) {
     console.log('[Detector: Metadata] Starting metadata analysis...');
     const findings = [];
@@ -47,9 +57,59 @@ async function metadataDetector({ repoMeta }) {
     return findings;
 }
 
-async function dependenciesDetector({ tree, getFileContent }) {
+async function dependenciesDetector({ tree, getFileContent, owner, repo, token }) {
     console.log('[Detector: Dependencies] Starting dependency analysis...');
     const findings = [];
+    
+    // STEP 1: Try GitHub's SBOM API first
+    console.log('[Detector: Dependencies] Attempting to fetch SBOM from GitHub Dependency Graph API...');
+    const sbomResult = await fetchGitHubSBOM(owner, repo, token);
+    
+    if (sbomResult && sbomResult.sbom) {
+        console.log('[Detector: Dependencies] ✓ Successfully fetched SBOM from GitHub');
+        const llmDeps = extractLLMDependenciesFromSBOM(sbomResult.sbom);
+        
+        if (llmDeps.length > 0) {
+            console.log(`[Detector: Dependencies] ✓ Found ${llmDeps.length} LLM dependencies via SBOM API`);
+            llmDeps.forEach(dep => {
+                findings.push({
+                    id: `dep-${dep.ecosystem}-${dep.name.replace(/[^a-zA-Z0-9]/g, '-')}`,
+                    title: `Dependency: ${dep.name}`,
+                    category: 'dependencies',
+                    severity: 'high',
+                    weight: 5,
+                    description: `LLM-related dependency: ${dep.name}${dep.version ? ` (version: ${dep.version})` : ''}`,
+                    evidence: [{
+                        file: 'GitHub Dependency Graph (SBOM)',
+                        snippet: `SPDX Package: ${dep.name}@${dep.version}`
+                    }],
+                    dependencyInfo: {
+                        name: dep.name,
+                        version: dep.version || 'unknown',
+                        ecosystem: dep.ecosystem,
+                        source: 'github-sbom-api',
+                        spdxId: dep.spdxId,
+                        license: dep.license
+                    }
+                });
+            });
+            
+            console.log(`[Detector: Dependencies] Complete (via SBOM API). Findings: ${findings.length}`);
+            // Return findings with SBOM metadata for downstream optimization
+            return {
+                findings,
+                sbomAvailable: true,
+                dependencies: llmDeps // Pass the full list for targeted code search
+            };
+        } else {
+            console.log('[Detector: Dependencies] SBOM retrieved but no LLM dependencies found, falling back to manual parsing...');
+        }
+    } else {
+        console.log('[Detector: Dependencies] ⚠️  SBOM API unavailable (dependency graph may not be enabled), falling back to manual parsing...');
+    }
+    
+    // STEP 2: Fallback to manual manifest file parsing
+    console.log('[Detector: Dependencies] Using manual manifest file parsing approach...');
     const manifestFiles = tree.filter(entry => {
         const fileName = entry.path.split('/').pop();
         return Object.values(MANIFEST_FILES).flat().includes(fileName);
@@ -104,7 +164,8 @@ async function dependenciesDetector({ tree, getFileContent }) {
                         name: dep.name,
                         version: dep.version || 'unknown',
                         ecosystem,
-                        manifestFile: manifest.path
+                        manifestFile: manifest.path,
+                        source: 'manual-parsing'
                     }
                 });
             });
@@ -113,8 +174,99 @@ async function dependenciesDetector({ tree, getFileContent }) {
         }
     }
     
-    console.log(`[Detector: Dependencies] Complete. Findings: ${findings.length}`);
-    return findings;
+    console.log(`[Detector: Dependencies] Complete (manual parsing). Findings: ${findings.length}`);
+    // Return findings without SBOM metadata (fallback mode)
+    return {
+        findings,
+        sbomAvailable: false,
+        dependencies: [] // No SBOM data available
+    };
+}
+
+function extractLLMDependenciesFromSBOM(sbom) {
+    console.log('[SBOM Parser] Extracting LLM dependencies from SPDX SBOM...');
+    const llmDeps = [];
+    
+    // SPDX format: sbom.packages is an array of package objects
+    const packages = sbom.packages || [];
+    console.log(`[SBOM Parser] Processing ${packages.length} packages from SBOM...`);
+    
+    // Create a flat list of all known LLM dependencies (lowercase for matching)
+    const allKnownDeps = [
+        ...LLM_DEPENDENCIES.python,
+        ...LLM_DEPENDENCIES.node,
+        ...LLM_DEPENDENCIES.go,
+        ...LLM_DEPENDENCIES.java,
+        ...LLM_DEPENDENCIES.rust
+    ].map(d => d.toLowerCase());
+    
+    for (const pkg of packages) {
+        const pkgName = pkg.name?.toLowerCase() || '';
+        
+        // Skip empty or invalid package names
+        if (!pkgName) continue;
+        
+        // Match exact or partial (for scoped packages like @anthropic-ai/sdk)
+        const isLLMDep = allKnownDeps.some(llmDep => {
+            const llmDepLower = llmDep.toLowerCase();
+            // Exact match
+            if (pkgName === llmDepLower) return true;
+            // Scoped package match (e.g., @anthropic-ai/sdk contains anthropic)
+            if (pkgName.includes(llmDepLower)) return true;
+            // Reverse match (for cases like langchain-openai matching langchain)
+            if (llmDepLower.includes(pkgName)) return true;
+            return false;
+        });
+        
+        if (isLLMDep) {
+            const ecosystem = detectEcosystemFromSPDX(pkg);
+            console.log(`[SBOM Parser] ✓ Found LLM dependency: ${pkg.name} (${ecosystem})`);
+            
+            llmDeps.push({
+                name: pkg.name,
+                version: pkg.versionInfo || 'unknown',
+                ecosystem,
+                spdxId: pkg.SPDXID,
+                license: pkg.licenseConcluded || pkg.licenseDeclared || 'unknown'
+            });
+        }
+    }
+    
+    console.log(`[SBOM Parser] Extracted ${llmDeps.length} LLM dependencies from SBOM`);
+    return llmDeps;
+}
+
+function detectEcosystemFromSPDX(pkg) {
+    // SPDX packages often have externalRefs that indicate the ecosystem
+    const refs = pkg.externalRefs || [];
+    for (const ref of refs) {
+        if (ref.referenceType === 'purl') {
+            // Package URL format: pkg:npm/lodash@1.0.0 or pkg:pypi/requests
+            const match = ref.referenceLocator?.match(/^pkg:([^/]+)\//);
+            if (match) {
+                const purlType = match[1];
+                // Map PURL types to our ecosystems
+                const ecosystemMap = {
+                    'npm': 'node',
+                    'pypi': 'python',
+                    'golang': 'go',
+                    'maven': 'java',
+                    'cargo': 'rust',
+                    'gem': 'ruby',
+                    'nuget': 'dotnet'
+                };
+                return ecosystemMap[purlType] || purlType;
+            }
+        }
+    }
+    
+    // Fallback: try to infer from package name patterns
+    const pkgName = pkg.name || '';
+    if (pkgName.startsWith('@')) return 'node'; // Scoped NPM package
+    if (pkgName.includes('github.com/')) return 'go'; // Go module
+    if (pkgName.includes(':')) return 'java'; // Maven coordinate
+    
+    return 'unknown';
 }
 
 function detectEcosystem(path) {
@@ -192,16 +344,11 @@ function findInRequirements(content, llmDeps) {
             });
             
             if (isLLMDep) {
-                // Sanitize snippet to remove any potential sensitive information
-                const sanitizedSnippet = trimmed
-                    .replace(/(['"])[A-Za-z0-9+/=_-]{20,}(['"])/g, '$1[REDACTED]$2')
-                    .replace(/(key|token|secret|password|api[_-]?key)(\s*[=:]\s*)(['"]).*?(['"])/gi, '$1$2$3[REDACTED]$4')
-                    .replace(/(key|token|secret|password|api[_-]?key)(\s*[=:]\s*)([^\s'"#]+)/gi, '$1$2[REDACTED]');
                 deps.push({
                     name: depName,
                     version: versionSpec ? versionSpec.replace(/^[>=<~!]+/, '') : 'unspecified',
                     line: i + 1,
-                    snippet: sanitizedSnippet
+                    snippet: trimmed
                 });
             }
         }
@@ -237,16 +384,11 @@ function findInPyproject(content, llmDeps) {
             
             if (isLLMDep) {
                 seen.add(depLower);
-                // Sanitize snippet to remove any potential sensitive information
-                const sanitizedSnippet = line.trim()
-                    .replace(/(['"])[A-Za-z0-9+/=_-]{20,}(['"])/g, '$1[REDACTED]$2')
-                    .replace(/(key|token|secret|password|api[_-]?key)(\s*[=:]\s*)(['"]).*?(['"])/gi, '$1$2$3[REDACTED]$4')
-                    .replace(/(key|token|secret|password|api[_-]?key)(\s*[=:]\s*)([^\s'"#]+)/gi, '$1$2[REDACTED]');
                 deps.push({
                     name: depName,
                     version: 'unspecified',
                     line: i + 1,
-                    snippet: sanitizedSnippet
+                    snippet: line.trim()
                 });
             }
         }
@@ -254,7 +396,7 @@ function findInPyproject(content, llmDeps) {
     return deps;
 }
 
-async function codeDetector({ tree, getFileContent, owner, repo, token, resumeState, repoMeta }) {
+async function codeDetector({ tree, getFileContent, owner, repo, token, resumeState, repoMeta, sbomAvailable, detectedDependencies }) {
     console.log('[Detector: Code] Starting code analysis...');
     const findings = [];
     let aiFilesFound = []; // Track files where AI usage was found
@@ -263,7 +405,9 @@ async function codeDetector({ tree, getFileContent, owner, repo, token, resumeSt
     if (token) {
         console.log('[Detector: Code] Using GitHub Search API for efficient scanning...');
         const languages = repoMeta?.languages || [];
-        const searchResult = await searchCodeViaAPI(owner, repo, token, resumeState, languages);
+        
+        // Pass SBOM intelligence to search function for optimization
+        const searchResult = await searchCodeViaAPI(owner, repo, token, resumeState, languages, sbomAvailable, detectedDependencies);
         
         if (searchResult) {
             findings.push(...searchResult.findings);
@@ -330,12 +474,8 @@ async function codeDetector({ tree, getFileContent, owner, repo, token, resumeSt
                     sdkFindings.set(key, { provider, weight, files: [] });
                 }
                 const lines = content.split('\n').filter(line => pattern.test(line));
-                // Redact any sensitive information from code snippets
-                const redactedSnippet = lines.slice(0, 2).join('\n')
-                    .replace(/(['"])[A-Za-z0-9+/=_-]{20,}(['"])/g, '$1[REDACTED]$2')
-                    .replace(/(key|token|secret|password|api[_-]?key)(\s*[=:]\s*)(['"]).*?(['"])/gi, '$1$2$3[REDACTED]$4')
-                    .replace(/(key|token|secret|password|api[_-]?key)(\s*[=:]\s*)([^\s'"]+)/gi, '$1$2[REDACTED]');
-                sdkFindings.get(key).files.push({ file: file.path, snippet: redactedSnippet });
+                const snippet = lines.slice(0, 2).join('\n');
+                sdkFindings.get(key).files.push({ file: file.path, snippet });
             }
         }
         
@@ -346,12 +486,8 @@ async function codeDetector({ tree, getFileContent, owner, repo, token, resumeSt
                     apiFindings.set(key, { provider, weight, files: [] });
                 }
                 const lines = content.split('\n').filter(line => pattern.test(line));
-                // Redact any sensitive information from code snippets
-                const redactedSnippet = lines.slice(0, 2).join('\n')
-                    .replace(/(['"])[A-Za-z0-9+/=_-]{20,}(['"])/g, '$1[REDACTED]$2')
-                    .replace(/(key|token|secret|password|api[_-]?key)(\s*[=:]\s*)(['"]).*?(['"])/gi, '$1$2$3[REDACTED]$4')
-                    .replace(/(key|token|secret|password|api[_-]?key)(\s*[=:]\s*)([^\s'"]+)/gi, '$1$2[REDACTED]');
-                apiFindings.get(key).files.push({ file: file.path, snippet: redactedSnippet });
+                const snippet = lines.slice(0, 2).join('\n');
+                apiFindings.get(key).files.push({ file: file.path, snippet });
             }
         }
     }
@@ -389,7 +525,7 @@ async function codeDetector({ tree, getFileContent, owner, repo, token, resumeSt
     return { findings, paused: false, aiFilesFound };
 }
 
-async function searchCodeViaAPI(owner, repo, token, resumeState = null, languages = []) {
+async function searchCodeViaAPI(owner, repo, token, resumeState = null, languages = [], sbomAvailable = false, detectedDependencies = []) {
     const findings = resumeState?.findings || [];
     const sdkFindings = resumeState?.sdkFindings || new Map();
     
@@ -434,20 +570,114 @@ async function searchCodeViaAPI(owner, repo, token, resumeState = null, language
         console.log(`[Code Search] Using default extensions: ${codeExtensions}`);
     }
     
-    // Search queries for different LLM SDKs (MAX 10 due to Code Search API rate limit)
-    // Add file extension filter to focus on actual code files
-    const searches = [
-        { query: `from openai import ${codeExtensions}`, provider: 'OpenAI' },
-        { query: `openai.chat.completions ${codeExtensions}`, provider: 'OpenAI' },
-        { query: `from anthropic import ${codeExtensions}`, provider: 'Anthropic' },
-        { query: `@anthropic-ai/sdk ${codeExtensions}`, provider: 'Anthropic' },
-        { query: `from langchain ${codeExtensions}`, provider: 'LangChain' },
-        { query: `ChatOpenAI ${codeExtensions}`, provider: 'OpenAI' },
-        { query: `google.generativeai ${codeExtensions}`, provider: 'Google' },
-        { query: `api.openai.com ${codeExtensions}`, provider: 'OpenAI' },
-        { query: `api.anthropic.com ${codeExtensions}`, provider: 'Anthropic' },
-        { query: `/v1/chat/completions ${codeExtensions}`, provider: 'OpenAI-compatible' }
-    ];
+    // Build smart search queries based on SBOM data
+    let searches = [];
+    
+    if (sbomAvailable && detectedDependencies.length > 0) {
+        // SMART MODE: Build targeted searches based on detected dependencies
+        console.log(`[Code Search] 🎯 SMART MODE: Building targeted searches from ${detectedDependencies.length} SBOM dependencies`);
+        
+        // Map dependencies to search patterns
+        const depNames = detectedDependencies.map(d => d.name.toLowerCase());
+        
+        // Build provider-specific searches based on what's actually installed
+        const providerSearches = {
+            'OpenAI': [],
+            'Anthropic': [],
+            'LangChain': [],
+            'Google': [],
+            'Cohere': [],
+            'Mistral': [],
+            'HuggingFace': []
+        };
+        
+        // Check which providers are installed
+        if (depNames.some(n => n.includes('openai') && !n.includes('langchain'))) {
+            providerSearches['OpenAI'].push(
+                { query: `from openai import ${codeExtensions}`, provider: 'OpenAI' },
+                { query: `openai.chat.completions ${codeExtensions}`, provider: 'OpenAI' },
+                { query: `api.openai.com ${codeExtensions}`, provider: 'OpenAI' }
+            );
+        }
+        
+        if (depNames.some(n => n.includes('anthropic'))) {
+            providerSearches['Anthropic'].push(
+                { query: `from anthropic import ${codeExtensions}`, provider: 'Anthropic' },
+                { query: `@anthropic-ai/sdk ${codeExtensions}`, provider: 'Anthropic' },
+                { query: `api.anthropic.com ${codeExtensions}`, provider: 'Anthropic' }
+            );
+        }
+        
+        if (depNames.some(n => n.includes('langchain'))) {
+            providerSearches['LangChain'].push(
+                { query: `from langchain ${codeExtensions}`, provider: 'LangChain' },
+                { query: `ChatOpenAI ${codeExtensions}`, provider: 'LangChain' }
+            );
+        }
+        
+        if (depNames.some(n => n.includes('google') || n.includes('generativeai') || n.includes('gemini'))) {
+            providerSearches['Google'].push(
+                { query: `google.generativeai ${codeExtensions}`, provider: 'Google' },
+                { query: `gemini ${codeExtensions}`, provider: 'Google' }
+            );
+        }
+        
+        if (depNames.some(n => n.includes('cohere'))) {
+            providerSearches['Cohere'].push(
+                { query: `from cohere import ${codeExtensions}`, provider: 'Cohere' }
+            );
+        }
+        
+        if (depNames.some(n => n.includes('mistral'))) {
+            providerSearches['Mistral'].push(
+                { query: `from mistralai import ${codeExtensions}`, provider: 'Mistral' }
+            );
+        }
+        
+        if (depNames.some(n => n.includes('transformers') || n.includes('diffusers') || n.includes('huggingface'))) {
+            providerSearches['HuggingFace'].push(
+                { query: `from transformers import ${codeExtensions}`, provider: 'HuggingFace' },
+                { query: `AutoModel ${codeExtensions}`, provider: 'HuggingFace' }
+            );
+        }
+        
+        // Flatten all provider searches into single array
+        for (const [provider, queries] of Object.entries(providerSearches)) {
+            if (queries.length > 0) {
+                console.log(`[Code Search] 🎯 Adding ${queries.length} targeted searches for ${provider} (detected in SBOM)`);
+                searches.push(...queries);
+            }
+        }
+        
+        // Add generic API endpoint search
+        searches.push({ query: `/v1/chat/completions ${codeExtensions}`, provider: 'OpenAI-compatible' });
+        
+        // Limit to 10 searches due to API constraints
+        if (searches.length > 10) {
+            console.log(`[Code Search] ⚠️  Generated ${searches.length} searches, limiting to 10 most relevant`);
+            searches = searches.slice(0, 10);
+        }
+        
+        console.log(`[Code Search] 🎯 SMART MODE: ${searches.length} targeted searches (only searching for installed dependencies)`);
+        
+    } else {
+        // FALLBACK MODE: Use broad pattern matching (original behavior)
+        console.log(`[Code Search] 📡 FALLBACK MODE: SBOM not available, using broad pattern matching`);
+        
+        // Search queries for different LLM SDKs (MAX 10 due to Code Search API rate limit)
+        searches = [
+            { query: `from openai import ${codeExtensions}`, provider: 'OpenAI' },
+            { query: `openai.chat.completions ${codeExtensions}`, provider: 'OpenAI' },
+            { query: `from anthropic import ${codeExtensions}`, provider: 'Anthropic' },
+            { query: `@anthropic-ai/sdk ${codeExtensions}`, provider: 'Anthropic' },
+            { query: `from langchain ${codeExtensions}`, provider: 'LangChain' },
+            { query: `ChatOpenAI ${codeExtensions}`, provider: 'OpenAI' },
+            { query: `google.generativeai ${codeExtensions}`, provider: 'Google' },
+            { query: `api.openai.com ${codeExtensions}`, provider: 'OpenAI' },
+            { query: `api.anthropic.com ${codeExtensions}`, provider: 'Anthropic' },
+            { query: `/v1/chat/completions ${codeExtensions}`, provider: 'OpenAI-compatible' }
+        ];
+    }
     
     const startIdx = resumeState?.lastSearchIndex || 0;
     console.log(`[Code Search] Starting from search ${startIdx}/${searches.length} (API limit: 10 req/min)`);
@@ -609,17 +839,10 @@ async function configDetector({ tree, getFileContent }) {
                         modelNameFindings.set(key, { provider, model, files: [] });
                     }
                     
-                    // Redact sensitive information from snippet (in case API keys are on same line)
-                    const redactedSnippet = lines[i].trim()
-                        .replace(/(['"])[A-Za-z0-9+/=_-]{20,}(['"])/g, '$1[REDACTED]$2')
-                        .replace(/(key|token|secret|password)(\s*[=:]\s*)(['"]).*?(['"])/gi, '$1$2$3[REDACTED]$4')
-                        .replace(/(key|token|secret|password)(\s*[=:]\s*)([^\s'"]+)/gi, '$1$2[REDACTED]')
-                        .substring(0, 100);
-                    
                     modelNameFindings.get(key).files.push({ 
                         file: file.path,
                         line: i + 1,
-                        snippet: redactedSnippet
+                        snippet: lines[i].trim().substring(0, 100)
                     });
                     
                     console.log(`[Detector: Config] 🎯 Found ${provider} model "${model}" in config: ${file.path}:${i + 1}`);
@@ -1100,16 +1323,10 @@ async function modelsIdentifierDetector({ tree, getFileContent, owner, repo, tok
                 // Store location with line number (avoid duplicates)
                 const existingLoc = modelsFound.get(key).locations.find(loc => loc.file === path && loc.line === lineNum);
                 if (!existingLoc) {
-                    // Redact sensitive information from snippet
-                    const redactedSnippet = lineContent.trim()
-                        .replace(/(['"])[A-Za-z0-9+/=_-]{20,}(['"])/g, '$1[REDACTED]$2')
-                        .replace(/(key|token|secret|password|api[_-]?key)(\s*[=:]\s*)(['"]).*?(['"])/gi, '$1$2$3[REDACTED]$4')
-                        .replace(/(key|token|secret|password|api[_-]?key)(\s*[=:]\s*)([^\s'"]+)/gi, '$1$2[REDACTED]')
-                        .substring(0, 100); // Limit snippet length
                     modelsFound.get(key).locations.push({
                         file: path,
                         line: lineNum,
-                        snippet: redactedSnippet
+                        snippet: lineContent.trim().substring(0, 100)
                     });
                 }
             }

@@ -49,8 +49,10 @@ The tool requires a GitHub token to operate efficiently. Analysis typically need
 
 ### Dependencies
 Individual components for each AI/LLM library with version and exact location:
-- Python: `openai`, `anthropic`, `langchain`, `transformers`, `chromadb`
-- Node.js: `openai`, `@anthropic-ai/sdk`, `langchain`, `ai`
+- **Primary Detection**: Uses GitHub's Dependency Graph SBOM API (SPDX format) for comprehensive, accurate dependency detection
+- **Fallback Detection**: Manual parsing of manifest files when SBOM API is unavailable
+- **Supported Ecosystems**: Python, Node.js, Go, Java, Rust
+- **Example Libraries**: `openai`, `anthropic`, `langchain`, `transformers`, `chromadb`, `@anthropic-ai/sdk`, `ai`
 
 ### AI Models
 Identifies specific models with type classification:
@@ -84,11 +86,13 @@ This project was developed with **Cursor IDE** and **Claude Code**. All AI-gener
 
 ## 🚀 How It Works
 
-1. **Smart Scanning**: Only scans file types matching detected repository languages (TypeScript → .ts/.tsx, Python → .py)
-2. **Provider Detection**: Identifies which AI providers are used (OpenAI, Google, HuggingFace, etc.) based on dependencies
-3. **Model Classification**: Distinguishes between LLM (text-generation), embedding models, and image generation
-4. **Precise Evidence**: Tracks exact file and line number for every detection
-5. **Machine-Readable**: Each dependency is a separate component, queryable and tooling-compatible
+1. **SBOM-First Approach**: Leverages GitHub's Dependency Graph SBOM API for efficient, standardized dependency detection
+2. **Automatic Fallback**: If SBOM API is unavailable, falls back to manual parsing of manifest files
+3. **Smart Scanning**: Only scans file types matching detected repository languages (TypeScript → .ts/.tsx, Python → .py)
+4. **Provider Detection**: Identifies which AI providers are used (OpenAI, Google, HuggingFace, etc.) based on dependencies
+5. **Model Classification**: Distinguishes between LLM (text-generation), embedding models, and image generation
+6. **Precise Evidence**: Tracks exact file and line number for every detection
+7. **Machine-Readable**: Each dependency is a separate component, queryable and tooling-compatible
 
 ## 📊 Example Output
 

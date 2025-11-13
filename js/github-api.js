@@ -150,6 +150,45 @@ async function searchCodeInRepo(owner, repo, query, token = null) {
     }
 }
 
+async function fetchGitHubSBOM(owner, repo, token) {
+    console.log(`[GitHub SBOM API] Fetching SBOM for ${owner}/${repo}`);
+    const headers = { 
+        'Accept': 'application/vnd.github+json',
+        'X-GitHub-Api-Version': '2022-11-28'
+    };
+    if (token) {
+        headers['Authorization'] = `Bearer ${token}`;
+    }
+    
+    try {
+        const response = await fetch(
+            `${GITHUB_API_BASE}/repos/${owner}/${repo}/dependency-graph/sbom`,
+            { headers }
+        );
+        
+        if (!response.ok) {
+            if (response.status === 404) {
+                console.log('[GitHub SBOM API] Dependency graph not available for this repository');
+            } else if (response.status === 403) {
+                console.log('[GitHub SBOM API] Insufficient permissions - dependency graph may be disabled');
+            } else if (response.status === 401) {
+                console.log('[GitHub SBOM API] Authentication required');
+            } else {
+                console.log(`[GitHub SBOM API] Error ${response.status}: ${response.statusText}`);
+            }
+            return null;
+        }
+        
+        const data = await response.json();
+        const packageCount = data.sbom?.packages?.length || 0;
+        console.log(`[GitHub SBOM API] ✓ SBOM retrieved successfully: ${packageCount} packages found`);
+        return data;
+    } catch (error) {
+        console.error('[GitHub SBOM API] Exception:', error.message);
+        return null;
+    }
+}
+
 async function fetchHuggingFaceModelInfo(modelId) {
     console.log(`[HuggingFace API] Fetching model info for: ${modelId}`);
     try {
