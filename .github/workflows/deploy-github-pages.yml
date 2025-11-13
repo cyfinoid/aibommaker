@@ -1,0 +1,103 @@
+name: Deploy to GitHub Pages
+
+# Trigger on release creation for better control
+on:
+  release:
+    types: [published]
+  
+  # Allow manual trigger from Actions tab for testing
+  workflow_dispatch:
+
+# Minimal permissions following principle of least privilege
+permissions:
+  contents: read      # Read repository contents
+  pages: write        # Deploy to GitHub Pages
+  id-token: write     # Verify deployment origin (OIDC)
+
+# Ensure only one deployment runs at a time
+concurrency:
+  group: "pages"
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    name: Deploy to GitHub Pages
+    runs-on: ubuntu-latest
+    
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v5
+        with:
+          fetch-depth: 1  # Only need current state, not history
+      
+      - name: Setup Pages
+        uses: actions/configure-pages@v5
+        
+      - name: Create deployment directory
+        run: |
+          mkdir -p _site
+          
+          echo "📦 Copying AI BOM Generator files..."
+          
+          # Copy main HTML file
+          cp index.html _site/
+          echo "✅ Copied index.html"
+          
+          # Copy CSS
+          cp styles.css _site/
+          echo "✅ Copied styles.css"
+          
+          # Copy main JavaScript
+          cp app.js _site/
+          echo "✅ Copied app.js"
+          
+          # Copy directories
+          cp -r src _site/
+          echo "✅ Copied src/ directory"
+          
+          cp -r lib _site/
+          echo "✅ Copied lib/ directory"
+          
+          # Add .nojekyll to prevent Jekyll processing
+          touch _site/.nojekyll
+          echo "✅ Created .nojekyll file"
+          
+          echo ""
+          echo "📊 Deployment summary:"
+          echo "  - HTML files: $(ls -1 _site/*.html 2>/dev/null | wc -l)"
+          echo "  - Main JS: app.js"
+          echo "  - CSS files: $(ls -1 _site/*.css 2>/dev/null | wc -l)"
+          echo "  - Source modules: $(find _site/src -name '*.js' 2>/dev/null | wc -l)"
+          echo "  - Library files: $(find _site/lib -name '*.js' 2>/dev/null | wc -l)"
+          echo ""
+          echo "📁 Contents of _site/:"
+          ls -la _site/
+          
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: '_site'
+          
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
+        
+      - name: Summary
+        run: |
+          echo "## 🚀 Deployment Complete" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "✅ Successfully deployed AI BOM Generator to GitHub Pages" >> $GITHUB_STEP_SUMMARY
+          echo "📦 Release: ${{ github.event.release.tag_name || 'manual trigger' }}" >> $GITHUB_STEP_SUMMARY
+          echo "🔗 URL: ${{ steps.deployment.outputs.page_url }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "### Files Deployed" >> $GITHUB_STEP_SUMMARY
+          echo "- index.html" >> $GITHUB_STEP_SUMMARY
+          echo "- app.js" >> $GITHUB_STEP_SUMMARY
+          echo "- styles.css" >> $GITHUB_STEP_SUMMARY
+          echo "- src/ (detection modules)" >> $GITHUB_STEP_SUMMARY
+          echo "- lib/ (syntax highlighting)" >> $GITHUB_STEP_SUMMARY
+
