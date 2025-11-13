@@ -584,9 +584,13 @@ async function configDetector({ tree, getFileContent }) {
                fileName === 'constants.js';
     });
     
-    console.log(`[Detector: Config] Found ${configFiles.length} config files to scan`);
+    console.log(`[Detector: Config] Found ${configFiles.length} config files to scan for model references`);
     
-    const apiKeyFindings = new Map();
+    // NOTE: We intentionally do NOT scan for API keys because:
+    // 1. Good projects don't commit API keys (they use env vars at runtime)
+    // 2. Code patterns and dependencies are better AI/LLM indicators
+    // 3. We shouldn't log or expose secret references for security reasons
+    
     const modelNameFindings = new Map();
     
     for (const file of configFiles) {
@@ -596,31 +600,7 @@ async function configDetector({ tree, getFileContent }) {
         
         const lines = content.split('\n');
         
-        // Check for API keys
-        for (const { pattern, provider, weight } of CONFIG_PATTERNS) {
-            for (let i = 0; i < lines.length; i++) {
-                if (pattern.test(lines[i])) {
-                    const key = `apikey-${provider}`;
-                    if (!apiKeyFindings.has(key)) {
-                        apiKeyFindings.set(key, { provider, weight, files: [] });
-                    }
-                    // Redact sensitive information from snippet
-                    const redactedSnippet = lines[i].trim()
-                        .replace(/(['"])[A-Za-z0-9+/=_-]{20,}(['"])/g, '$1[REDACTED]$2')
-                        .replace(/(key|token|secret|password)(\s*[=:]\s*)(['"]).*?(['"])/gi, '$1$2$3[REDACTED]$4')
-                        .replace(/(key|token|secret|password)(\s*[=:]\s*)([^\s'"]+)/gi, '$1$2[REDACTED]')
-                        .substring(0, 100);
-                    apiKeyFindings.get(key).files.push({ 
-                        file: file.path, 
-                        line: i + 1,
-                        snippet: redactedSnippet
-                    });
-                    break; // One per file is enough
-                }
-            }
-        }
-        
-        // Check for model names in config
+        // Check for model names in config (NOT API keys)
         for (const { pattern, provider, model } of MODEL_PATTERNS) {
             for (let i = 0; i < lines.length; i++) {
                 if (pattern.test(lines[i])) {
@@ -649,21 +629,7 @@ async function configDetector({ tree, getFileContent }) {
         }
     }
     
-    // Create findings for API keys
-    for (const [key, data] of apiKeyFindings) {
-        console.log(`[Detector: Config] ✓ Found ${data.provider} API configuration in ${data.files.length} files`);
-        findings.push({
-            id: `config-${key}`,
-            title: `${data.provider} API Configuration`,
-            category: 'config',
-            severity: 'medium',
-            weight: data.weight,
-            description: `Found ${data.provider} API key configuration`,
-            evidence: data.files.slice(0, 5)
-        });
-    }
-    
-    // Create findings for model names
+    // Create findings for model names (API key findings removed - see note above)
     for (const [key, data] of modelNameFindings) {
         console.log(`[Detector: Config] ✓ Found ${data.provider} model "${data.model}" in ${data.files.length} config files`);
         findings.push({
@@ -1093,6 +1059,11 @@ async function modelsIdentifierDetector({ tree, getFileContent, owner, repo, tok
             while ((match = regex.exec(content)) !== null) {
                 let modelName = model === 'extract' ? match[1] : model;
                 
+                // Special case: Exclude Google's models/* format from HuggingFace detector
+                if (provider === 'HuggingFace' && modelName.startsWith('models/')) {
+                    continue; // This is a Google model, not HuggingFace
+                }
+                
                 // Validate model name to filter out false positives
                 if (!isValidModelName(modelName, provider)) {
                     continue; // Skip invalid model names
@@ -1102,12 +1073,19 @@ async function modelsIdentifierDetector({ tree, getFileContent, owner, repo, tok
                 const lineNum = content.substring(0, match.index).split('\n').length;
                 const lineContent = lines[lineNum - 1] || '';
                 
-                const key = `${provider}-${modelName}`;
+                // Normalize Google model names: prefer "models/embedding-001" format
+                let normalizedModelName = modelName;
+                if (provider === 'Google' && !modelName.startsWith('models/') && 
+                    (modelName.includes('embedding') || modelName.includes('text-embedding'))) {
+                    normalizedModelName = `models/${modelName}`;
+                }
+                
+                const key = `${provider}-${normalizedModelName}`;
                 
                 if (!modelsFound.has(key)) {
                     modelsFound.set(key, {
                         provider,
-                        modelName,
+                        modelName: normalizedModelName, // Use normalized name
                         modelType: type, // text-generation, embeddings, text-to-image, etc.
                         locations: [], // Change from files to locations (includes line numbers)
                         isHuggingFace: provider === 'HuggingFace'
@@ -1115,7 +1093,7 @@ async function modelsIdentifierDetector({ tree, getFileContent, owner, repo, tok
                     
                     if (priority) {
                         const typeInfo = type !== 'unknown' ? ` [${type}]` : '';
-                        console.log(`[Detector: AI Models] 🎯 Found ${provider} model "${modelName}"${typeInfo} in priority file: ${path}:${lineNum}`);
+                        console.log(`[Detector: AI Models] 🎯 Found ${provider} model "${normalizedModelName}"${typeInfo} in priority file: ${path}:${lineNum}`);
                     }
                 }
                 

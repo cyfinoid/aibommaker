@@ -92,18 +92,11 @@ const API_ENDPOINTS = [
     { pattern: /\/v1\/embeddings/i, provider: 'OpenAI-compatible', weight: 3 }
 ];
 
-const CONFIG_PATTERNS = [
-    { pattern: /OPENAI_API_KEY/i, provider: 'OpenAI', weight: 3 },
-    { pattern: /ANTHROPIC_API_KEY/i, provider: 'Anthropic', weight: 3 },
-    { pattern: /GOOGLE_API_KEY|GEMINI_API_KEY/i, provider: 'Google', weight: 3 },
-    { pattern: /AZURE_OPENAI_/i, provider: 'Azure OpenAI', weight: 3 },
-    { pattern: /MISTRAL_API_KEY/i, provider: 'Mistral', weight: 3 },
-    { pattern: /GROQ_API_KEY/i, provider: 'Groq', weight: 3 },
-    { pattern: /COHERE_API_KEY/i, provider: 'Cohere', weight: 3 },
-    { pattern: /REPLICATE_API_TOKEN/i, provider: 'Replicate', weight: 3 },
-    { pattern: /OLLAMA_HOST|OLLAMA_API/i, provider: 'Ollama', weight: 3 },
-    { pattern: /HUGGINGFACE_TOKEN|HF_TOKEN/i, provider: 'HuggingFace', weight: 3 }
-];
+// CONFIG_PATTERNS removed - we don't scan for API keys anymore
+// Reasons:
+// 1. Good projects don't commit API keys (use env vars at runtime)
+// 2. Code/dependencies are better AI indicators
+// 3. Security: shouldn't log or expose secret references
 
 const MODEL_PATTERNS = [
     { pattern: /gpt-4o/i, provider: 'OpenAI', model: 'GPT-4o' },
