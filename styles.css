@@ -57,18 +57,62 @@ body {
     padding: 2rem;
 }
 
+/* Warning Banner */
+.warning-banner {
+    background: linear-gradient(135deg, rgba(253, 203, 82, 0.15), rgba(214, 60, 83, 0.15));
+    border: 2px solid var(--accent-yellow);
+    border-radius: 8px;
+    padding: 1rem;
+    margin: 1rem 0 0 0;
+    box-shadow: 0 4px 12px rgba(253, 203, 82, 0.2);
+}
+
+.warning-header {
+    font-size: var(--font-section-header);
+    font-weight: 800;
+    color: var(--accent-yellow);
+    margin-bottom: 0.75rem;
+    text-align: center;
+}
+
+.warning-banner p {
+    color: var(--text-light);
+    margin-bottom: 0.5rem;
+    line-height: 1.5;
+    font-size: var(--font-caption);
+}
+
+.warning-banner p:last-child {
+    margin-bottom: 0;
+}
+
+.warning-banner strong {
+    color: var(--accent-yellow);
+    font-weight: 700;
+}
+
+/* Light mode adjustments for warning banner */
+[data-theme="light"] .warning-banner {
+    background: linear-gradient(135deg, rgba(230, 184, 74, 0.2), rgba(192, 42, 62, 0.2));
+    box-shadow: 0 4px 12px rgba(230, 184, 74, 0.3);
+}
+
+[data-theme="light"] .warning-banner strong {
+    color: var(--accent-red);
+}
+
 /* Typography */
 .title {
     font-size: var(--font-title);
     font-weight: 800;
-    margin-bottom: 0.5rem;
+    margin-bottom: 0.25rem;
 }
 
 .subtitle {
     font-size: var(--font-subtitle);
     font-weight: 400;
     color: var(--text-secondary);
-    margin-bottom: 2rem;
+    margin-bottom: 1rem;
 }
 
 .heading {
@@ -102,9 +146,9 @@ body {
 /* Header */
 .header {
     text-align: center;
-    padding: 2rem 0 3rem;
+    padding: 1.5rem 0 1.5rem;
     border-bottom: 2px solid var(--text-primary);
-    margin-bottom: 2rem;
+    margin-bottom: 1.5rem;
     position: relative;
 }
 
@@ -575,11 +619,76 @@ body {
     font-size: 13px;
     color: var(--text-light);
     overflow-x: auto;
-    max-height: 600px;
+    max-height: 1000px;
     overflow-y: auto;
     white-space: pre;
     line-height: 1;
     /* tab-size: 2; */
+    
+    /* Custom scrollbar for better visibility */
+    scrollbar-width: thin;
+    scrollbar-color: var(--text-primary) var(--bg-secondary);
+}
+
+/* Webkit scrollbar styling for Chrome/Safari/Edge - Highly visible */
+.code-preview::-webkit-scrollbar {
+    width: 14px;
+    height: 14px;
+}
+
+.code-preview::-webkit-scrollbar-track {
+    background: var(--bg-secondary);
+    border-radius: 6px;
+    border: 1px solid rgba(80, 200, 120, 0.2);
+}
+
+.code-preview::-webkit-scrollbar-thumb {
+    background: var(--text-primary);
+    border-radius: 6px;
+    border: 2px solid var(--bg-secondary);
+    box-shadow: 0 0 6px rgba(80, 200, 120, 0.3);
+}
+
+.code-preview::-webkit-scrollbar-thumb:hover {
+    background: var(--accent-green);
+    box-shadow: 0 0 10px rgba(127, 209, 185, 0.5);
+}
+
+.code-preview::-webkit-scrollbar-thumb:active {
+    background: var(--accent-yellow);
+}
+
+.code-preview::-webkit-scrollbar-corner {
+    background: var(--bg-secondary);
+}
+
+/* Parent container for tab content to provide visual context */
+.tab-content pre {
+    position: relative;
+    background-color: var(--bg-secondary);
+    border: 1px solid rgba(80, 200, 120, 0.2);
+    border-radius: 6px;
+    padding: 1rem;
+    box-shadow: inset 0 2px 8px rgba(0, 0, 0, 0.3);
+}
+
+/* Light mode scrollbar adjustments */
+[data-theme="light"] .code-preview::-webkit-scrollbar-track {
+    border: 1px solid rgba(45, 122, 79, 0.3);
+}
+
+[data-theme="light"] .code-preview::-webkit-scrollbar-thumb {
+    background: var(--text-primary);
+    box-shadow: 0 0 6px rgba(45, 122, 79, 0.4);
+}
+
+[data-theme="light"] .code-preview::-webkit-scrollbar-thumb:hover {
+    background: var(--accent-green);
+    box-shadow: 0 0 10px rgba(77, 181, 147, 0.6);
+}
+
+[data-theme="light"] .tab-content pre {
+    box-shadow: inset 0 2px 8px rgba(0, 0, 0, 0.1);
 }
 
 /* Syntax Highlighting */
