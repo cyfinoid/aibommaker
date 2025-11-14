@@ -163,6 +163,9 @@ function extractGovernanceMetadata(findings, analysisResult) {
     const governanceFindings = findings.filter(f => f.category === 'governance');
     const modelFindings = findings.filter(f => f.modelInfo);
     
+    // Get parsed documentation from README.md if available
+    const parsedDocs = analysisResult.parsedDocs || null;
+    
     const governance = {
         models: [],
         documentation_status: {
@@ -176,7 +179,18 @@ function extractGovernanceMetadata(findings, analysisResult) {
             security_documentation: false,
             readme_present: false
         },
-        detected_considerations: []
+        detected_considerations: [],
+        // Include extracted documentation text from README.md
+        extracted_documentation: parsedDocs ? {
+            intended_use: parsedDocs.intendedUse || [],
+            limitations: parsedDocs.limitations || [],
+            ethical_considerations: parsedDocs.ethicalConsiderations || [],
+            bias_information: parsedDocs.biasInformation || [],
+            security_notes: parsedDocs.securityNotes || [],
+            // RFC 9116 security.txt parsed data
+            security_txt: parsedDocs.securityTxt || null,
+            source_files: parsedDocs.files || []
+        } : null
     };
     
     // Extract model information
@@ -193,12 +207,19 @@ function extractGovernanceMetadata(findings, analysisResult) {
         }
     }
     
-    // Check documentation status
+    // Check documentation status from findings
     for (const finding of governanceFindings) {
         if (finding.riskInfo) {
             const type = finding.riskInfo.type;
             
-            if (type === 'limitations') {
+            if (type === 'intended-use') {
+                governance.documentation_status.intended_use_documented = true;
+                governance.detected_considerations.push({
+                    type: 'intended_use',
+                    count: finding.riskInfo.count,
+                    description: finding.description
+                });
+            } else if (type === 'limitations') {
                 governance.documentation_status.limitations_documented = true;
                 governance.detected_considerations.push({
                     type: 'limitations',
@@ -223,11 +244,38 @@ function extractGovernanceMetadata(findings, analysisResult) {
         }
     }
     
-    // Check for README and documentation files from all findings
-    const allFiles = findings.flatMap(f => f.evidence?.map(e => e.file) || []);
-    governance.transparency.readme_present = allFiles.some(f => f && f.toLowerCase().includes('readme'));
-    governance.transparency.model_cards_present = allFiles.some(f => f && f.toLowerCase().includes('model'));
-    governance.transparency.security_documentation = allFiles.some(f => f && f.toLowerCase().includes('security'));
+    // Also check parsedDocs directly for documentation status
+    if (parsedDocs) {
+        if (parsedDocs.intendedUse && parsedDocs.intendedUse.length > 0) {
+            governance.documentation_status.intended_use_documented = true;
+        }
+        if (parsedDocs.limitations && parsedDocs.limitations.length > 0) {
+            governance.documentation_status.limitations_documented = true;
+        }
+        if (parsedDocs.ethicalConsiderations && parsedDocs.ethicalConsiderations.length > 0) {
+            governance.documentation_status.ethical_considerations_documented = true;
+        }
+        if (parsedDocs.biasInformation && parsedDocs.biasInformation.length > 0) {
+            governance.documentation_status.bias_fairness_documented = true;
+        }
+        
+        // Check for README and documentation files from parsed docs
+        governance.transparency.readme_present = parsedDocs.files.some(f => f && f.toLowerCase().includes('readme'));
+        governance.transparency.model_cards_present = parsedDocs.files.some(f => f && f.toLowerCase().includes('model'));
+        // Check for SECURITY.md or security.txt (RFC 9116)
+        governance.transparency.security_documentation = parsedDocs.files.some(f => {
+            const lower = f.toLowerCase();
+            return lower.includes('security') || lower.endsWith('security.txt');
+        }) || (parsedDocs.securityTxt !== null);
+    }
+    
+    // Fallback: Check for README and documentation files from all findings if parsedDocs not available
+    if (!parsedDocs) {
+        const allFiles = findings.flatMap(f => f.evidence?.map(e => e.file) || []);
+        governance.transparency.readme_present = allFiles.some(f => f && f.toLowerCase().includes('readme'));
+        governance.transparency.model_cards_present = allFiles.some(f => f && f.toLowerCase().includes('model'));
+        governance.transparency.security_documentation = allFiles.some(f => f && f.toLowerCase().includes('security'));
+    }
     
     return governance;
 }

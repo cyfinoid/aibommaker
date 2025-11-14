@@ -257,6 +257,7 @@ const DOCUMENTATION_FILES = [
     'README.md', 'readme.md', 'Readme.md',
     'MODEL_CARD.md', 'model-card.md', 'ModelCard.md', 'model_card.md',
     'SECURITY.md', 'security.md', 'Security.md',
+    'security.txt', // RFC 9116 security.txt file
     'LIMITATIONS.md', 'limitations.md', 'Limitations.md',
     'ETHICS.md', 'ethics.md', 'Ethics.md',
     'FAIRNESS.md', 'fairness.md',

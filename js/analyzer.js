@@ -375,6 +375,7 @@ async function analyzeRepository(input, onProgress = null) {
             topics: repoMeta.topics,
             languages: repoMeta.languages
         },
+        parsedDocs: parsedDocs, // Include parsed documentation for BOM generation
         analyzedAt: new Date().toISOString()
     };
 }

@@ -74,6 +74,11 @@ async function fetchRepoTree(owner, repo, ref, token = null) {
     const headers = { 'Accept': 'application/vnd.github.v3+json' };
     if (token) headers['Authorization'] = `Bearer ${token}`;
     
+    // NOTE: We use recursive=1 to get the full file tree because:
+    // 1. We need to check for documentation files (README.md, SECURITY.md) that may be in subdirectories
+    // 2. AI-specific config files (model configs, YAML files) may be anywhere in the repo
+    // 3. The tree is fetched once and reused across all detectors, making it efficient
+    // 4. This enables targeted scanning of specific file types without multiple API calls
     const startTime = performance.now();
     const response = await fetch(
         `${GITHUB_API_BASE}/repos/${owner}/${repo}/git/trees/${ref}?recursive=1`,

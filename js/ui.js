@@ -16,14 +16,21 @@ function renderScoreBadge(score, confidence) {
     badge.textContent = `Score: ${score} - ${confidence.label}`;
 }
 
-function renderAnalysisNotes(findings, analysisResult) {
+function renderAnalysisNotes(findings, analysisResult, fileTree = null) {
     const container = document.getElementById('analysis-notes-list');
     container.innerHTML = '';
     
     // Scan-specific: What we looked for but didn't find in THIS repository
     const notFound = [];
     
-    const allFiles = findings.flatMap(f => f.evidence?.map(e => e.file) || []);
+    // Check actual file tree for documentation files (not just files referenced in findings)
+    // This ensures we detect README.md even if it wasn't referenced in any finding's evidence
+    const treeFiles = fileTree ? fileTree.map(f => f.path) : [];
+    const allFilesFromFindings = findings.flatMap(f => f.evidence?.map(e => e.file) || []);
+    
+    // Combine tree files and findings files for comprehensive check
+    const allFiles = [...new Set([...treeFiles, ...allFilesFromFindings])];
+    
     const hasDependencies = findings.some(f => f.category === 'dependencies');
     const hasModels = findings.some(f => f.modelInfo);
     const hasHardware = findings.some(f => f.category === 'hardware');
@@ -34,7 +41,9 @@ function renderAnalysisNotes(findings, analysisResult) {
     );
     
     // Documentation we scanned for but didn't find
-    if (!allFiles.some(f => f && f.toLowerCase().includes('readme'))) {
+    // Check actual file tree, not just files referenced in findings
+    const hasReadme = allFiles.some(f => f && f.toLowerCase().includes('readme'));
+    if (!hasReadme) {
         notFound.push({
             category: 'Documentation',
             item: 'README.md',
@@ -52,12 +61,16 @@ function renderAnalysisNotes(findings, analysisResult) {
         });
     }
     
-    if (!allFiles.some(f => f && f.toLowerCase().includes('security'))) {
+    const hasSecurity = allFiles.some(f => {
+        const lower = f.toLowerCase();
+        return lower.includes('security') || lower.endsWith('security.txt');
+    });
+    if (!hasSecurity) {
         notFound.push({
             category: 'Documentation',
-            item: 'SECURITY.md',
-            searched: 'Scanned repository root for security policy',
-            benefit: 'Would provide vulnerability reporting procedures and security contacts'
+            item: 'SECURITY.md or security.txt (RFC 9116)',
+            searched: 'Scanned repository root and .well-known/ directory for security policy',
+            benefit: 'Would provide vulnerability reporting procedures and security contacts (RFC 9116 standard)'
         });
     }
     
@@ -397,10 +410,15 @@ document.addEventListener('DOMContentLoaded', () => {
         e.preventDefault();
         
         const repoInput = document.getElementById('repo-input').value.trim();
-        const token = document.getElementById('token-input').value.trim() || null;
+        const token = document.getElementById('token-input').value.trim();
         
         if (!repoInput) {
             alert('Please enter a repository');
+            return;
+        }
+        
+        if (!token) {
+            alert('GitHub token is required. Please provide a GitHub Personal Access Token.');
             return;
         }
         
@@ -462,7 +480,8 @@ document.addEventListener('DOMContentLoaded', () => {
             // Score badge removed - AIBOM focuses on what's found, not scoring
             // renderScoreBadge(result.score, result.confidence);
             renderFindings(result.findings, result.repository.htmlUrl);
-            renderAnalysisNotes(result.findings, result);
+            // Pass file tree to check for documentation files that may not be in findings evidence
+            renderAnalysisNotes(result.findings, result, tree);
             regenerateBOMs();
             
             document.getElementById('findings-section').scrollIntoView({ behavior: 'smooth' });

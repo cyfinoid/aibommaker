@@ -47,14 +47,15 @@
                     <p class="caption">Enter a GitHub repository URL or owner/repo format</p>
                 </div>
                 <div class="form-group">
-                    <label for="token-input" class="form-label">GitHub Token (Optional)</label>
+                    <label for="token-input" class="form-label">GitHub Token <span style="color: var(--accent-red);">*</span></label>
                     <input 
                         type="password" 
                         id="token-input" 
                         class="form-input" 
                         placeholder="ghp_xxxxxxxxxxxxxxxxxxxx"
+                        required
                     >
-                    <p class="caption">Provide a token to avoid rate limiting</p>
+                    <p class="caption">Required for GitHub API access and to avoid rate limiting</p>
                 </div>
                 <button type="submit" id="analyze-btn" class="btn btn-primary">
                     Analyze Repository

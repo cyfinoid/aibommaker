@@ -402,6 +402,11 @@ async function codeDetector({ tree, getFileContent, owner, repo, token, resumeSt
     let aiFilesFound = []; // Track files where AI usage was found
     
     // Try GitHub Search API first (more efficient if token is provided)
+    // NOTE: We use GitHub Search API for primary detection, but still need recursive tree scanning because:
+    // 1. GitHub Search API has rate limits and may not cover all patterns
+    // 2. Some AI-specific files (config files, model files, etc.) may not match search patterns
+    // 3. We need to scan files identified by search API for detailed analysis (line numbers, context)
+    // 4. Fallback is needed when Search API is unavailable or rate-limited
     if (token) {
         console.log('[Detector: Code] Using GitHub Search API for efficient scanning...');
         const languages = repoMeta?.languages || [];
@@ -442,6 +447,11 @@ async function codeDetector({ tree, getFileContent, owner, repo, token, resumeSt
     }
     
     // Fallback: Traditional file scanning
+    // WHY RECURSIVE SCANNING: Even with Search API, we need recursive tree access because:
+    // - Search API may miss AI-specific config files (model names in YAML/JSON)
+    // - Some detectors need to scan specific file types (e.g., modelsIdentifierDetector scans config files)
+    // - Documentation detection needs to check entire tree for README.md, SECURITY.md, etc.
+    // - The tree is fetched once (recursive=1) and reused, so it's efficient
     const CODE_EXTENSIONS = ['.py', '.js', '.ts', '.jsx', '.tsx'];
     const codeFiles = tree.filter(entry => {
         const ext = entry.path.match(/\.[^.]+$/)?.[0] || '';
@@ -1220,6 +1230,11 @@ async function modelsIdentifierDetector({ tree, getFileContent, owner, repo, tok
     console.log('[Detector: AI Models] Starting AI model identification...');
     const findings = [];
     const modelsFound = new Map();
+    
+    // WHY RECURSIVE TREE SCANNING FOR MODELS:
+    // Model names are often in config files (YAML, JSON, TOML, .env) that may not be detected by code search
+    // We prioritize files where AI usage was already detected, then scan config files, then code files
+    // This targeted approach minimizes unnecessary scanning while ensuring we catch model references
     
     // Get file extensions to scan based on repository languages
     const languages = repoMeta?.languages || [];
@@ -2084,6 +2099,61 @@ async function infrastructureDetector({ tree, getFileContent, allFindings = [] }
 // ============================================================================
 // DOCUMENTATION PARSER
 // ============================================================================
+/**
+ * Parse RFC 9116 security.txt format
+ * Fields: Contact, Expires, Encryption, Acknowledgments, Preferred-Languages, Canonical, Policy
+ */
+function parseSecurityTxt(content) {
+    const securityInfo = {
+        contact: [],
+        expires: null,
+        encryption: [],
+        acknowledgments: [],
+        preferredLanguages: [],
+        canonical: null,
+        policy: null
+    };
+    
+    const lines = content.split('\n');
+    for (const line of lines) {
+        const trimmed = line.trim();
+        if (!trimmed || trimmed.startsWith('#')) continue; // Skip comments and empty lines
+        
+        // RFC 9116 format: Field: Value
+        const colonIndex = trimmed.indexOf(':');
+        if (colonIndex === -1) continue;
+        
+        const field = trimmed.substring(0, colonIndex).trim().toLowerCase();
+        const value = trimmed.substring(colonIndex + 1).trim();
+        
+        switch (field) {
+            case 'contact':
+                securityInfo.contact.push(value);
+                break;
+            case 'expires':
+                securityInfo.expires = value;
+                break;
+            case 'encryption':
+                securityInfo.encryption.push(value);
+                break;
+            case 'acknowledgments':
+                securityInfo.acknowledgments.push(value);
+                break;
+            case 'preferred-languages':
+                securityInfo.preferredLanguages = value.split(',').map(l => l.trim());
+                break;
+            case 'canonical':
+                securityInfo.canonical = value;
+                break;
+            case 'policy':
+                securityInfo.policy = value;
+                break;
+        }
+    }
+    
+    return securityInfo;
+}
+
 async function documentationParser({ tree, getFileContent }) {
     console.log('[Detector: Documentation] Starting documentation analysis...');
     const parsedDocs = {
@@ -2092,16 +2162,29 @@ async function documentationParser({ tree, getFileContent }) {
         ethicalConsiderations: [],
         biasInformation: [],
         securityNotes: [],
+        securityTxt: null, // RFC 9116 security.txt parsed data
         files: []
     };
     
-    // Find documentation files
-    const docFiles = tree.filter(entry => 
-        DOCUMENTATION_FILES.some(docFile => 
-            entry.path.toLowerCase().endsWith(docFile.toLowerCase()) ||
-            entry.path.toLowerCase() === docFile.toLowerCase()
-        )
-    );
+    // Find documentation files (including security.txt in .well-known/ or root)
+    const docFiles = tree.filter(entry => {
+        const path = entry.path.toLowerCase();
+        const fileName = entry.path.split('/').pop().toLowerCase();
+        
+        // Check standard documentation files
+        if (DOCUMENTATION_FILES.some(docFile => 
+            path.endsWith(docFile.toLowerCase()) || fileName === docFile.toLowerCase()
+        )) {
+            return true;
+        }
+        
+        // Check for security.txt in .well-known/ directory (RFC 9116 preferred location)
+        if (path === '.well-known/security.txt' || path === '/.well-known/security.txt') {
+            return true;
+        }
+        
+        return false;
+    });
     
     console.log(`[Detector: Documentation] Found ${docFiles.length} documentation files`);
     
@@ -2111,8 +2194,30 @@ async function documentationParser({ tree, getFileContent }) {
         
         parsedDocs.files.push(file.path);
         const lowerContent = content.toLowerCase();
+        const fileName = file.path.split('/').pop().toLowerCase();
         
-        // Extract sections by headers
+        // Special handling for RFC 9116 security.txt format
+        if (fileName === 'security.txt' || file.path.toLowerCase().endsWith('/security.txt')) {
+            console.log(`[Detector: Documentation] Parsing RFC 9116 security.txt: ${file.path}`);
+            parsedDocs.securityTxt = parseSecurityTxt(content);
+            
+            // Also add security contact info to securityNotes for consistency
+            if (parsedDocs.securityTxt.contact.length > 0) {
+                parsedDocs.securityNotes.push({
+                    file: file.path,
+                    text: `Security Contact: ${parsedDocs.securityTxt.contact.join(', ')}`
+                });
+            }
+            if (parsedDocs.securityTxt.policy) {
+                parsedDocs.securityNotes.push({
+                    file: file.path,
+                    text: `Security Policy: ${parsedDocs.securityTxt.policy}`
+                });
+            }
+            continue; // Skip markdown parsing for security.txt
+        }
+        
+        // Extract sections by headers (for markdown files)
         const lines = content.split('\n');
         let currentSection = '';
         let currentContent = [];
@@ -2157,6 +2262,9 @@ async function documentationParser({ tree, getFileContent }) {
         }
     }
     
+    if (parsedDocs.securityTxt) {
+        console.log(`[Detector: Documentation] ✓ Parsed security.txt: ${parsedDocs.securityTxt.contact.length} contact(s), policy: ${parsedDocs.securityTxt.policy ? 'yes' : 'no'}`);
+    }
     console.log(`[Detector: Documentation] Extracted: ${parsedDocs.intendedUse.length} intended use, ${parsedDocs.limitations.length} limitations, ${parsedDocs.ethicalConsiderations.length} ethical considerations`);
     
     return parsedDocs;
@@ -2185,7 +2293,10 @@ async function riskDetector({ tree, getFileContent, allFindings = [], parsedDocs
     // Track missing critical documentation (for analysis notes, not findings)
     const hasReadme = parsedDocs.files.some(f => f.toLowerCase().includes('readme'));
     const hasModelCard = parsedDocs.files.some(f => f.toLowerCase().includes('model'));
-    const hasSecurity = parsedDocs.files.some(f => f.toLowerCase().includes('security'));
+    const hasSecurity = parsedDocs.files.some(f => {
+        const lower = f.toLowerCase();
+        return lower.includes('security') || lower.endsWith('security.txt');
+    });
     
     if (!hasReadme) {
         risks.missingDocs.push('No README.md found');
@@ -2194,7 +2305,7 @@ async function riskDetector({ tree, getFileContent, allFindings = [], parsedDocs
         risks.missingDocs.push('No MODEL_CARD.md found');
     }
     if (!hasSecurity) {
-        risks.missingDocs.push('No SECURITY.md found');
+        risks.missingDocs.push('No SECURITY.md or security.txt (RFC 9116) found');
     }
     
     // Check dependencies for known issues
@@ -2278,6 +2389,26 @@ async function riskDetector({ tree, getFileContent, allFindings = [], parsedDocs
     }
     
     // Create findings only for POSITIVE indicators (what we found)
+    if (parsedDocs.intendedUse.length > 0) {
+        console.log(`[Detector: Risk] ✓ Found ${parsedDocs.intendedUse.length} documented intended use`);
+        findings.push({
+            id: 'governance-intended-use-documented',
+            title: 'Intended Use Documented',
+            category: 'governance',
+            severity: 'info',
+            weight: 0,
+            description: `Model intended use is documented in ${parsedDocs.intendedUse.length} location(s)`,
+            evidence: parsedDocs.intendedUse.slice(0, 3).map(u => ({ 
+                file: u.file, 
+                snippet: u.text.substring(0, 200) 
+            })),
+            riskInfo: {
+                type: 'intended-use',
+                count: parsedDocs.intendedUse.length
+            }
+        });
+    }
+    
     if (parsedDocs.limitations.length > 0) {
         console.log(`[Detector: Risk] ✓ Found ${parsedDocs.limitations.length} documented limitations`);
         findings.push({
