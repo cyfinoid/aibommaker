@@ -151,6 +151,8 @@ async function analyzeRepository(input, onProgress = null) {
         { name: 'CI/CD', fn: ciDetector },
         { name: 'Model Files', fn: modelsDetector },
         { name: 'Prompts', fn: promptsDetector },
+        { name: 'Protocols', fn: protocolDetector }, // MCP, A2A, and plugin systems
+        { name: 'AI Dev Tools', fn: aiDevToolsDetector }, // Cursor, Copilot, Claude Code (low confidence)
         { name: 'Hardware', fn: hardwareDetector, needsAllFindings: true },
         { name: 'Infrastructure', fn: infrastructureDetector, needsAllFindings: true },
         { name: 'Documentation', fn: documentationParser, isParser: true }, // Parser, not detector

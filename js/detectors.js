@@ -125,7 +125,8 @@ async function dependenciesDetector({ tree, getFileContent, owner, repo, token }
         }
         
         console.log(`[Detector: Dependencies] Detected ecosystem: ${ecosystem}`);
-        const llmDeps = LLM_DEPENDENCIES[ecosystem] || [];
+        // Use AI_EXTENDED_DEPENDENCIES for comprehensive AI package detection
+        const llmDeps = AI_EXTENDED_DEPENDENCIES[ecosystem] || LLM_DEPENDENCIES[ecosystem] || [];
         let foundDeps = [];
         
         if (manifest.path.endsWith('package.json')) {
@@ -177,20 +178,21 @@ async function dependenciesDetector({ tree, getFileContent, owner, repo, token }
 }
 
 function extractLLMDependenciesFromSBOM(sbom) {
-    console.log('[SBOM Parser] Extracting LLM dependencies from SPDX SBOM...');
+    console.log('[SBOM Parser] Extracting AI/LLM dependencies from SPDX SBOM...');
     const llmDeps = [];
     
     // SPDX format: sbom.packages is an array of package objects
     const packages = sbom.packages || [];
     console.log(`[SBOM Parser] Processing ${packages.length} packages from SBOM...`);
     
-    // Create a flat list of all known LLM dependencies (lowercase for matching)
+    // Create a flat list of all known AI dependencies (lowercase for matching)
+    // Use AI_EXTENDED_DEPENDENCIES which includes LLM providers, frameworks, agents, protocols, etc.
     const allKnownDeps = [
-        ...LLM_DEPENDENCIES.python,
-        ...LLM_DEPENDENCIES.node,
-        ...LLM_DEPENDENCIES.go,
-        ...LLM_DEPENDENCIES.java,
-        ...LLM_DEPENDENCIES.rust
+        ...AI_EXTENDED_DEPENDENCIES.python,
+        ...AI_EXTENDED_DEPENDENCIES.node,
+        ...AI_EXTENDED_DEPENDENCIES.go,
+        ...AI_EXTENDED_DEPENDENCIES.java,
+        ...AI_EXTENDED_DEPENDENCIES.rust
     ].map(d => d.toLowerCase());
     
     for (const pkg of packages) {
@@ -2471,6 +2473,653 @@ async function riskDetector({ tree, getFileContent, allFindings = [], parsedDocs
     
     console.log(`[Detector: Risk] Complete. Findings: ${findings.length}`);
     return { findings, risks, parsedDocs };
+}
+
+// ============================================================================
+// PROTOCOL DETECTOR - MCP, A2A, and AI Plugin Systems
+// ============================================================================
+
+/**
+ * Parse MCP server configuration and extract AI-relevant information
+ */
+function parseMcpServerConfig(serverName, serverConfig) {
+    const info = {
+        name: serverName,
+        command: serverConfig.command || null,
+        args: serverConfig.args || [],
+        env: {},
+        category: 'unknown',
+        provider: null,
+        description: null,
+        capabilities: []
+    };
+    
+    // Extract environment variables (redact sensitive values)
+    if (serverConfig.env) {
+        for (const [key, value] of Object.entries(serverConfig.env)) {
+            // Don't include actual API key values, just note their presence
+            if (key.toLowerCase().includes('key') || key.toLowerCase().includes('token') || key.toLowerCase().includes('secret')) {
+                info.env[key] = '[REDACTED]';
+            } else {
+                info.env[key] = value;
+            }
+        }
+    }
+    
+    // Categorize based on server name and command
+    const nameLower = serverName.toLowerCase();
+    const commandStr = [info.command, ...(info.args || [])].join(' ').toLowerCase();
+    
+    // Database/Storage servers
+    if (nameLower.includes('sqlite') || commandStr.includes('sqlite')) {
+        info.category = 'database';
+        info.description = 'SQLite database access via MCP';
+        info.capabilities.push('database-query', 'data-storage');
+    } else if (nameLower.includes('postgres') || commandStr.includes('postgres')) {
+        info.category = 'database';
+        info.description = 'PostgreSQL database access via MCP';
+        info.capabilities.push('database-query', 'data-storage');
+    } else if (nameLower.includes('redis') || commandStr.includes('redis')) {
+        info.category = 'database';
+        info.description = 'Redis cache/database access via MCP';
+        info.capabilities.push('cache', 'data-storage');
+    }
+    
+    // File system servers
+    else if (nameLower.includes('filesystem') || nameLower.includes('fs') || commandStr.includes('filesystem')) {
+        info.category = 'filesystem';
+        info.description = 'Local filesystem access via MCP';
+        info.capabilities.push('file-read', 'file-write');
+    }
+    
+    // Code/Development servers
+    else if (nameLower.includes('github') || commandStr.includes('github')) {
+        info.category = 'code-platform';
+        info.provider = 'GitHub';
+        info.description = 'GitHub repository access via MCP';
+        info.capabilities.push('code-read', 'issue-management', 'pr-management');
+    } else if (nameLower.includes('gitlab') || commandStr.includes('gitlab')) {
+        info.category = 'code-platform';
+        info.provider = 'GitLab';
+        info.description = 'GitLab repository access via MCP';
+        info.capabilities.push('code-read', 'issue-management');
+    } else if (nameLower.includes('git') || commandStr.includes('git')) {
+        info.category = 'version-control';
+        info.description = 'Git version control access via MCP';
+        info.capabilities.push('code-read', 'version-control');
+    }
+    
+    // Communication/Collaboration servers
+    else if (nameLower.includes('slack') || commandStr.includes('slack')) {
+        info.category = 'communication';
+        info.provider = 'Slack';
+        info.description = 'Slack workspace access via MCP';
+        info.capabilities.push('messaging', 'channel-access');
+    } else if (nameLower.includes('discord') || commandStr.includes('discord')) {
+        info.category = 'communication';
+        info.provider = 'Discord';
+        info.description = 'Discord server access via MCP';
+        info.capabilities.push('messaging');
+    } else if (nameLower.includes('email') || nameLower.includes('gmail') || commandStr.includes('email')) {
+        info.category = 'communication';
+        info.description = 'Email access via MCP';
+        info.capabilities.push('email-read', 'email-send');
+    }
+    
+    // Search/Web servers
+    else if (nameLower.includes('brave') || commandStr.includes('brave-search')) {
+        info.category = 'web-search';
+        info.provider = 'Brave';
+        info.description = 'Brave Search API access via MCP';
+        info.capabilities.push('web-search');
+    } else if (nameLower.includes('google') || commandStr.includes('google')) {
+        info.category = 'web-search';
+        info.provider = 'Google';
+        info.description = 'Google services access via MCP';
+        info.capabilities.push('web-search', 'google-services');
+    } else if (nameLower.includes('fetch') || nameLower.includes('http') || commandStr.includes('fetch')) {
+        info.category = 'web-access';
+        info.description = 'HTTP/Web fetch capabilities via MCP';
+        info.capabilities.push('web-fetch', 'api-access');
+    } else if (nameLower.includes('puppeteer') || nameLower.includes('playwright') || nameLower.includes('browser')) {
+        info.category = 'browser-automation';
+        info.description = 'Browser automation via MCP';
+        info.capabilities.push('web-scraping', 'browser-control');
+    }
+    
+    // Memory/State servers
+    else if (nameLower.includes('memory') || commandStr.includes('memory')) {
+        info.category = 'memory';
+        info.description = 'Persistent memory/state management via MCP';
+        info.capabilities.push('state-management', 'memory');
+    }
+    
+    // AI/Reasoning servers
+    else if (nameLower.includes('thinking') || nameLower.includes('reasoning') || commandStr.includes('sequential-thinking')) {
+        info.category = 'ai-reasoning';
+        info.description = 'AI reasoning/thinking capabilities via MCP';
+        info.capabilities.push('reasoning', 'chain-of-thought');
+    }
+    
+    // Cloud provider servers
+    else if (nameLower.includes('aws') || nameLower.includes('s3') || commandStr.includes('aws')) {
+        info.category = 'cloud';
+        info.provider = 'AWS';
+        info.description = 'AWS services access via MCP';
+        info.capabilities.push('cloud-services');
+    } else if (nameLower.includes('gcp') || nameLower.includes('google-cloud')) {
+        info.category = 'cloud';
+        info.provider = 'GCP';
+        info.description = 'Google Cloud services access via MCP';
+        info.capabilities.push('cloud-services');
+    } else if (nameLower.includes('azure') || commandStr.includes('azure')) {
+        info.category = 'cloud';
+        info.provider = 'Azure';
+        info.description = 'Azure services access via MCP';
+        info.capabilities.push('cloud-services');
+    }
+    
+    // Custom/NPX servers - try to extract package name
+    else if (commandStr.includes('npx') || commandStr.includes('npm')) {
+        const npmMatch = commandStr.match(/@[\w-]+\/[\w-]+|[\w-]+-mcp|mcp-[\w-]+/);
+        if (npmMatch) {
+            info.category = 'npm-package';
+            info.description = `NPM package MCP server: ${npmMatch[0]}`;
+        }
+    }
+    
+    // Python/uvx servers
+    else if (commandStr.includes('uvx') || commandStr.includes('python')) {
+        const pyMatch = commandStr.match(/mcp[_-][\w-]+|[\w-]+[_-]mcp/);
+        if (pyMatch) {
+            info.category = 'python-package';
+            info.description = `Python MCP server: ${pyMatch[0]}`;
+        }
+    }
+    
+    return info;
+}
+
+/**
+ * Extract AI provider hints from MCP environment variables
+ */
+function extractAiProvidersFromEnv(env) {
+    const providers = [];
+    
+    for (const key of Object.keys(env || {})) {
+        const keyLower = key.toLowerCase();
+        if (keyLower.includes('openai')) providers.push('OpenAI');
+        else if (keyLower.includes('anthropic') || keyLower.includes('claude')) providers.push('Anthropic');
+        else if (keyLower.includes('google') || keyLower.includes('gemini')) providers.push('Google');
+        else if (keyLower.includes('azure')) providers.push('Azure');
+        else if (keyLower.includes('cohere')) providers.push('Cohere');
+        else if (keyLower.includes('huggingface') || keyLower.includes('hf_')) providers.push('HuggingFace');
+    }
+    
+    return [...new Set(providers)];
+}
+
+async function protocolDetector({ tree, getFileContent }) {
+    console.log('[Detector: Protocols] Starting AI protocol detection...');
+    const findings = [];
+    
+    // Check for MCP configuration files
+    const mcpConfigFiles = AI_PROTOCOL_PATTERNS.mcp.config_files;
+    const a2aConfigFiles = AI_PROTOCOL_PATTERNS.a2a.config_files;
+    
+    for (const entry of tree) {
+        const fileName = entry.path.split('/').pop();
+        const filePath = entry.path;
+        
+        // Check for MCP config files
+        if (mcpConfigFiles.includes(fileName) || filePath.includes('.mcp/')) {
+            console.log(`[Detector: Protocols] ✓ Found MCP config: ${filePath}`);
+            const content = await getFileContent(filePath);
+            
+            let mcpServers = {};
+            let parsedServers = [];
+            let aiProviders = [];
+            
+            if (content) {
+                try {
+                    const json = JSON.parse(content);
+                    
+                    // Extract MCP servers from various config formats
+                    if (json.mcpServers) {
+                        mcpServers = json.mcpServers;
+                    } else if (json['mcp-servers']) {
+                        mcpServers = json['mcp-servers'];
+                    } else if (json.servers) {
+                        mcpServers = json.servers;
+                    }
+                    
+                    // Parse each server configuration
+                    for (const [serverName, serverConfig] of Object.entries(mcpServers)) {
+                        const serverInfo = parseMcpServerConfig(serverName, serverConfig);
+                        parsedServers.push(serverInfo);
+                        
+                        // Extract AI provider hints from env vars
+                        const envProviders = extractAiProvidersFromEnv(serverConfig.env);
+                        aiProviders.push(...envProviders);
+                        
+                        console.log(`[Detector: Protocols]   → MCP Server: ${serverName} (${serverInfo.category})`);
+                        if (serverInfo.capabilities.length > 0) {
+                            console.log(`[Detector: Protocols]     Capabilities: ${serverInfo.capabilities.join(', ')}`);
+                        }
+                    }
+                    
+                    aiProviders = [...new Set(aiProviders)];
+                    
+                } catch (e) {
+                    console.log(`[Detector: Protocols]   ⚠️ Could not parse JSON: ${e.message}`);
+                }
+            }
+            
+            const serverNames = Object.keys(mcpServers);
+            const serverCount = serverNames.length;
+            
+            // Create main MCP config finding
+            let description = 'MCP (Model Context Protocol) configuration detected';
+            if (serverCount > 0) {
+                const categories = [...new Set(parsedServers.map(s => s.category).filter(c => c !== 'unknown'))];
+                description = `MCP configuration with ${serverCount} server(s)`;
+                if (categories.length > 0) {
+                    description += ` spanning ${categories.join(', ')}`;
+                }
+                if (aiProviders.length > 0) {
+                    description += `. AI providers detected: ${aiProviders.join(', ')}`;
+                }
+            }
+            
+            findings.push({
+                id: `protocol-mcp-config-${filePath.replace(/[^a-zA-Z0-9]/g, '-')}`,
+                title: 'MCP (Model Context Protocol) Configuration',
+                category: 'protocol',
+                severity: 'high',
+                weight: 5,
+                description: description,
+                evidence: [{
+                    file: filePath,
+                    snippet: serverCount > 0 
+                        ? `Servers: ${serverNames.slice(0, 5).join(', ')}${serverCount > 5 ? ` (+${serverCount - 5} more)` : ''}`
+                        : 'MCP config file'
+                }],
+                protocolInfo: {
+                    type: 'mcp',
+                    configFile: filePath,
+                    servers: serverNames,
+                    parsedServers: parsedServers,
+                    aiProviders: aiProviders,
+                    capabilities: [...new Set(parsedServers.flatMap(s => s.capabilities))]
+                }
+            });
+            
+            // Create individual findings for significant MCP servers
+            for (const server of parsedServers) {
+                if (server.category !== 'unknown' && server.capabilities.length > 0) {
+                    findings.push({
+                        id: `protocol-mcp-server-${server.name.replace(/[^a-zA-Z0-9]/g, '-')}`,
+                        title: `MCP Server: ${server.name}`,
+                        category: 'protocol',
+                        severity: 'medium',
+                        weight: 2,
+                        description: server.description || `MCP server providing ${server.category} capabilities`,
+                        evidence: [{
+                            file: filePath,
+                            snippet: `Command: ${server.command || 'N/A'}, Capabilities: ${server.capabilities.join(', ')}`
+                        }],
+                        protocolInfo: {
+                            type: 'mcp-server',
+                            serverName: server.name,
+                            serverCategory: server.category,
+                            provider: server.provider,
+                            capabilities: server.capabilities,
+                            command: server.command,
+                            hasEnvVars: Object.keys(server.env).length > 0
+                        }
+                    });
+                }
+            }
+        }
+        
+        // Check for A2A / Agent Protocol config files
+        if (a2aConfigFiles.includes(fileName) || filePath.includes('.agent-protocol/')) {
+            console.log(`[Detector: Protocols] ✓ Found A2A/Agent Protocol config: ${filePath}`);
+            findings.push({
+                id: `protocol-a2a-config-${filePath.replace(/[^a-zA-Z0-9]/g, '-')}`,
+                title: 'Agent-to-Agent Protocol Configuration',
+                category: 'protocol',
+                severity: 'high',
+                weight: 4,
+                description: 'A2A/Agent Protocol configuration detected - enables agent communication',
+                evidence: [{
+                    file: filePath,
+                    snippet: 'Agent Protocol config file'
+                }],
+                protocolInfo: {
+                    type: 'a2a',
+                    configFile: filePath
+                }
+            });
+        }
+    }
+    
+    // Scan code files for MCP/A2A usage patterns
+    const codeExtensions = ['.py', '.js', '.ts', '.tsx', '.jsx', '.mjs'];
+    const codeFiles = tree.filter(entry => 
+        codeExtensions.some(ext => entry.path.endsWith(ext)) &&
+        !entry.path.includes('node_modules') &&
+        !entry.path.includes('__pycache__')
+    ).slice(0, 50); // Limit to avoid too many API calls
+    
+    const mcpPatterns = AI_PROTOCOL_PATTERNS.mcp.code_patterns;
+    const a2aPatterns = AI_PROTOCOL_PATTERNS.a2a.code_patterns;
+    const functionPatterns = AI_PROTOCOL_PATTERNS.function_calling.code_patterns;
+    
+    for (const file of codeFiles) {
+        const content = await getFileContent(file.path);
+        if (!content) continue;
+        
+        // Check MCP patterns
+        for (const patternDef of mcpPatterns) {
+            if (patternDef.pattern.test(content)) {
+                const match = content.match(patternDef.pattern);
+                const lineNum = content.substring(0, content.indexOf(match[0])).split('\n').length;
+                
+                findings.push({
+                    id: `protocol-mcp-code-${file.path.replace(/[^a-zA-Z0-9]/g, '-')}-${patternDef.type.replace(/\s+/g, '-')}`,
+                    title: `MCP ${patternDef.type} Usage`,
+                    category: 'protocol',
+                    severity: 'high',
+                    weight: 4,
+                    description: `Model Context Protocol (MCP) ${patternDef.type.toLowerCase()} implementation detected`,
+                    evidence: [{
+                        file: file.path,
+                        line: lineNum,
+                        snippet: match[0].substring(0, 100)
+                    }],
+                    protocolInfo: {
+                        type: 'mcp',
+                        subType: patternDef.type
+                    }
+                });
+                break; // One finding per file per protocol
+            }
+        }
+        
+        // Check A2A patterns
+        for (const patternDef of a2aPatterns) {
+            if (patternDef.pattern.test(content)) {
+                const match = content.match(patternDef.pattern);
+                const lineNum = content.substring(0, content.indexOf(match[0])).split('\n').length;
+                
+                findings.push({
+                    id: `protocol-a2a-code-${file.path.replace(/[^a-zA-Z0-9]/g, '-')}-${patternDef.type.replace(/\s+/g, '-')}`,
+                    title: `Agent Protocol ${patternDef.type} Usage`,
+                    category: 'protocol',
+                    severity: 'medium',
+                    weight: 3,
+                    description: `Agent-to-Agent (A2A) ${patternDef.type.toLowerCase()} implementation detected`,
+                    evidence: [{
+                        file: file.path,
+                        line: lineNum,
+                        snippet: match[0].substring(0, 100)
+                    }],
+                    protocolInfo: {
+                        type: 'a2a',
+                        subType: patternDef.type
+                    }
+                });
+                break;
+            }
+        }
+        
+        // Check function calling patterns (indicates tool use capability)
+        for (const patternDef of functionPatterns) {
+            if (patternDef.pattern.test(content)) {
+                const match = content.match(patternDef.pattern);
+                const lineNum = content.substring(0, content.indexOf(match[0])).split('\n').length;
+                
+                findings.push({
+                    id: `protocol-tools-${file.path.replace(/[^a-zA-Z0-9]/g, '-')}-${patternDef.type.replace(/\s+/g, '-')}`,
+                    title: `AI ${patternDef.type}`,
+                    category: 'protocol',
+                    severity: 'medium',
+                    weight: 3,
+                    description: `AI function/tool calling capability detected (${patternDef.type})`,
+                    evidence: [{
+                        file: file.path,
+                        line: lineNum,
+                        snippet: match[0].substring(0, 100)
+                    }],
+                    protocolInfo: {
+                        type: 'function-calling',
+                        subType: patternDef.type
+                    }
+                });
+                break;
+            }
+        }
+    }
+    
+    // Deduplicate findings by ID
+    const uniqueFindings = [...new Map(findings.map(f => [f.id, f])).values()];
+    
+    console.log(`[Detector: Protocols] Complete. Findings: ${uniqueFindings.length}`);
+    return { findings: uniqueFindings };
+}
+
+// ============================================================================
+// AI DEV TOOLS DETECTOR - Cursor, Claude Code, Copilot, Aider, etc.
+// Low confidence findings - indicates AI-assisted development
+// ============================================================================
+async function aiDevToolsDetector({ tree, getFileContent }) {
+    console.log('[Detector: AI Dev Tools] Starting AI development tools detection...');
+    const findings = [];
+    
+    const configFiles = AI_DEV_TOOLS.ide_copilots.config_files;
+    const vscodeExtensions = AI_DEV_TOOLS.ide_copilots.vscode_extensions;
+    
+    // Check for AI dev tool config files
+    for (const entry of tree) {
+        const fileName = entry.path.split('/').pop();
+        const filePath = entry.path;
+        
+        // Direct config file matches
+        for (const configFile of configFiles) {
+            if (filePath === configFile || fileName === configFile || filePath.endsWith('/' + configFile)) {
+                console.log(`[Detector: AI Dev Tools] ✓ Found AI tool config: ${filePath}`);
+                
+                let toolName = 'AI Development Tool';
+                let description = 'AI-assisted development tool configuration detected';
+                
+                // Identify specific tool
+                if (configFile.includes('cursor') || configFile.includes('.cursorrules')) {
+                    toolName = 'Cursor IDE';
+                    description = 'Cursor IDE configuration - AI-first code editor built on VSCode';
+                } else if (configFile.includes('copilot')) {
+                    toolName = 'GitHub Copilot';
+                    description = 'GitHub Copilot configuration - AI pair programming assistant';
+                } else if (configFile.includes('aider')) {
+                    toolName = 'Aider';
+                    description = 'Aider configuration - AI pair programming in terminal';
+                } else if (configFile.includes('continue')) {
+                    toolName = 'Continue.dev';
+                    description = 'Continue.dev configuration - open-source AI code assistant';
+                } else if (configFile.includes('cody')) {
+                    toolName = 'Sourcegraph Cody';
+                    description = 'Sourcegraph Cody configuration - AI coding assistant';
+                } else if (configFile.includes('windsurf') || configFile.includes('codeium')) {
+                    toolName = 'Codeium/Windsurf';
+                    description = 'Codeium/Windsurf configuration - AI code acceleration';
+                } else if (configFile.includes('tabnine')) {
+                    toolName = 'TabNine';
+                    description = 'TabNine configuration - AI code completion';
+                } else if (configFile.includes('amazonq')) {
+                    toolName = 'Amazon Q';
+                    description = 'Amazon Q configuration - AWS AI assistant';
+                } else if (configFile.toLowerCase().includes('claude')) {
+                    toolName = 'Claude Code';
+                    description = 'Claude Code conventions file - Anthropic AI coding assistant';
+                }
+                
+                findings.push({
+                    id: `aidev-config-${filePath.replace(/[^a-zA-Z0-9]/g, '-')}`,
+                    title: `${toolName} Configuration`,
+                    category: 'ai-dev-tools',
+                    severity: 'low',  // Low confidence - just indicates AI-assisted development
+                    weight: 1,
+                    description: description,
+                    evidence: [{
+                        file: filePath,
+                        snippet: `${toolName} config file`
+                    }],
+                    devToolInfo: {
+                        tool: toolName,
+                        configFile: filePath,
+                        confidence: 'low',
+                        note: 'Indicates AI-assisted development, not AI functionality in the project'
+                    }
+                });
+                break;
+            }
+        }
+        
+        // Check for .vscode/extensions.json for recommended AI extensions
+        if (filePath === '.vscode/extensions.json' || filePath.endsWith('/.vscode/extensions.json')) {
+            const content = await getFileContent(filePath);
+            if (content) {
+                try {
+                    const json = JSON.parse(content);
+                    const recommendations = json.recommendations || [];
+                    const aiExtensions = recommendations.filter(ext => 
+                        vscodeExtensions.some(aiExt => ext.toLowerCase().includes(aiExt.toLowerCase()))
+                    );
+                    
+                    if (aiExtensions.length > 0) {
+                        console.log(`[Detector: AI Dev Tools] ✓ Found ${aiExtensions.length} AI VSCode extensions recommended`);
+                        findings.push({
+                            id: 'aidev-vscode-extensions',
+                            title: 'AI VSCode Extensions Recommended',
+                            category: 'ai-dev-tools',
+                            severity: 'low',
+                            weight: 1,
+                            description: `${aiExtensions.length} AI-powered VSCode extension(s) recommended: ${aiExtensions.join(', ')}`,
+                            evidence: [{
+                                file: filePath,
+                                snippet: aiExtensions.join(', ')
+                            }],
+                            devToolInfo: {
+                                tool: 'VSCode AI Extensions',
+                                extensions: aiExtensions,
+                                confidence: 'low',
+                                note: 'Recommended extensions for AI-assisted development'
+                            }
+                        });
+                    }
+                } catch (e) {
+                    // Invalid JSON, skip
+                }
+            }
+        }
+    }
+    
+    // Check for AI dev tool dependencies in package.json
+    const packageJsonFiles = tree.filter(entry => entry.path.endsWith('package.json'));
+    for (const pkg of packageJsonFiles) {
+        const content = await getFileContent(pkg.path);
+        if (!content) continue;
+        
+        try {
+            const json = JSON.parse(content);
+            const allDeps = {
+                ...json.dependencies,
+                ...json.devDependencies
+            };
+            
+            const aiDevDeps = AI_DEV_TOOLS.ide_copilots.node || [];
+            const codeGenDeps = AI_DEV_TOOLS.code_gen_tools?.node || [];
+            const testingDeps = AI_DEV_TOOLS.testing_tools?.node || [];
+            
+            const foundDeps = Object.keys(allDeps).filter(dep => 
+                [...aiDevDeps, ...codeGenDeps, ...testingDeps].some(aiDep => 
+                    dep.toLowerCase().includes(aiDep.toLowerCase())
+                )
+            );
+            
+            if (foundDeps.length > 0) {
+                console.log(`[Detector: AI Dev Tools] ✓ Found ${foundDeps.length} AI dev tool dependencies`);
+                findings.push({
+                    id: `aidev-deps-${pkg.path.replace(/[^a-zA-Z0-9]/g, '-')}`,
+                    title: 'AI Development Tool Dependencies',
+                    category: 'ai-dev-tools',
+                    severity: 'low',
+                    weight: 1,
+                    description: `AI development tool dependencies: ${foundDeps.join(', ')}`,
+                    evidence: [{
+                        file: pkg.path,
+                        snippet: foundDeps.join(', ')
+                    }],
+                    devToolInfo: {
+                        tool: 'AI Dev Dependencies',
+                        dependencies: foundDeps,
+                        confidence: 'low'
+                    }
+                });
+            }
+        } catch (e) {
+            // Invalid JSON
+        }
+    }
+    
+    // Check for AI dev tool dependencies in requirements.txt / pyproject.toml
+    const pythonManifests = tree.filter(entry => 
+        entry.path.endsWith('requirements.txt') || 
+        entry.path.endsWith('pyproject.toml') ||
+        entry.path.endsWith('requirements-dev.txt')
+    );
+    
+    const pythonAiDevDeps = [
+        ...AI_DEV_TOOLS.ide_copilots.python || [],
+        ...AI_DEV_TOOLS.code_gen_tools?.python || [],
+        ...AI_DEV_TOOLS.testing_tools?.python || []
+    ];
+    
+    for (const manifest of pythonManifests) {
+        const content = await getFileContent(manifest.path);
+        if (!content) continue;
+        
+        const foundDeps = pythonAiDevDeps.filter(dep => 
+            content.toLowerCase().includes(dep.toLowerCase())
+        );
+        
+        if (foundDeps.length > 0) {
+            console.log(`[Detector: AI Dev Tools] ✓ Found ${foundDeps.length} Python AI dev tool dependencies`);
+            findings.push({
+                id: `aidev-python-${manifest.path.replace(/[^a-zA-Z0-9]/g, '-')}`,
+                title: 'Python AI Development Tool Dependencies',
+                category: 'ai-dev-tools',
+                severity: 'low',
+                weight: 1,
+                description: `Python AI development tool dependencies: ${foundDeps.join(', ')}`,
+                evidence: [{
+                    file: manifest.path,
+                    snippet: foundDeps.join(', ')
+                }],
+                devToolInfo: {
+                    tool: 'Python AI Dev Dependencies',
+                    dependencies: foundDeps,
+                    confidence: 'low'
+                }
+            });
+        }
+    }
+    
+    // Deduplicate
+    const uniqueFindings = [...new Map(findings.map(f => [f.id, f])).values()];
+    
+    console.log(`[Detector: AI Dev Tools] Complete. Findings: ${uniqueFindings.length}`);
+    return { findings: uniqueFindings };
 }
 
 // ============================================================================

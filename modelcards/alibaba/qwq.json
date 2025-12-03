@@ -1,0 +1,42 @@
+{
+  "modelName": "Qwq",
+  "provider": "Alibaba",
+  "modelType": "text-generation",
+  "modelId": "qwq",
+  "description": "This model was detected in code repositories. See official documentation.",
+  "intendedUse": {
+    "note": "Intended use cases should be verified from official provider documentation."
+  },
+  "architecture": {},
+  "trainingData": {
+    "description": "Training data details are not publicly disclosed for SaaS models."
+  },
+  "trainingProcedure": "Training methodology details are proprietary and not publicly disclosed.",
+  "evaluation": {
+    "evaluationData": "See official provider documentation for evaluation data and benchmarks.",
+    "metrics": {
+      "note": "See official provider documentation for specific performance metrics."
+    },
+    "performanceSummary": "See official provider documentation for performance characteristics."
+  },
+  "limitations": {
+    "note": "Specific limitations should be verified from official provider documentation."
+  },
+  "ethicalConsiderations": {
+    "biasAndFairness": "See official provider documentation for bias and fairness evaluations.",
+    "safetyMeasures": "See official provider documentation for safety measures.",
+    "privacyConsiderations": "Review provider's privacy policy. Sensitive data should not be sent without safeguards."
+  },
+  "access": {
+    "note": "See official provider documentation for access, rate limits, pricing, and licensing information."
+  },
+  "requirements": {
+    "note": "See official provider documentation for hardware and software requirements."
+  },
+  "references": {
+    "important": "All information must be verified against official provider documentation."
+  },
+  "citation": "See official Alibaba documentation for citation information.",
+  "additionalInfo": "This model card includes information verified from official provider documentation where available. All information should be verified against official provider documentation.",
+  "lastUpdated": "2025-11-14"
+}

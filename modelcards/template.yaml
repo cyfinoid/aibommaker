@@ -1,0 +1,68 @@
+# Model Card Template (YAML Format)
+# Based on Google Model Cards, HuggingFace Model Cards, and industry best practices
+
+modelName: "{MODEL_NAME}"
+provider: "{PROVIDER}"
+modelType: "{MODEL_TYPE}"  # text-generation, embeddings, text-to-image, etc.
+version: "{VERSION}"
+releaseDate: "{RELEASE_DATE}"
+modelId: "{MODEL_ID}"
+
+description: "{SHORT_DESCRIPTION}"
+
+intendedUse:
+  primaryUseCases:
+    - "{USE_CASE_1}"
+    - "{USE_CASE_2}"
+  outOfScope:
+    - "{OUT_OF_SCOPE_1}"
+
+architecture:
+  type: "{ARCHITECTURE_TYPE}"
+  parameters: "{PARAMETER_COUNT}"
+  contextLength: {CONTEXT_LENGTH}
+  details: "{ARCHITECTURE_DETAILS}"
+
+trainingData:
+  description: "{TRAINING_DATA_DESCRIPTION}"
+  size: "{DATASET_SIZE}"
+  sources:
+    - "{SOURCE_1}"
+
+trainingProcedure: "{TRAINING_PROCEDURE}"
+
+evaluation:
+  evaluationData: "{EVALUATION_DATA}"
+  metrics:
+    metric1: "{VALUE}"
+  performanceSummary: "{PERFORMANCE_SUMMARY}"
+
+limitations:
+  - "{LIMITATION_1}"
+  - "{LIMITATION_2}"
+
+ethicalConsiderations:
+  biasAndFairness: "{BIAS_FAIRNESS_INFO}"
+  safetyMeasures: "{SAFETY_MEASURES}"
+  privacyConsiderations: "{PRIVACY_CONSIDERATIONS}"
+
+access:
+  apiAccess: "{API_ACCESS_INFO}"
+  rateLimits: "{RATE_LIMITS}"
+  pricing: "{PRICING_INFO}"
+  licensing: "{LICENSING_INFO}"
+
+requirements:
+  hardware: "{HARDWARE_REQUIREMENTS}"
+  software:
+    - "{SOFTWARE_1}"
+
+references:
+  - "{REFERENCE_URL_1}"
+
+citation: "{CITATION}"
+
+additionalInfo: "{ADDITIONAL_INFO}"
+
+lastUpdated: "{LAST_UPDATED_DATE}"
+

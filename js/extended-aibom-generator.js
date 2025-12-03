@@ -52,6 +52,8 @@ function extractExtendedMetadata(findings, analysisResult) {
     return {
         hardware: extractHardwareMetadata(findings),
         infrastructure: extractInfrastructureMetadata(findings),
+        protocols: extractProtocolMetadata(findings),
+        ai_development_tools: extractAiDevToolsMetadata(findings),
         model_governance: extractGovernanceMetadata(findings, analysisResult),
         risk_assessment: extractRiskAssessment(findings),
         data_pipeline: extractDataPipeline(findings),
@@ -94,6 +96,163 @@ function extractHardwareMetadata(findings) {
     }
     
     return hardware;
+}
+
+/**
+ * Extract protocol information (MCP, A2A, function calling)
+ */
+function extractProtocolMetadata(findings) {
+    const protocolFindings = findings.filter(f => f.category === 'protocol');
+    
+    if (protocolFindings.length === 0) {
+        return {
+            detected: false,
+            note: 'No AI protocol implementations detected (MCP, A2A, function calling)'
+        };
+    }
+    
+    const protocols = {
+        detected: true,
+        mcp: {
+            detected: false,
+            servers: [],
+            server_details: [],
+            capabilities: [],
+            ai_providers: [],
+            implementations: []
+        },
+        a2a: {
+            detected: false,
+            implementations: []
+        },
+        function_calling: {
+            detected: false,
+            implementations: []
+        },
+        details: []
+    };
+    
+    for (const finding of protocolFindings) {
+        if (finding.protocolInfo) {
+            const type = finding.protocolInfo.type;
+            
+            if (type === 'mcp') {
+                protocols.mcp.detected = true;
+                if (finding.protocolInfo.servers) {
+                    protocols.mcp.servers.push(...finding.protocolInfo.servers);
+                }
+                if (finding.protocolInfo.capabilities) {
+                    protocols.mcp.capabilities.push(...finding.protocolInfo.capabilities);
+                }
+                if (finding.protocolInfo.aiProviders) {
+                    protocols.mcp.ai_providers.push(...finding.protocolInfo.aiProviders);
+                }
+                if (finding.protocolInfo.parsedServers) {
+                    protocols.mcp.server_details.push(...finding.protocolInfo.parsedServers.map(s => ({
+                        name: s.name,
+                        category: s.category,
+                        provider: s.provider,
+                        description: s.description,
+                        capabilities: s.capabilities
+                    })));
+                }
+                protocols.mcp.implementations.push({
+                    subType: finding.protocolInfo.subType || 'config',
+                    file: finding.evidence?.[0]?.file,
+                    description: finding.description
+                });
+            } else if (type === 'mcp-server') {
+                // Individual MCP server finding
+                protocols.mcp.detected = true;
+                protocols.mcp.server_details.push({
+                    name: finding.protocolInfo.serverName,
+                    category: finding.protocolInfo.serverCategory,
+                    provider: finding.protocolInfo.provider,
+                    capabilities: finding.protocolInfo.capabilities,
+                    has_env_vars: finding.protocolInfo.hasEnvVars
+                });
+            } else if (type === 'a2a') {
+                protocols.a2a.detected = true;
+                protocols.a2a.implementations.push({
+                    subType: finding.protocolInfo.subType || 'general',
+                    file: finding.evidence?.[0]?.file,
+                    description: finding.description
+                });
+            } else if (type === 'function-calling') {
+                protocols.function_calling.detected = true;
+                protocols.function_calling.implementations.push({
+                    subType: finding.protocolInfo.subType || 'general',
+                    file: finding.evidence?.[0]?.file,
+                    description: finding.description
+                });
+            }
+            
+            protocols.details.push({
+                type: type,
+                title: finding.title,
+                description: finding.description,
+                evidence: finding.evidence?.map(e => ({
+                    file: e.file,
+                    snippet: e.snippet
+                })) || []
+            });
+        }
+    }
+    
+    // Deduplicate
+    protocols.mcp.servers = [...new Set(protocols.mcp.servers)];
+    protocols.mcp.capabilities = [...new Set(protocols.mcp.capabilities)];
+    protocols.mcp.ai_providers = [...new Set(protocols.mcp.ai_providers)];
+    
+    // Deduplicate server_details by name
+    const seenServers = new Set();
+    protocols.mcp.server_details = protocols.mcp.server_details.filter(s => {
+        if (seenServers.has(s.name)) return false;
+        seenServers.add(s.name);
+        return true;
+    });
+    
+    return protocols;
+}
+
+/**
+ * Extract AI development tools metadata (Cursor, Copilot, Aider, etc.)
+ */
+function extractAiDevToolsMetadata(findings) {
+    const devToolFindings = findings.filter(f => f.category === 'ai-dev-tools');
+    
+    if (devToolFindings.length === 0) {
+        return {
+            detected: false,
+            note: 'No AI development tool configurations detected'
+        };
+    }
+    
+    const devTools = {
+        detected: true,
+        confidence: 'low', // These are low confidence findings by design
+        note: 'AI development tools indicate AI-assisted development, not AI functionality in the project',
+        tools: [],
+        details: []
+    };
+    
+    for (const finding of devToolFindings) {
+        if (finding.devToolInfo) {
+            devTools.tools.push(finding.devToolInfo.tool);
+            devTools.details.push({
+                tool: finding.devToolInfo.tool,
+                configFile: finding.devToolInfo.configFile,
+                description: finding.description,
+                dependencies: finding.devToolInfo.dependencies || [],
+                extensions: finding.devToolInfo.extensions || []
+            });
+        }
+    }
+    
+    // Deduplicate tools
+    devTools.tools = [...new Set(devTools.tools)];
+    
+    return devTools;
 }
 
 /**
@@ -450,6 +609,8 @@ function generateSummary(metadata, findings) {
         categories: {
             dependencies: findings.filter(f => f.category === 'dependencies').length,
             models: findings.filter(f => f.modelInfo).length,
+            protocols: findings.filter(f => f.category === 'protocol').length,
+            ai_dev_tools: findings.filter(f => f.category === 'ai-dev-tools').length,
             hardware: findings.filter(f => f.category === 'hardware').length,
             infrastructure: findings.filter(f => f.category === 'infrastructure').length,
             governance: findings.filter(f => f.category === 'governance').length,
@@ -458,6 +619,8 @@ function generateSummary(metadata, findings) {
         hardware_detected: metadata.hardware.detected,
         infrastructure_detected: metadata.infrastructure.detected,
         data_pipeline_detected: metadata.data_pipeline.detected,
+        protocols_detected: findings.some(f => f.category === 'protocol'),
+        ai_dev_tools_detected: findings.some(f => f.category === 'ai-dev-tools'),
         risk_level: metadata.risk_assessment.overall_risk_level,
         documentation_completeness: calculateDocumentationCompleteness(metadata.model_governance)
     };

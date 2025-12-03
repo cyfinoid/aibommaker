@@ -1,27 +1,421 @@
 // Constants and patterns for AI/LLM detection
+// ============================================================================
+// This file contains extensible registries for AI package detection.
+// Users can add new packages by extending the arrays in each category.
+// ============================================================================
 
 const GITHUB_API_BASE = 'https://api.github.com';
 const HUGGINGFACE_API_BASE = 'https://huggingface.co/api';
 
+// ============================================================================
+// AI PACKAGE REGISTRY - Extensible categorized lists of AI-related packages
+// ============================================================================
+// To add new packages: Simply add to the appropriate category array.
+// Each package entry can be a string (package name) or an object with metadata.
+// ============================================================================
+
+const AI_PACKAGE_REGISTRY = {
+    // ==========================================================================
+    // LLM Provider SDKs - Direct API access to LLM providers
+    // ==========================================================================
+    llm_providers: {
+        python: [
+            'openai', 'anthropic', 'google-generativeai', 'cohere', 'mistralai',
+            'replicate', 'together', 'groq', 'fireworks-ai', 'anyscale',
+            'ai21', 'aleph-alpha-client', 'stability-sdk', 'deepseek-ai'
+        ],
+        node: [
+            'openai', '@anthropic-ai/sdk', '@google/generative-ai', 'cohere-ai',
+            '@mistralai/mistralai', 'replicate', 'groq-sdk', '@ai-sdk/openai',
+            '@ai-sdk/anthropic', '@ai-sdk/google', '@ai-sdk/mistral'
+        ],
+        go: [
+            'github.com/sashabaranov/go-openai',
+            'github.com/anthropics/anthropic-sdk-go',
+            'github.com/google/generative-ai-go',
+            'github.com/cohere-ai/cohere-go'
+        ],
+        java: [
+            'com.openai:openai-java',
+            'com.anthropic:anthropic-sdk-java',
+            'com.google.cloud:google-cloud-aiplatform'
+        ],
+        rust: ['async-openai', 'anthropic-sdk', 'mistral-rs']
+    },
+    
+    // ==========================================================================
+    // LLM Frameworks - Orchestration and abstraction layers
+    // ==========================================================================
+    llm_frameworks: {
+        python: [
+            'langchain', 'langchain-core', 'langchain-openai', 'langchain-anthropic',
+            'langchain-google-genai', 'langchain-community', 'langgraph',
+            'llama-index', 'llama-index-core', 'llama-index-llms-openai',
+            'haystack-ai', 'dspy-ai', 'guidance', 'outlines', 'instructor',
+            'litellm', 'magentic', 'marvin', 'promptflow', 'semantic-kernel',
+            'autogen', 'crewai', 'agency-swarm'
+        ],
+        node: [
+            'langchain', '@langchain/core', '@langchain/openai', '@langchain/anthropic',
+            '@langchain/google-genai', '@langchain/community', '@langchain/langgraph',
+            'llamaindex', 'ai', '@vercel/ai', 'flowise', 'langflow'
+        ],
+        go: ['github.com/tmc/langchaingo'],
+        java: ['dev.langchain4j:langchain4j', 'dev.langchain4j:langchain4j-open-ai'],
+        rust: ['llm-chain', 'langchain-rust']
+    },
+    
+    // ==========================================================================
+    // Local LLM Inference - Running models locally
+    // ==========================================================================
+    local_inference: {
+        python: [
+            'llama-cpp-python', 'vllm', 'transformers', 'huggingface-hub',
+            'accelerate', 'bitsandbytes', 'auto-gptq', 'exllama', 'exllamav2',
+            'ctransformers', 'gpt4all', 'mlx', 'mlx-lm', 'ollama'
+        ],
+        node: ['@huggingface/inference', 'ollama', 'node-llama-cpp'],
+        go: ['github.com/ollama/ollama'],
+        rust: ['llama-cpp-rs', 'candle', 'candle-core']
+    },
+    
+    // ==========================================================================
+    // Vector Databases & Embeddings - Semantic search infrastructure
+    // ==========================================================================
+    vector_stores: {
+        python: [
+            'pinecone-client', 'chromadb', 'weaviate-client', 'qdrant-client',
+            'faiss-cpu', 'faiss-gpu', 'milvus', 'pymilvus', 'pgvector',
+            'lancedb', 'vespa', 'opensearch-py', 'elasticsearch',
+            'sentence-transformers', 'fastembed'
+        ],
+        node: [
+            '@pinecone-database/pinecone', 'chromadb', 'weaviate-client',
+            'qdrant-client', 'vectordb', '@lancedb/lancedb', '@upstash/vector'
+        ],
+        go: ['github.com/pinecone-io/go-pinecone', 'github.com/weaviate/weaviate-go-client'],
+        java: ['io.pinecone:pinecone-client', 'io.weaviate:client']
+    },
+    
+    // ==========================================================================
+    // AI Agents & Autonomous Systems
+    // ==========================================================================
+    ai_agents: {
+        python: [
+            'autogen', 'crewai', 'agency-swarm', 'agentops', 'langchain-agents',
+            'superagi', 'agents', 'llama-agents', 'phidata', 'composio',
+            'browser-use', 'lavague', 'agent-protocol'
+        ],
+        node: [
+            '@langchain/langgraph', 'autogen', 'agent-protocol',
+            '@browserbasehq/stagehand', 'browser-use'
+        ]
+    },
+    
+    // ==========================================================================
+    // MCP (Model Context Protocol) - Anthropic's protocol for tool integration
+    // ==========================================================================
+    mcp_protocol: {
+        python: [
+            'mcp', 'anthropic-mcp', 'mcp-server', 'mcp-client',
+            'mcp-server-sqlite', 'mcp-server-git', 'mcp-server-filesystem',
+            'mcp-server-github', 'mcp-server-postgres', 'mcp-server-slack'
+        ],
+        node: [
+            '@modelcontextprotocol/sdk', '@modelcontextprotocol/server-filesystem',
+            '@modelcontextprotocol/server-github', '@modelcontextprotocol/server-gitlab',
+            '@modelcontextprotocol/server-postgres', '@modelcontextprotocol/server-sqlite',
+            '@modelcontextprotocol/server-slack', '@modelcontextprotocol/server-memory',
+            '@modelcontextprotocol/server-brave-search', '@modelcontextprotocol/server-fetch',
+            '@modelcontextprotocol/server-puppeteer', '@modelcontextprotocol/server-sequential-thinking',
+            '@anthropic-ai/mcp', 'mcp-framework'
+        ],
+        rust: ['mcp-rust', 'mcp-server']
+    },
+    
+    // ==========================================================================
+    // A2A (Agent-to-Agent) & Multi-Agent Protocols
+    // ==========================================================================
+    a2a_protocols: {
+        python: [
+            'agent-protocol', 'a2a', 'agent-communication-protocol',
+            'openagents', 'agentverse', 'fetchai-uagents', 'uagents'
+        ],
+        node: [
+            'agent-protocol', '@agent-protocol/client', '@agent-protocol/sdk',
+            'agentverse'
+        ]
+    },
+    
+    // ==========================================================================
+    // AI Plugin Systems & Tool Calling
+    // ==========================================================================
+    plugin_systems: {
+        python: [
+            'openai-function-calling', 'toolformer', 'gorilla-llm', 'composio',
+            'langchain-tools', 'semantic-kernel-plugins', 'openapi-llm'
+        ],
+        node: [
+            '@langchain/tools', 'ai-plugin', 'chatgpt-plugin', 'composio-core'
+        ]
+    },
+    
+    // ==========================================================================
+    // RAG (Retrieval Augmented Generation) & Document Processing
+    // ==========================================================================
+    rag_document: {
+        python: [
+            'unstructured', 'llama-parse', 'docling', 'pymupdf', 'pypdf',
+            'pdfplumber', 'markdownify', 'trafilatura', 'beautifulsoup4',
+            'llama-index-readers', 'langchain-document-loaders'
+        ],
+        node: [
+            'pdf-parse', '@langchain/document-loaders', 'cheerio', 'puppeteer',
+            'unstructured-client'
+        ]
+    },
+    
+    // ==========================================================================
+    // Prompt Engineering & Evaluation
+    // ==========================================================================
+    prompt_eval: {
+        python: [
+            'promptfoo', 'ragas', 'deepeval', 'langsmith', 'phoenix-ai',
+            'arize-phoenix', 'langfuse', 'traceloop', 'openllmetry',
+            'prompttools', 'giskard'
+        ],
+        node: [
+            'promptfoo', 'langsmith', '@langfuse/langfuse', 'langwatch'
+        ]
+    }
+};
+
+// ==========================================================================
+// AI DEVELOPMENT TOOLS - IDE plugins, copilots, and AI-assisted coding
+// Confidence: Low - These indicate AI-assisted development, not AI functionality
+// ==========================================================================
+const AI_DEV_TOOLS = {
+    // IDE Extensions and Copilots (detected via config files or dependencies)
+    ide_copilots: {
+        // Config files that indicate AI tool usage
+        config_files: [
+            '.cursor',                    // Cursor IDE directory
+            '.cursor/rules',              // Cursor custom rules
+            '.cursorrules',               // Cursor rules file
+            '.cursorignore',              // Cursor ignore file
+            'cursor.json',                // Cursor config
+            '.github/copilot',            // GitHub Copilot config
+            '.github/copilot-instructions.md', // Copilot instructions
+            'copilot-instructions.md',    // Copilot instructions (root)
+            '.aider',                     // Aider AI config
+            '.aider.conf.yml',            // Aider config
+            '.aider.input.history',       // Aider history
+            'aider.conf.yml',             // Aider config
+            '.continue',                  // Continue.dev config
+            'continue.json',              // Continue config
+            '.cody',                      // Sourcegraph Cody
+            'cody.json',                  // Cody config
+            '.windsurf',                  // Windsurf/Codeium config
+            '.codeium',                   // Codeium config
+            '.tabnine',                   // TabNine config
+            '.amazonq',                   // Amazon Q config
+            '.aws/amazonq',               // Amazon Q AWS config
+            'CLAUDE.md',                  // Claude Code conventions file
+            'claude.md',                  // Claude Code conventions file (lowercase)
+            '.claude',                    // Claude config directory
+        ],
+        // Node.js dependencies that indicate AI tooling
+        node: [
+            '@anthropic-ai/claude-code',
+            '@cursor/sdk',
+            'aider-chat',
+            'continue-dev'
+        ],
+        // Python dependencies
+        python: [
+            'aider-chat',
+            'claude-dev'
+        ],
+        // VSCode extension identifiers (from extensions.json or workspace recommendations)
+        vscode_extensions: [
+            'github.copilot',
+            'github.copilot-chat',
+            'anthropic.claude-vscode',
+            'continue.continue',
+            'codeium.codeium',
+            'tabnine.tabnine-vscode',
+            'amazonwebservices.aws-toolkit-vscode',
+            'sourcegraph.cody-ai'
+        ]
+    },
+    
+    // AI Code Generation and Review Tools
+    code_gen_tools: {
+        python: [
+            'gpt-engineer', 'aider-chat', 'mentat', 'codegen', 'smol-developer',
+            'auto-gpt', 'babyagi', 'jarvis', 'devika', 'opendevin', 'swe-agent',
+            'openhands'
+        ],
+        node: [
+            'smol-ai', 'gpt-pilot', 'code-gpt'
+        ]
+    },
+    
+    // AI-Assisted Testing
+    testing_tools: {
+        python: [
+            'codium-ai', 'cover-agent', 'qodo-cover', 'pythagora-io',
+            'testpilot', 'testgen-llm'
+        ],
+        node: [
+            '@qodo/cover-agent', 'testpilot'
+        ]
+    }
+};
+
+// ==========================================================================
+// PROTOCOL & STANDARD DETECTION - MCP, A2A, OpenAPI for LLMs
+// ==========================================================================
+const AI_PROTOCOL_PATTERNS = {
+    // MCP (Model Context Protocol) detection
+    mcp: {
+        config_files: [
+            // Standard MCP config files
+            'mcp.json',
+            'mcp-config.json',
+            'mcp-servers.json',
+            'mcp_config.json',
+            'mcp_servers.json',
+            '.mcp/config.json',
+            '.mcp/servers.json',
+            // Claude Desktop config (contains MCP servers)
+            'claude_desktop_config.json',
+            // Cursor MCP config
+            '.cursor/mcp.json',
+            'cursor-mcp.json',
+            // Cline/Roo config
+            'cline_mcp_settings.json',
+            'roo_mcp_settings.json',
+            // Generic tool configs that may contain MCP
+            '.config/mcp/servers.json',
+            'config/mcp.json'
+        ],
+        code_patterns: [
+            { pattern: /McpServer|MCP\.Server|mcp\.server/i, type: 'MCP Server' },
+            { pattern: /McpClient|MCP\.Client|mcp\.client/i, type: 'MCP Client' },
+            { pattern: /@modelcontextprotocol/i, type: 'MCP SDK' },
+            { pattern: /from\s+mcp\s+import|import\s+mcp/i, type: 'MCP Python' },
+            { pattern: /tool\s*\(\s*["'].*["']\s*,\s*["'].*["']\s*\)/i, type: 'MCP Tool Definition' },
+            { pattern: /\.register_tool\s*\(|\.add_tool\s*\(/i, type: 'MCP Tool Registration' },
+            { pattern: /ToolResult|CallToolResult/i, type: 'MCP Tool Result' }
+        ],
+        json_patterns: [
+            // Look for MCP server configuration in JSON
+            { key: 'mcpServers', type: 'MCP Server Config' },
+            { key: 'mcp-servers', type: 'MCP Server Config' },
+            { key: 'modelContextProtocol', type: 'MCP Config' }
+        ]
+    },
+    
+    // A2A (Agent-to-Agent) Protocol
+    a2a: {
+        config_files: [
+            'a2a.json',
+            'agent-protocol.json',
+            '.agent-protocol/config.json'
+        ],
+        code_patterns: [
+            { pattern: /agent-protocol|AgentProtocol/i, type: 'Agent Protocol' },
+            { pattern: /agent_protocol|from\s+agent_protocol/i, type: 'A2A Python' },
+            { pattern: /TaskRequest|TaskResponse|AgentMessage/i, type: 'A2A Messages' },
+            { pattern: /agent\.communicate|send_to_agent/i, type: 'A2A Communication' }
+        ]
+    },
+    
+    // OpenAPI/OpenAI Function Calling
+    function_calling: {
+        code_patterns: [
+            { pattern: /function_call|tool_choice|tools\s*[=:]\s*\[/i, type: 'Function Calling' },
+            { pattern: /\.functions\s*=|"functions"\s*:/i, type: 'OpenAI Functions' },
+            { pattern: /ToolMessage|tool_calls|parallel_tool_calls/i, type: 'Tool Calls' }
+        ]
+    },
+    
+    // Semantic Kernel Plugins
+    semantic_kernel: {
+        config_files: [
+            'sk-config.json',
+            'semantic-kernel.json'
+        ],
+        code_patterns: [
+            { pattern: /semantic[-_]?kernel|from\s+semantic_kernel/i, type: 'Semantic Kernel' },
+            { pattern: /@kernel_function|KernelPlugin/i, type: 'SK Plugin' }
+        ]
+    }
+};
+
+// ==========================================================================
+// BACKWARD COMPATIBILITY - Generate LLM_DEPENDENCIES from registry
+// ==========================================================================
 const LLM_DEPENDENCIES = {
     python: [
-        'openai', 'anthropic', 'google-generativeai', 'langchain', 'langchain-openai',
-        'langchain-anthropic', 'langchain-google-genai', 'llama-index', 'llama-index-core',
-        'haystack-ai', 'transformers', 'sentence-transformers', 'vllm', 'huggingface-hub',
-        'llama-cpp-python', 'litellm', 'cohere', 'replicate', 'stability-sdk', 'together',
-        'pinecone-client', 'chromadb', 'weaviate-client', 'qdrant-client', 'faiss-cpu', 'faiss-gpu'
+        ...AI_PACKAGE_REGISTRY.llm_providers.python || [],
+        ...AI_PACKAGE_REGISTRY.llm_frameworks.python || [],
+        ...AI_PACKAGE_REGISTRY.local_inference.python || [],
+        ...AI_PACKAGE_REGISTRY.vector_stores.python || []
     ],
     node: [
-        'openai', '@anthropic-ai/sdk', '@google/generative-ai', 'langchain', 'langchain-openai',
-        'langchain-anthropic', 'ai', 'llamaindex', '@mistralai/mistralai', 'cohere-ai',
-        'replicate', '@huggingface/inference', '@pinecone-database/pinecone', 'chromadb',
-        'weaviate-client', 'qdrant-client', 'vectordb'
+        ...AI_PACKAGE_REGISTRY.llm_providers.node || [],
+        ...AI_PACKAGE_REGISTRY.llm_frameworks.node || [],
+        ...AI_PACKAGE_REGISTRY.local_inference.node || [],
+        ...AI_PACKAGE_REGISTRY.vector_stores.node || []
     ],
-    go: ['github.com/sashabaranov/go-openai', 'github.com/anthropics/anthropic-sdk-go', 
-         'github.com/google/generative-ai-go', 'github.com/tmc/langchaingo'],
-    java: ['com.openai:openai-java', 'com.anthropic:anthropic-sdk-java', 
-           'com.google.cloud:google-cloud-aiplatform', 'dev.langchain4j:langchain4j'],
-    rust: ['async-openai', 'anthropic-sdk', 'llm-chain']
+    go: [
+        ...AI_PACKAGE_REGISTRY.llm_providers.go || [],
+        ...AI_PACKAGE_REGISTRY.llm_frameworks.go || [],
+        ...AI_PACKAGE_REGISTRY.local_inference.go || [],
+        ...AI_PACKAGE_REGISTRY.vector_stores.go || []
+    ],
+    java: [
+        ...AI_PACKAGE_REGISTRY.llm_providers.java || [],
+        ...AI_PACKAGE_REGISTRY.llm_frameworks.java || [],
+        ...AI_PACKAGE_REGISTRY.vector_stores.java || []
+    ],
+    rust: [
+        ...AI_PACKAGE_REGISTRY.llm_providers.rust || [],
+        ...AI_PACKAGE_REGISTRY.llm_frameworks.rust || [],
+        ...AI_PACKAGE_REGISTRY.local_inference.rust || []
+    ]
+};
+
+// ==========================================================================
+// EXTENDED DEPENDENCIES - All AI-adjacent packages (includes protocols, agents)
+// ==========================================================================
+const AI_EXTENDED_DEPENDENCIES = {
+    python: [
+        ...LLM_DEPENDENCIES.python,
+        ...AI_PACKAGE_REGISTRY.ai_agents?.python || [],
+        ...AI_PACKAGE_REGISTRY.mcp_protocol?.python || [],
+        ...AI_PACKAGE_REGISTRY.a2a_protocols?.python || [],
+        ...AI_PACKAGE_REGISTRY.plugin_systems?.python || [],
+        ...AI_PACKAGE_REGISTRY.rag_document?.python || [],
+        ...AI_PACKAGE_REGISTRY.prompt_eval?.python || []
+    ],
+    node: [
+        ...LLM_DEPENDENCIES.node,
+        ...AI_PACKAGE_REGISTRY.ai_agents?.node || [],
+        ...AI_PACKAGE_REGISTRY.mcp_protocol?.node || [],
+        ...AI_PACKAGE_REGISTRY.a2a_protocols?.node || [],
+        ...AI_PACKAGE_REGISTRY.plugin_systems?.node || [],
+        ...AI_PACKAGE_REGISTRY.rag_document?.node || [],
+        ...AI_PACKAGE_REGISTRY.prompt_eval?.node || []
+    ],
+    go: [...LLM_DEPENDENCIES.go],
+    java: [...LLM_DEPENDENCIES.java],
+    rust: [
+        ...LLM_DEPENDENCIES.rust,
+        ...AI_PACKAGE_REGISTRY.mcp_protocol?.rust || []
+    ]
 };
 
 const MANIFEST_FILES = {
@@ -34,6 +428,7 @@ const MANIFEST_FILES = {
 
 const SDK_PATTERNS = {
     python: [
+        // OpenAI
         { pattern: /import\s+openai/i, provider: 'OpenAI', weight: 5 },
         { pattern: /from\s+openai\s+import/i, provider: 'OpenAI', weight: 5 },
         { pattern: /openai\.ChatCompletion/i, provider: 'OpenAI', weight: 5 },
@@ -41,44 +436,81 @@ const SDK_PATTERNS = {
         { pattern: /openai\.Embedding/i, provider: 'OpenAI', weight: 5 },
         { pattern: /OpenAI\(/i, provider: 'OpenAI', weight: 5 },
         
+        // Anthropic
         { pattern: /import\s+anthropic/i, provider: 'Anthropic', weight: 5 },
         { pattern: /from\s+anthropic\s+import/i, provider: 'Anthropic', weight: 5 },
         { pattern: /Anthropic\(/i, provider: 'Anthropic', weight: 5 },
         { pattern: /messages\.create\(/i, provider: 'Anthropic', weight: 4 },
         
+        // Google
         { pattern: /import\s+google\.generativeai/i, provider: 'Google', weight: 5 },
         { pattern: /genai\.GenerativeModel/i, provider: 'Google', weight: 5 },
         { pattern: /\.generate_content\(/i, provider: 'Google', weight: 4 },
         
+        // LangChain
         { pattern: /from\s+langchain/i, provider: 'LangChain', weight: 4 },
         { pattern: /import\s+langchain/i, provider: 'LangChain', weight: 4 },
         
+        // LiteLLM
         { pattern: /import\s+litellm/i, provider: 'LiteLLM', weight: 5 },
         { pattern: /from\s+litellm\s+import/i, provider: 'LiteLLM', weight: 5 },
         { pattern: /litellm\./i, provider: 'LiteLLM', weight: 4 },
         
+        // LlamaIndex
         { pattern: /from\s+llama_index/i, provider: 'LlamaIndex', weight: 4 },
-        { pattern: /import\s+llama_index/i, provider: 'LlamaIndex', weight: 4 }
+        { pattern: /import\s+llama_index/i, provider: 'LlamaIndex', weight: 4 },
+        
+        // MCP (Model Context Protocol)
+        { pattern: /from\s+mcp\s+import/i, provider: 'MCP', weight: 4, category: 'protocol' },
+        { pattern: /import\s+mcp/i, provider: 'MCP', weight: 4, category: 'protocol' },
+        { pattern: /mcp\.server|mcp\.client/i, provider: 'MCP', weight: 5, category: 'protocol' },
+        { pattern: /McpServer\(|McpClient\(/i, provider: 'MCP', weight: 5, category: 'protocol' },
+        
+        // Agent Protocol / A2A
+        { pattern: /from\s+agent_protocol/i, provider: 'Agent Protocol', weight: 4, category: 'protocol' },
+        { pattern: /import\s+agent_protocol/i, provider: 'Agent Protocol', weight: 4, category: 'protocol' },
+        
+        // CrewAI / AutoGen
+        { pattern: /from\s+crewai/i, provider: 'CrewAI', weight: 4, category: 'agents' },
+        { pattern: /from\s+autogen/i, provider: 'AutoGen', weight: 4, category: 'agents' },
+        { pattern: /import\s+autogen/i, provider: 'AutoGen', weight: 4, category: 'agents' }
     ],
     
     javascript: [
+        // OpenAI
         { pattern: /from\s+['"]openai['"]/i, provider: 'OpenAI', weight: 5 },
         { pattern: /require\s*\(\s*['"]openai['"]/i, provider: 'OpenAI', weight: 5 },
         { pattern: /new\s+OpenAI\s*\(/i, provider: 'OpenAI', weight: 5 },
         { pattern: /\.chat\.completions\.create/i, provider: 'OpenAI', weight: 5 },
         
+        // Anthropic
         { pattern: /from\s+['"]@anthropic-ai\/sdk['"]/i, provider: 'Anthropic', weight: 5 },
         { pattern: /require\s*\(\s*['"]@anthropic-ai\/sdk['"]/i, provider: 'Anthropic', weight: 5 },
         { pattern: /new\s+Anthropic\s*\(/i, provider: 'Anthropic', weight: 5 },
         
+        // Google
         { pattern: /from\s+['"]@google\/generative-ai['"]/i, provider: 'Google', weight: 5 },
         { pattern: /GoogleGenerativeAI/i, provider: 'Google', weight: 5 },
         
+        // LangChain
         { pattern: /from\s+['"]langchain/i, provider: 'LangChain', weight: 4 },
         { pattern: /require\s*\(\s*['"]langchain/i, provider: 'LangChain', weight: 4 },
+        { pattern: /from\s+['"]@langchain\//i, provider: 'LangChain', weight: 4 },
         
+        // Vercel AI SDK
         { pattern: /from\s+['"]ai['"]/i, provider: 'Vercel AI', weight: 4 },
-        { pattern: /generateText|streamText/i, provider: 'Vercel AI', weight: 4 }
+        { pattern: /from\s+['"]@ai-sdk\//i, provider: 'Vercel AI', weight: 4 },
+        { pattern: /generateText|streamText/i, provider: 'Vercel AI', weight: 4 },
+        
+        // MCP (Model Context Protocol)
+        { pattern: /from\s+['"]@modelcontextprotocol/i, provider: 'MCP', weight: 5, category: 'protocol' },
+        { pattern: /require\s*\(['"]@modelcontextprotocol/i, provider: 'MCP', weight: 5, category: 'protocol' },
+        { pattern: /McpServer|McpClient/i, provider: 'MCP', weight: 4, category: 'protocol' },
+        { pattern: /StdioServerTransport|SSEServerTransport/i, provider: 'MCP', weight: 4, category: 'protocol' },
+        
+        // Agent Protocol / A2A
+        { pattern: /from\s+['"]agent-protocol/i, provider: 'Agent Protocol', weight: 4, category: 'protocol' },
+        { pattern: /require\s*\(['"]agent-protocol/i, provider: 'Agent Protocol', weight: 4, category: 'protocol' }
     ]
 };
 
@@ -103,19 +535,55 @@ const API_ENDPOINTS = [
 // 3. Security: shouldn't log or expose secret references
 
 const MODEL_PATTERNS = [
+    // OpenAI Models
+    { pattern: /gpt-4o-mini/i, provider: 'OpenAI', model: 'GPT-4o Mini' },
     { pattern: /gpt-4o/i, provider: 'OpenAI', model: 'GPT-4o' },
     { pattern: /gpt-4-turbo|gpt-4-1106/i, provider: 'OpenAI', model: 'GPT-4 Turbo' },
-    { pattern: /gpt-4(?!\.)/i, provider: 'OpenAI', model: 'GPT-4' },
+    { pattern: /gpt-4(?![o\.])/i, provider: 'OpenAI', model: 'GPT-4' },
     { pattern: /gpt-3\.5-turbo/i, provider: 'OpenAI', model: 'GPT-3.5 Turbo' },
+    { pattern: /o1-preview/i, provider: 'OpenAI', model: 'o1-preview' },
+    { pattern: /o1-mini/i, provider: 'OpenAI', model: 'o1-mini' },
+    { pattern: /o3-mini/i, provider: 'OpenAI', model: 'o3-mini' },
+    
+    // Anthropic Models
     { pattern: /claude-3-opus/i, provider: 'Anthropic', model: 'Claude 3 Opus' },
-    { pattern: /claude-3\.5-sonnet/i, provider: 'Anthropic', model: 'Claude 3.5 Sonnet' },
+    { pattern: /claude-3\.5-sonnet|claude-3-5-sonnet/i, provider: 'Anthropic', model: 'Claude 3.5 Sonnet' },
+    { pattern: /claude-3\.5-haiku|claude-3-5-haiku/i, provider: 'Anthropic', model: 'Claude 3.5 Haiku' },
     { pattern: /claude-3-sonnet/i, provider: 'Anthropic', model: 'Claude 3 Sonnet' },
     { pattern: /claude-3-haiku/i, provider: 'Anthropic', model: 'Claude 3 Haiku' },
+    { pattern: /claude-opus-4|claude-4-opus/i, provider: 'Anthropic', model: 'Claude Opus 4' },
+    { pattern: /claude-sonnet-4|claude-4-sonnet/i, provider: 'Anthropic', model: 'Claude Sonnet 4' },
+    
+    // Google Models
+    { pattern: /gemini-2\.0-flash/i, provider: 'Google', model: 'Gemini 2.0 Flash' },
+    { pattern: /gemini-2\.0-pro/i, provider: 'Google', model: 'Gemini 2.0 Pro' },
     { pattern: /gemini-1\.5-pro/i, provider: 'Google', model: 'Gemini 1.5 Pro' },
     { pattern: /gemini-1\.5-flash/i, provider: 'Google', model: 'Gemini 1.5 Flash' },
     { pattern: /gemini-pro/i, provider: 'Google', model: 'Gemini Pro' },
+    { pattern: /gemma-2|gemma2/i, provider: 'Google', model: 'Gemma 2' },
+    
+    // Mistral Models
     { pattern: /mistral-large/i, provider: 'Mistral', model: 'Mistral Large' },
-    { pattern: /mixtral-8x7b/i, provider: 'Mistral', model: 'Mixtral 8x7B' }
+    { pattern: /mistral-medium/i, provider: 'Mistral', model: 'Mistral Medium' },
+    { pattern: /mistral-small/i, provider: 'Mistral', model: 'Mistral Small' },
+    { pattern: /mixtral-8x22b/i, provider: 'Mistral', model: 'Mixtral 8x22B' },
+    { pattern: /mixtral-8x7b/i, provider: 'Mistral', model: 'Mixtral 8x7B' },
+    { pattern: /codestral/i, provider: 'Mistral', model: 'Codestral' },
+    
+    // Meta Models
+    { pattern: /llama-3\.3|llama3\.3/i, provider: 'Meta', model: 'Llama 3.3' },
+    { pattern: /llama-3\.2|llama3\.2/i, provider: 'Meta', model: 'Llama 3.2' },
+    { pattern: /llama-3\.1|llama3\.1/i, provider: 'Meta', model: 'Llama 3.1' },
+    { pattern: /llama-3|llama3(?![.\d])/i, provider: 'Meta', model: 'Llama 3' },
+    
+    // DeepSeek Models
+    { pattern: /deepseek-r1/i, provider: 'DeepSeek', model: 'DeepSeek R1' },
+    { pattern: /deepseek-v3/i, provider: 'DeepSeek', model: 'DeepSeek V3' },
+    { pattern: /deepseek-coder/i, provider: 'DeepSeek', model: 'DeepSeek Coder' },
+    
+    // Alibaba Models
+    { pattern: /qwen-2\.5|qwen2\.5/i, provider: 'Alibaba', model: 'Qwen 2.5' },
+    { pattern: /qwq/i, provider: 'Alibaba', model: 'QwQ' }
 ];
 
 const PROMPT_INDICATORS = [
@@ -135,11 +603,20 @@ const PROMPT_INDICATORS = [
 ];
 
 const CI_PATTERNS = [
+    // AI PR Review & Code Generation
     { pattern: /ai-pr-review/i, description: 'AI PR Review Action' },
     { pattern: /chatgpt-action/i, description: 'ChatGPT Action' },
     { pattern: /openai-pr-reviewer/i, description: 'OpenAI PR Reviewer' },
     { pattern: /gpt-commit-summarizer/i, description: 'GPT Commit Summarizer' },
-    { pattern: /copilot-cli/i, description: 'GitHub Copilot CLI' }
+    { pattern: /copilot-cli/i, description: 'GitHub Copilot CLI' },
+    { pattern: /coderabbit/i, description: 'CodeRabbit AI Review' },
+    { pattern: /codium-ai\/pr-agent/i, description: 'CodiumAI PR-Agent' },
+    { pattern: /pr-agent/i, description: 'PR-Agent' },
+    { pattern: /sweep-ai/i, description: 'Sweep AI' },
+    { pattern: /deepsource/i, description: 'DeepSource AI' },
+    { pattern: /sourcery-ai/i, description: 'Sourcery AI' },
+    { pattern: /aider-chat/i, description: 'Aider Chat in CI' },
+    { pattern: /claude-dev/i, description: 'Claude Dev Action' }
 ];
 
 const MODEL_FILE_PATTERNS = [

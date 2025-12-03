@@ -53,7 +53,49 @@ function generateCycloneDXJson(analysisResult, selectedFindings) {
     
     // Group findings to create proper ML model components
     console.log('[BOM Generator] Creating components from findings...');
-    const { components: modelComponents, modelRefs, libraryRefs, hardwareInfo, infraInfo, governanceInfo } = createMLModelComponents(selectedFindings);
+    const { components: modelComponents, modelRefs, libraryRefs, mcpRefs, hardwareInfo, infraInfo, governanceInfo, protocolInfo } = createMLModelComponents(selectedFindings);
+    
+    // Add MCP/Protocol properties to main component
+    if (protocolInfo && protocolInfo.detected) {
+        bom.metadata.component.properties.push({
+            name: 'aibom:mcp:detected',
+            value: 'true'
+        });
+        if (protocolInfo.mcpServers.length > 0) {
+            bom.metadata.component.properties.push({
+                name: 'aibom:mcp:servers',
+                value: protocolInfo.mcpServers.join(', ')
+            });
+            bom.metadata.component.properties.push({
+                name: 'aibom:mcp:server-count',
+                value: protocolInfo.mcpServers.length.toString()
+            });
+        }
+        if (protocolInfo.mcpCapabilities.length > 0) {
+            bom.metadata.component.properties.push({
+                name: 'aibom:mcp:capabilities',
+                value: protocolInfo.mcpCapabilities.join(', ')
+            });
+        }
+        if (protocolInfo.aiProviders.length > 0) {
+            bom.metadata.component.properties.push({
+                name: 'aibom:mcp:ai-providers',
+                value: protocolInfo.aiProviders.join(', ')
+            });
+        }
+        if (protocolInfo.hasA2A) {
+            bom.metadata.component.properties.push({
+                name: 'aibom:a2a:detected',
+                value: 'true'
+            });
+        }
+        if (protocolInfo.hasFunctionCalling) {
+            bom.metadata.component.properties.push({
+                name: 'aibom:function-calling:detected',
+                value: 'true'
+            });
+        }
+    }
     
     // Add hardware and infrastructure properties to main component
     if (hardwareInfo.detected) {
@@ -154,12 +196,18 @@ function generateCycloneDXJson(analysisResult, selectedFindings) {
     
     console.log(`[BOM Generator] Created ${modelRefs.length} ML model components`);
     console.log(`[BOM Generator] Created ${libraryRefs.length} library components`);
+    console.log(`[BOM Generator] Created ${mcpRefs ? mcpRefs.length : 0} MCP server components`);
     modelRefs.forEach(m => {
         console.log(`  - Model: ${m.component.name} (${m.component.author})`);
     });
     libraryRefs.forEach(l => {
         console.log(`  - Library: ${l.name}`);
     });
+    if (mcpRefs && mcpRefs.length > 0) {
+        mcpRefs.forEach(mcp => {
+            console.log(`  - MCP Server: ${mcp.name}`);
+        });
+    }
     
     bom.components = modelComponents;
     
@@ -747,14 +795,228 @@ function createMLModelComponents(findings) {
     const libraryComponents = createLibraryComponents(libraryDeps, findings);
     components.push(...libraryComponents);
     
+    // Add MCP servers as components
+    const mcpComponents = createMCPServerComponents(findings);
+    components.push(...mcpComponents);
+    
+    // Extract protocol info for metadata
+    const protocolInfo = extractProtocolInfo(findings);
+    
     return { 
         components, 
         modelRefs: Array.from(modelMap.values()), 
         libraryRefs: libraryComponents,
+        mcpRefs: mcpComponents,
         hardwareInfo,
         infraInfo,
-        governanceInfo
+        governanceInfo,
+        protocolInfo
     };
+}
+
+/**
+ * Create CycloneDX components for MCP servers
+ */
+function createMCPServerComponents(findings) {
+    const components = [];
+    const seenServers = new Set();
+    
+    // Find all protocol findings with MCP server details
+    const protocolFindings = findings.filter(f => f.category === 'protocol');
+    
+    for (const finding of protocolFindings) {
+        if (!finding.protocolInfo) continue;
+        
+        // Handle MCP config findings with parsed servers
+        if (finding.protocolInfo.type === 'mcp' && finding.protocolInfo.parsedServers) {
+            for (const server of finding.protocolInfo.parsedServers) {
+                if (seenServers.has(server.name)) continue;
+                seenServers.add(server.name);
+                
+                const component = createMCPServerComponent(server, finding);
+                if (component) {
+                    components.push(component);
+                }
+            }
+        }
+        
+        // Handle individual MCP server findings
+        if (finding.protocolInfo.type === 'mcp-server') {
+            const serverName = finding.protocolInfo.serverName;
+            if (seenServers.has(serverName)) continue;
+            seenServers.add(serverName);
+            
+            const serverInfo = {
+                name: serverName,
+                category: finding.protocolInfo.serverCategory,
+                provider: finding.protocolInfo.provider,
+                capabilities: finding.protocolInfo.capabilities || [],
+                description: finding.description
+            };
+            
+            const component = createMCPServerComponent(serverInfo, finding);
+            if (component) {
+                components.push(component);
+            }
+        }
+    }
+    
+    return components;
+}
+
+/**
+ * Create a single MCP server component
+ */
+function createMCPServerComponent(serverInfo, finding) {
+    const bomRef = `mcp-server-${serverInfo.name.replace(/[^a-zA-Z0-9]/g, '-')}`;
+    
+    // Determine the component type - MCP servers are essentially services/tools
+    const component = {
+        type: 'platform',  // CycloneDX type for services/platforms
+        'bom-ref': bomRef,
+        name: `mcp-server-${serverInfo.name}`,
+        version: 'configured',
+        description: serverInfo.description || `MCP server providing ${serverInfo.category || 'AI tool'} capabilities`,
+        scope: 'required',
+        properties: [
+            { name: 'cdx:component:type', value: 'mcp-server' },
+            { name: 'mcp:server:name', value: serverInfo.name },
+            { name: 'mcp:server:category', value: serverInfo.category || 'unknown' }
+        ]
+    };
+    
+    // Add provider if available
+    if (serverInfo.provider) {
+        component.publisher = serverInfo.provider;
+        component.properties.push({
+            name: 'mcp:server:provider',
+            value: serverInfo.provider
+        });
+    }
+    
+    // Add capabilities as properties
+    if (serverInfo.capabilities && serverInfo.capabilities.length > 0) {
+        component.properties.push({
+            name: 'mcp:server:capabilities',
+            value: serverInfo.capabilities.join(', ')
+        });
+    }
+    
+    // Add PURL based on server type
+    const purl = getMCPServerPurl(serverInfo);
+    if (purl) {
+        component.purl = purl;
+    }
+    
+    // Add external reference to MCP documentation
+    component.externalReferences = [{
+        type: 'documentation',
+        url: 'https://modelcontextprotocol.io/docs',
+        comment: 'Model Context Protocol Documentation'
+    }];
+    
+    // Add specific external references based on category
+    if (serverInfo.category === 'code-platform' && serverInfo.provider === 'GitHub') {
+        component.externalReferences.push({
+            type: 'website',
+            url: 'https://github.com',
+            comment: 'GitHub - Code hosting platform'
+        });
+    } else if (serverInfo.category === 'communication' && serverInfo.provider === 'Slack') {
+        component.externalReferences.push({
+            type: 'website',
+            url: 'https://slack.com',
+            comment: 'Slack - Team communication'
+        });
+    } else if (serverInfo.category === 'web-search' && serverInfo.provider === 'Brave') {
+        component.externalReferences.push({
+            type: 'website',
+            url: 'https://search.brave.com',
+            comment: 'Brave Search'
+        });
+    }
+    
+    // Add evidence from finding
+    if (finding.evidence && finding.evidence.length > 0) {
+        const ev = finding.evidence[0];
+        component.properties.push({
+            name: 'cdx:evidence:location',
+            value: ev.file
+        });
+    }
+    
+    return component;
+}
+
+/**
+ * Generate PURL for MCP server based on its type and name
+ */
+function getMCPServerPurl(serverInfo) {
+    const name = serverInfo.name.toLowerCase();
+    
+    // Official MCP servers from modelcontextprotocol
+    const officialServers = [
+        'filesystem', 'github', 'gitlab', 'postgres', 'sqlite', 
+        'slack', 'memory', 'brave-search', 'fetch', 'puppeteer',
+        'sequential-thinking', 'google-drive', 'google-maps'
+    ];
+    
+    for (const official of officialServers) {
+        if (name.includes(official)) {
+            return `pkg:npm/@modelcontextprotocol/server-${official}`;
+        }
+    }
+    
+    // NPM package pattern
+    if (name.includes('mcp-') || name.includes('-mcp')) {
+        return `pkg:npm/${name}`;
+    }
+    
+    // Generic MCP server
+    return `pkg:mcp/${serverInfo.name}`;
+}
+
+/**
+ * Extract protocol information for BOM metadata
+ */
+function extractProtocolInfo(findings) {
+    const protocolFindings = findings.filter(f => f.category === 'protocol');
+    
+    const info = {
+        detected: protocolFindings.length > 0,
+        mcpServers: [],
+        mcpCapabilities: [],
+        aiProviders: [],
+        hasA2A: false,
+        hasFunctionCalling: false
+    };
+    
+    for (const finding of protocolFindings) {
+        if (!finding.protocolInfo) continue;
+        
+        if (finding.protocolInfo.type === 'mcp') {
+            if (finding.protocolInfo.servers) {
+                info.mcpServers.push(...finding.protocolInfo.servers);
+            }
+            if (finding.protocolInfo.capabilities) {
+                info.mcpCapabilities.push(...finding.protocolInfo.capabilities);
+            }
+            if (finding.protocolInfo.aiProviders) {
+                info.aiProviders.push(...finding.protocolInfo.aiProviders);
+            }
+        } else if (finding.protocolInfo.type === 'a2a') {
+            info.hasA2A = true;
+        } else if (finding.protocolInfo.type === 'function-calling') {
+            info.hasFunctionCalling = true;
+        }
+    }
+    
+    // Deduplicate
+    info.mcpServers = [...new Set(info.mcpServers)];
+    info.mcpCapabilities = [...new Set(info.mcpCapabilities)];
+    info.aiProviders = [...new Set(info.aiProviders)];
+    
+    return info;
 }
 
 function createLibraryComponents(libraryDeps, findings) {
@@ -1197,6 +1459,138 @@ function generateSPDX(analysisResult, selectedFindings) {
                 'to': [libId],
                 'completeness': 'noAssertion'
             });
+        }
+    });
+    
+    // Add MCP servers as packages
+    const mcpFindings = selectedFindings.filter(f => 
+        f.category === 'protocol' && 
+        (f.protocolInfo?.type === 'mcp' || f.protocolInfo?.type === 'mcp-server')
+    );
+    
+    const seenMcpServers = new Set();
+    let mcpIdx = 0;
+    
+    mcpFindings.forEach(finding => {
+        // Handle MCP config with parsed servers
+        if (finding.protocolInfo?.parsedServers) {
+            for (const server of finding.protocolInfo.parsedServers) {
+                if (seenMcpServers.has(server.name)) continue;
+                seenMcpServers.add(server.name);
+                
+                const mcpId = `${namespace}/MCPServer-${generateShortId()}`;
+                const mcpPackage = {
+                    '@id': mcpId,
+                    'type': 'software_Package',
+                    'spdxId': mcpId,
+                    'creationInfo': {
+                        'type': 'CreationInfo',
+                        'specVersion': '3.0.1',
+                        'created': analyzedAt,
+                        'createdBy': ['Tool: AI BOM Generator-1.0.0']
+                    },
+                    'name': `mcp-server-${server.name}`,
+                    'summary': server.description || `MCP server providing ${server.category || 'AI tool'} capabilities`,
+                    'packageVersion': 'configured',
+                    'downloadLocation': 'NOASSERTION',
+                    'primaryPurpose': 'application',
+                    'comment': `MCP Server Category: ${server.category || 'unknown'}. Capabilities: ${(server.capabilities || []).join(', ') || 'N/A'}`
+                };
+                
+                // Add provider if available
+                if (server.provider) {
+                    mcpPackage.suppliedBy = {
+                        'type': 'Organization',
+                        'name': server.provider
+                    };
+                }
+                
+                // Add PURL
+                mcpPackage.externalIdentifier = [{
+                    'type': 'ExternalIdentifier',
+                    'externalIdentifierType': 'purl',
+                    'identifier': getMCPServerPurl(server)
+                }];
+                
+                spdx.element.push(mcpPackage);
+                
+                relationships.push({
+                    '@id': `${namespace}/Relationship-mcp-${mcpIdx}`,
+                    'type': 'Relationship',
+                    'spdxId': `${namespace}/Relationship-mcp-${mcpIdx}`,
+                    'creationInfo': {
+                        'type': 'CreationInfo',
+                        'specVersion': '3.0.1',
+                        'created': analyzedAt,
+                        'createdBy': ['Tool: AI BOM Generator-1.0.0']
+                    },
+                    'relationshipType': 'dependsOn',
+                    'from': repoId,
+                    'to': [mcpId],
+                    'completeness': 'noAssertion'
+                });
+                
+                mcpIdx++;
+            }
+        }
+        
+        // Handle individual MCP server finding
+        if (finding.protocolInfo?.type === 'mcp-server') {
+            const serverName = finding.protocolInfo.serverName;
+            if (seenMcpServers.has(serverName)) return;
+            seenMcpServers.add(serverName);
+            
+            const mcpId = `${namespace}/MCPServer-${generateShortId()}`;
+            const mcpPackage = {
+                '@id': mcpId,
+                'type': 'software_Package',
+                'spdxId': mcpId,
+                'creationInfo': {
+                    'type': 'CreationInfo',
+                    'specVersion': '3.0.1',
+                    'created': analyzedAt,
+                    'createdBy': ['Tool: AI BOM Generator-1.0.0']
+                },
+                'name': `mcp-server-${serverName}`,
+                'summary': finding.description,
+                'packageVersion': 'configured',
+                'downloadLocation': 'NOASSERTION',
+                'primaryPurpose': 'application',
+                'comment': `MCP Server Category: ${finding.protocolInfo.serverCategory || 'unknown'}. Capabilities: ${(finding.protocolInfo.capabilities || []).join(', ') || 'N/A'}`
+            };
+            
+            if (finding.protocolInfo.provider) {
+                mcpPackage.suppliedBy = {
+                    'type': 'Organization',
+                    'name': finding.protocolInfo.provider
+                };
+            }
+            
+            mcpPackage.externalIdentifier = [{
+                'type': 'ExternalIdentifier',
+                'externalIdentifierType': 'purl',
+                'identifier': getMCPServerPurl({ name: serverName })
+            }];
+            
+            spdx.element.push(mcpPackage);
+            
+            relationships.push({
+                '@id': `${namespace}/Relationship-mcp-${mcpIdx}`,
+                'type': 'Relationship',
+                'spdxId': `${namespace}/Relationship-mcp-${mcpIdx}`,
+                'creationInfo': {
+                    'type': 'CreationInfo',
+                    'specVersion': '3.0.1',
+                    'created': analyzedAt,
+                    'createdBy': ['Tool: AI BOM Generator-1.0.0']
+                },
+                'relationshipType': 'dependsOn',
+                'from': repoId,
+                'to': [mcpId],
+                'completeness': 'noAssertion'
+            });
+            
+            mcpIdx++;
         }
     });
     
