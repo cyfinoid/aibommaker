@@ -1,3 +1,53 @@
+// Model Card Loading Utility for UI
+// Cache for loaded model cards to avoid multiple fetches
+const uiModelCardCache = new Map();
+
+async function loadModelCardUI(modelName, provider) {
+    try {
+        // Normalize provider name to match directory structure
+        const normalizedProvider = provider.toLowerCase();
+        // Normalize model name to match filename - keep dots for version numbers
+        const normalizedModelName = modelName.toLowerCase()
+            .replace(/[^a-z0-9.-]/g, '-')  // Keep dots and hyphens
+            .replace(/-+/g, '-')           // Collapse multiple hyphens
+            .replace(/^-|-$/g, '');        // Remove leading/trailing hyphens
+
+        // Create cache key
+        const cacheKey = `${normalizedProvider}/${normalizedModelName}`;
+
+        // Check cache first
+        if (uiModelCardCache.has(cacheKey)) {
+            console.log(`[UI ModelCard] Using cached model card for ${modelName}`);
+            return uiModelCardCache.get(cacheKey);
+        }
+
+        // Construct the path to the model card JSON file
+        const modelCardPath = `modelcards/${normalizedProvider}/${normalizedModelName}.json`;
+
+        console.log(`[UI ModelCard] Attempting to load: ${modelCardPath}`);
+
+        // Fetch the model card JSON
+        const response = await fetch(modelCardPath);
+
+        if (!response.ok) {
+            console.log(`[UI ModelCard] Model card not found: ${modelCardPath}`);
+            return null;
+        }
+
+        const modelCardData = await response.json();
+        console.log(`[UI ModelCard] Successfully loaded and cached model card for ${modelName}`);
+
+        // Cache the result
+        uiModelCardCache.set(cacheKey, modelCardData);
+
+        return modelCardData;
+
+    } catch (error) {
+        console.log(`[UI ModelCard] Error loading model card for ${modelName}: ${error.message}`);
+        return null;
+    }
+}
+
 // UI rendering and interaction functions
 // ============================================================================
 // UI FUNCTIONS
@@ -148,7 +198,7 @@ function renderAnalysisNotes(findings, analysisResult, fileTree = null) {
     container.appendChild(notFoundSection);
 }
 
-function renderFindings(findings, repoUrl) {
+async function renderFindings(findings, repoUrl) {
     const container = document.getElementById('findings-list');
     container.innerHTML = '';
     
@@ -157,6 +207,21 @@ function renderFindings(findings, repoUrl) {
         return;
     }
     
+    // Load model card data for model findings that don't have it
+    await Promise.all(findings.map(async (finding) => {
+        if (finding.modelInfo && !finding.modelInfo.modelCardData &&
+            finding.modelInfo.provider && finding.modelInfo.modelName) {
+            try {
+                const modelCardData = await loadModelCardUI(finding.modelInfo.modelName, finding.modelInfo.provider);
+                if (modelCardData) {
+                    finding.modelInfo.modelCardData = modelCardData;
+                }
+            } catch (error) {
+                console.log(`[UI] Failed to load model card for finding ${finding.id}: ${error.message}`);
+            }
+        }
+    }));
+
     findings.forEach((finding, index) => {
         const item = document.createElement('div');
         item.className = 'finding-item';
@@ -189,6 +254,40 @@ function renderFindings(findings, repoUrl) {
         
         const details = document.createElement('div');
         details.className = 'finding-details';
+        // Check if this is a model finding with model card data
+        let modelCardHtml = '';
+        if (finding.modelInfo && finding.modelInfo.modelCardData) {
+            const modelCard = finding.modelInfo.modelCardData;
+            modelCardHtml = `
+                <div class="model-card-section">
+                    <h4>📋 Model Card Information</h4>
+                    <div class="model-card-content">
+                        ${modelCard.description ? `<p><strong>Description:</strong> ${modelCard.description}</p>` : ''}
+                        ${modelCard.intendedUse ? `<p><strong>Intended Use:</strong> ${modelCard.intendedUse.note || modelCard.intendedUse}</p>` : ''}
+                        ${modelCard.limitations ? `<p><strong>Limitations:</strong> ${modelCard.limitations.note || modelCard.limitations}</p>` : ''}
+                        ${modelCard.trainingData ? `<p><strong>Training Data:</strong> ${modelCard.trainingData.description || modelCard.trainingData}</p>` : ''}
+                        ${modelCard.architecture && modelCard.architecture.contextLength ? `<p><strong>Context Length:</strong> ${modelCard.architecture.contextLength}</p>` : ''}
+                        ${modelCard.capabilities && modelCard.capabilities.length > 0 ? `<p><strong>Capabilities:</strong> ${modelCard.capabilities.join(', ')}</p>` : ''}
+                        ${modelCard.ethicalConsiderations ? `
+                            <div class="ethical-considerations">
+                                <strong>Ethical Considerations:</strong>
+                                ${modelCard.ethicalConsiderations.biasAndFairness ? `<p><strong>Bias & Fairness:</strong> ${modelCard.ethicalConsiderations.biasAndFairness}</p>` : ''}
+                                ${modelCard.ethicalConsiderations.safetyMeasures ? `<p><strong>Safety Measures:</strong> ${modelCard.ethicalConsiderations.safetyMeasures}</p>` : ''}
+                                ${modelCard.ethicalConsiderations.privacyConsiderations ? `<p><strong>Privacy:</strong> ${modelCard.ethicalConsiderations.privacyConsiderations}</p>` : ''}
+                            </div>
+                        ` : ''}
+                        ${modelCard.references ? `
+                            <div class="model-references">
+                                <strong>References:</strong>
+                                ${modelCard.references.modelSpecificDocs ? `<p><a href="${modelCard.references.modelSpecificDocs}" target="_blank">📖 Official Documentation</a></p>` : ''}
+                                ${modelCard.references.officialDocs ? `<p><a href="${modelCard.references.officialDocs}" target="_blank">🏢 Provider Documentation</a></p>` : ''}
+                            </div>
+                        ` : ''}
+                    </div>
+                </div>
+            `;
+        }
+
         details.innerHTML = `
             <p class="finding-description">${finding.description}</p>
             ${finding.evidence && finding.evidence.length > 0 ? `
@@ -196,39 +295,39 @@ function renderFindings(findings, repoUrl) {
                     ${finding.evidence.slice(0, 5).map(ev => {
                         // Build GitHub link with line number anchor
                         let fileUrl = ev.url;
-                        
+
                         // If we have a direct URL from GitHub API, use it (preserves commit SHA)
                         if (!fileUrl) {
                             // Build URL from repo URL and file path (fallback)
                             fileUrl = `${repoUrl}/blob/main/${ev.file}`;
                         }
-                        
+
                         // Ensure URL has line anchor if we have line number
                         if (ev.line && ev.line > 0) {
                             // Remove existing line anchor if present, add correct one
                             fileUrl = fileUrl.replace(/#L\d+$/, '') + `#L${ev.line}`;
                         }
-                        
-                        const fileDisplay = ev.line && ev.line > 0 
-                            ? `${ev.file}:${ev.line}` 
+
+                        const fileDisplay = ev.line && ev.line > 0
+                            ? `${ev.file}:${ev.line}`
                             : ev.file;
-                        
+
                         // Use snippet if available - show actual code, not generic message
                         let snippetText = null;
                         if (ev.snippet) {
                             // Only show snippet if it's actual code (not generic messages)
-                            if (ev.snippet !== 'Found via GitHub Code Search' && 
+                            if (ev.snippet !== 'Found via GitHub Code Search' &&
                                 ev.snippet !== 'Found at line ' + ev.line &&
                                 ev.snippet.trim().length > 0) {
                                 snippetText = ev.snippet;
                             }
                         }
-                        
+
                         // If no snippet but we have line number, show that
                         if (!snippetText && ev.line) {
                             snippetText = `Found at line ${ev.line}`;
                         }
-                        
+
                         return `
                         <div class="evidence-item">
                             <a class="evidence-file" href="${fileUrl}" target="_blank">${fileDisplay}</a>
@@ -238,6 +337,7 @@ function renderFindings(findings, repoUrl) {
                     }).join('')}
                 </div>
             ` : ''}
+            ${modelCardHtml}
         `;
         
         const header = document.createElement('div');
@@ -479,10 +579,10 @@ document.addEventListener('DOMContentLoaded', () => {
             
             // Score badge removed - AIBOM focuses on what's found, not scoring
             // renderScoreBadge(result.score, result.confidence);
-            renderFindings(result.findings, result.repository.htmlUrl);
+            await renderFindings(result.findings, result.repository.htmlUrl);
             // Pass file tree to check for documentation files that may not be in findings evidence
             renderAnalysisNotes(result.findings, result, tree);
-            regenerateBOMs();
+            await regenerateBOMs();
             
             document.getElementById('findings-section').scrollIntoView({ behavior: 'smooth' });
         } catch (error) {
@@ -497,23 +597,23 @@ document.addEventListener('DOMContentLoaded', () => {
         show(document.getElementById('analysis-form'));
     });
     
-    document.getElementById('select-all-btn').addEventListener('click', () => {
+    document.getElementById('select-all-btn').addEventListener('click', async () => {
         selectAllFindings(true);
-        regenerateBOMs();
+        await regenerateBOMs();
     });
-    
-    document.getElementById('deselect-all-btn').addEventListener('click', () => {
+
+    document.getElementById('deselect-all-btn').addEventListener('click', async () => {
         selectAllFindings(false);
-        regenerateBOMs();
+        await regenerateBOMs();
     });
     
     document.getElementById('category-filter').addEventListener('change', (e) => {
         filterFindings(e.target.value);
     });
     
-    document.addEventListener('change', (e) => {
+    document.addEventListener('change', async (e) => {
         if (e.target.classList.contains('finding-checkbox')) {
-            regenerateBOMs();
+            await regenerateBOMs();
         }
     });
     
@@ -591,7 +691,7 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 });
 
-function regenerateBOMs() {
+async function regenerateBOMs() {
     if (!currentAnalysis) return;
     
     const selected = getSelectedFindings(currentFindings);
@@ -613,13 +713,13 @@ function regenerateBOMs() {
         const startTime = performance.now();
         
         console.log('[BOM] Generating CycloneDX JSON...');
-        generatedBOMs['cyclonedx-json'] = generateCycloneDXJson(currentAnalysis, selected);
+        generatedBOMs['cyclonedx-json'] = await generateCycloneDXJson(currentAnalysis, selected);
         renderBOMPreview('cyclonedx-json', generatedBOMs['cyclonedx-json']);
         const jsonSize = (generatedBOMs['cyclonedx-json'].length / 1024).toFixed(2);
         console.log(`[BOM] ✓ CycloneDX JSON generated (${jsonSize} KB)`);
         
         console.log('[BOM] Generating CycloneDX XML...');
-        generatedBOMs['cyclonedx-xml'] = generateCycloneDXXml(currentAnalysis, selected);
+        generatedBOMs['cyclonedx-xml'] = await generateCycloneDXXml(currentAnalysis, selected);
         renderBOMPreview('cyclonedx-xml', generatedBOMs['cyclonedx-xml']);
         const xmlSize = (generatedBOMs['cyclonedx-xml'].length / 1024).toFixed(2);
         console.log(`[BOM] ✓ CycloneDX XML generated (${xmlSize} KB)`);
@@ -631,7 +731,7 @@ function regenerateBOMs() {
         console.log(`[BOM] ✓ SPDX generated (${spdxSize} KB)`);
         
         console.log('[BOM] Generating Extended AIBOM...');
-        generatedBOMs['extended-aibom'] = generateExtendedAIBOM(currentAnalysis, selected);
+        generatedBOMs['extended-aibom'] = await generateExtendedAIBOM(currentAnalysis, selected);
         renderBOMPreview('extended-aibom', generatedBOMs['extended-aibom']);
         const extendedSize = (generatedBOMs['extended-aibom'].length / 1024).toFixed(2);
         console.log(`[BOM] ✓ Extended AIBOM generated (${extendedSize} KB)`);

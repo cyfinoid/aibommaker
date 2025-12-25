@@ -1,5 +1,55 @@
+// Model Card Loading Utility
+// Cache for loaded model cards to avoid multiple fetches
+const modelCardCache = new Map();
+
+async function loadModelCard(modelName, provider) {
+    try {
+        // Normalize provider name to match directory structure
+        const normalizedProvider = provider.toLowerCase();
+        // Normalize model name to match filename - keep dots for version numbers
+        const normalizedModelName = modelName.toLowerCase()
+            .replace(/[^a-z0-9.-]/g, '-')  // Keep dots and hyphens
+            .replace(/-+/g, '-')           // Collapse multiple hyphens
+            .replace(/^-|-$/g, '');        // Remove leading/trailing hyphens
+
+        // Create cache key
+        const cacheKey = `${normalizedProvider}/${normalizedModelName}`;
+
+        // Check cache first
+        if (modelCardCache.has(cacheKey)) {
+            console.log(`[ModelCard] Using cached model card for ${modelName}`);
+            return modelCardCache.get(cacheKey);
+        }
+
+        // Construct the path to the model card JSON file
+        const modelCardPath = `modelcards/${normalizedProvider}/${normalizedModelName}.json`;
+
+        console.log(`[ModelCard] Attempting to load: ${modelCardPath}`);
+
+        // Fetch the model card JSON
+        const response = await fetch(modelCardPath);
+
+        if (!response.ok) {
+            console.log(`[ModelCard] Model card not found: ${modelCardPath}`);
+            return null;
+        }
+
+        const modelCardData = await response.json();
+        console.log(`[ModelCard] Successfully loaded and cached model card for ${modelName}`);
+
+        // Cache the result
+        modelCardCache.set(cacheKey, modelCardData);
+
+        return modelCardData;
+
+    } catch (error) {
+        console.log(`[ModelCard] Error loading model card for ${modelName}: ${error.message}`);
+        return null;
+    }
+}
+
 // BOM Generator functions (CycloneDX & SPDX)
-function generateCycloneDXJson(analysisResult, selectedFindings) {
+async function generateCycloneDXJson(analysisResult, selectedFindings) {
     const { repository, analyzedAt } = analysisResult;
     const uuid = generateUUID();
     
@@ -53,7 +103,7 @@ function generateCycloneDXJson(analysisResult, selectedFindings) {
     
     // Group findings to create proper ML model components
     console.log('[BOM Generator] Creating components from findings...');
-    const { components: modelComponents, modelRefs, libraryRefs, mcpRefs, hardwareInfo, infraInfo, governanceInfo, protocolInfo } = createMLModelComponents(selectedFindings);
+    const { components: modelComponents, modelRefs, libraryRefs, mcpRefs, hardwareInfo, infraInfo, governanceInfo, protocolInfo } = await createMLModelComponents(selectedFindings);
     
     // Add MCP/Protocol properties to main component
     if (protocolInfo && protocolInfo.detected) {
@@ -257,7 +307,7 @@ function generateCycloneDXJson(analysisResult, selectedFindings) {
     return JSON.stringify(bom, null, 2);
 }
 
-function createMLModelComponents(findings) {
+async function createMLModelComponents(findings) {
     const components = [];
     const modelMap = new Map();
     const libraryDeps = new Set(); // Track required libraries
@@ -417,13 +467,61 @@ function createMLModelComponents(findings) {
                     considerations: {},
                     properties: []
                 };
-                
+
+                // Model card data is now loaded in UI, use it if available
+                const localModelCardData = finding.modelInfo?.modelCardData || null;
+
                 // Extract enhanced data from HuggingFace
                 const cardData = huggingface?.cardData || {};
                 const config = huggingface?.config || {};
                 const evalResults = cardData.eval_results || modelCardData?.eval_results || null;
                 const modelParams = huggingface?.modelParameters || {};
-                
+
+                // Integrate loaded model card data
+                if (localModelCardData) {
+                    console.log(`[ModelCard] Integrating data for ${provider}/${modelName}`);
+
+                    // Model parameters from local model card
+                    if (localModelCardData.modelType) {
+                        modelCard.modelParameters.modelType = localModelCardData.modelType;
+                    }
+                    if (localModelCardData.architecture && localModelCardData.architecture.contextLength) {
+                        modelCard.modelParameters.contextLength = localModelCardData.architecture.contextLength;
+                    }
+
+                    // Intended use
+                    if (localModelCardData.intendedUse) {
+                        modelCard.intendedUse = localModelCardData.intendedUse.note || localModelCardData.intendedUse;
+                    }
+
+                    // Limitations
+                    if (localModelCardData.limitations) {
+                        modelCard.limitations = localModelCardData.limitations.note || localModelCardData.limitations;
+                    }
+
+                    // Training data
+                    if (localModelCardData.trainingData) {
+                        modelCard.trainingData = localModelCardData.trainingData.description || localModelCardData.trainingData;
+                    }
+
+                    // Ethical considerations
+                    if (localModelCardData.ethicalConsiderations) {
+                        modelCard.considerations.ethical = {
+                            biasAndFairness: localModelCardData.ethicalConsiderations.biasAndFairness,
+                            safetyMeasures: localModelCardData.ethicalConsiderations.safetyMeasures,
+                            privacyConsiderations: localModelCardData.ethicalConsiderations.privacyConsiderations
+                        };
+                    }
+
+                    // Capabilities
+                    if (localModelCardData.capabilities && Array.isArray(localModelCardData.capabilities)) {
+                        modelCard.capabilities = localModelCardData.capabilities;
+                    }
+
+                    // Add model card source reference
+                    modelCard.modelCardSource = `modelcards/${provider.toLowerCase()}/${modelName.toLowerCase().replace(/[^a-z0-9-]/g, '-')}.json`;
+                }
+
                 if (huggingface) {
                     // Tasks
                     if (huggingface.pipeline_tag) {
@@ -1137,7 +1235,7 @@ function generateShortId() {
     return Array.from(array, byte => byte.toString(36)).join('').substring(0, 10);
 }
 
-function generateCycloneDXXml(analysisResult, selectedFindings) {
+async function generateCycloneDXXml(analysisResult, selectedFindings) {
     const { repository, analyzedAt } = analysisResult;
     const uuid = generateUUID();
     
@@ -1168,7 +1266,7 @@ function generateCycloneDXXml(analysisResult, selectedFindings) {
     
     // Components
     xml += '  <components>\n';
-    const { components } = createMLModelComponents(selectedFindings);
+    const { components } = await createMLModelComponents(selectedFindings);
     
     components.forEach(comp => {
         xml += `    <component type="${comp.type}" bom-ref="${escapeXml(comp['bom-ref'])}">\n`;
@@ -1218,7 +1316,7 @@ function generateCycloneDXXml(analysisResult, selectedFindings) {
     // Dependencies - need to regenerate to match JSON structure
     xml += '  <dependencies>\n';
     
-    const { modelRefs, libraryRefs } = createMLModelComponents(selectedFindings);
+    const { modelRefs, libraryRefs } = await createMLModelComponents(selectedFindings);
     const libraryRefIds = libraryRefs.map(l => l['bom-ref']);
     
     // Main repo depends on all components

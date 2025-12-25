@@ -190,13 +190,13 @@ function calculateCarbonFootprint(modelParameters) {
  * Generate Extended AIBOM format
  * Includes standard CycloneDX BOM plus extended metadata sections
  */
-function generateExtendedAIBOM(analysisResult, selectedFindings) {
+async function generateExtendedAIBOM(analysisResult, selectedFindings) {
     const { repository, analyzedAt } = analysisResult;
     
     console.log('[Extended AIBOM] Generating extended AI BOM...');
     
     // Generate standard CycloneDX BOM as base
-    const standardBom = JSON.parse(generateCycloneDXJson(analysisResult, selectedFindings));
+    const standardBom = JSON.parse(await generateCycloneDXJson(analysisResult, selectedFindings));
     
     // Extract extended metadata from findings
     const extendedMetadata = extractExtendedMetadata(selectedFindings, analysisResult);

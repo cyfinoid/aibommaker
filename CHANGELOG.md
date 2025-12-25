@@ -7,6 +7,76 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.0.3] - 2025-12-25
+
+### Added
+
+#### Model Cards System
+- **Comprehensive model cards database** with 100+ model cards for major AI providers
+  - OpenAI: GPT-4, GPT-4o, GPT-3.5-turbo, o1-preview, o1-mini, DALL-E models, text embeddings
+  - Anthropic: Claude-3 family (Opus, Sonnet, Haiku, 3.5-Sonnet)
+  - Google: Gemini models (1.5-flash/pro, 2.0-flash-exp), Gemma 2/3, embedding models
+  - Meta: Llama 3.x family, CodeLlama, MedLlama2
+  - Microsoft: Phi-3, Phi-4
+  - Cohere: Command-A, Command-R, Command-R-Plus, Command-R7B-Arabic
+  - DeepSeek: DeepSeek-Coder-v2, DeepSeek-R1, DeepSeek-v3
+  - Alibaba: Qwen 2.5, Qwen 2.5-Coder, QWQ
+  - Mistral: Mistral, Mistral-Large, Mixtral-8x7B, Mathstral
+  - 01.ai: Yi model
+  - EPFL: Meditron
+  - NexusFlow: Athene-v2
+- **Model card generation scripts**
+  - `generate_cards.py`: Automated model card generation from templates
+  - `extract_factual_info.py`: Extract factual information from model documentation
+  - `extract_official_info.py`: Extract official model information from provider sources
+  - `update_from_official_sources.py`: Update model cards from official sources
+- **Structured model metadata** in JSON format with comprehensive fields
+  - Model capabilities, limitations, training data, performance metrics
+  - Ethical considerations, bias assessments, safety information
+  - Technical specifications, input/output formats, supported languages
+- **Model card templates** (JSON, Markdown, YAML) for consistent formatting
+- **Official sources tracking** with `official_models_found.json` for source verification
+
+#### Enhanced File Detection
+- **Improved README and security file detection**
+  - Better pattern matching for documentation files
+  - Enhanced security file recognition (SECURITY.md, etc.)
+  - Improved file type detection and parsing
+- **Model card file detection integration**
+  - Automatic detection of model card files in repositories
+  - Support for multiple model card formats (JSON, Markdown, YAML)
+
+#### Pattern Updates and False Positive Reduction
+- **Comprehensive pattern updates** across detection systems
+  - Enhanced model detection patterns with reduced false positives
+  - Improved hardware and infrastructure pattern matching
+  - Better dependency and library detection
+- **False positive filtering**
+  - Word boundary matching to prevent substring matches
+  - Context-aware pattern validation
+  - Enhanced validation for model name detection
+
+### Fixed
+- **Reduced false positives in model detection**
+  - Better word boundary handling for model names
+  - Improved pattern specificity to avoid common word matches
+  - Enhanced validation logic for detected patterns
+
+### Technical Details
+
+#### New Files
+- `modelcards/` directory with 100+ model card files across providers
+- Model card generation and extraction scripts in `modelcards/`
+- Template files for consistent model card formatting
+
+#### Modified Files
+- `js/constants.js` - Major pattern updates and false positive reductions
+- `js/detectors.js` - Enhanced file detection for documentation and model cards
+- `js/extended-aibom-generator.js` - Model card integration
+- `js/github-api.js` - Improved API handling for model card sources
+- `js/ui.js` - Model card display enhancements
+- `index.html` - Model card UI integration
+
 ## [0.0.2] - 2025-11-14
 
 ### Added

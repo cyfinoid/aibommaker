@@ -565,6 +565,56 @@ body {
     word-break: break-word;
 }
 
+/* Model Card Section */
+.model-card-section {
+    margin-top: 1.5rem;
+    padding: 1rem;
+    background: var(--bg-secondary);
+    border: 1px solid var(--text-secondary);
+    border-radius: 8px;
+}
+
+.model-card-section h4 {
+    color: var(--accent-blue);
+    margin-bottom: 1rem;
+    font-size: var(--font-section-header);
+    font-weight: 600;
+}
+
+.model-card-content p {
+    margin-bottom: 0.75rem;
+    line-height: 1.5;
+}
+
+.model-card-content strong {
+    color: var(--text-primary);
+    display: inline-block;
+    margin-bottom: 0.25rem;
+}
+
+.ethical-considerations,
+.model-references {
+    margin-top: 1rem;
+    padding: 0.75rem;
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 4px;
+    border-left: 3px solid var(--accent-yellow);
+}
+
+.ethical-considerations p,
+.model-references p {
+    margin-bottom: 0.5rem;
+}
+
+.model-references a {
+    color: var(--accent-blue);
+    text-decoration: none;
+}
+
+.model-references a:hover {
+    text-decoration: underline;
+}
+
 /* BOM Section */
 .bom-tabs {
     display: flex;
