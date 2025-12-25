@@ -2,6 +2,191 @@
 // Generates comprehensive AI Bill of Materials with enhanced metadata
 
 /**
+ * Calculate detailed compliance scores for EU AI Act and NIST AI RMF
+ * @param {Array} findings - All findings from analysis
+ * @param {string} riskLevel - EU AI Act risk level
+ * @returns {Object} Detailed compliance scores
+ */
+function calculateComplianceScores(findings, riskLevel) {
+    const scores = {
+        euAIAct: { score: 0, maxScore: 10, breakdown: {} },
+        nistAIRMF: { score: 0, maxScore: 16, breakdown: {} }
+    };
+
+    // EU AI Act scoring (simplified)
+    scores.euAIAct.breakdown = {
+        riskAssessment: riskLevel === 'high' ? 3 : riskLevel === 'limited' ? 2 : 1,
+        documentation: findings.filter(f => f.category === 'governance').length > 0 ? 3 : 1,
+        transparency: findings.some(f => f.category === 'governance') ? 2 : 0,
+        accountability: findings.some(f => f.category === 'governance') ? 2 : 0
+    };
+    scores.euAIAct.score = Object.values(scores.euAIAct.breakdown).reduce((a, b) => a + b, 0);
+
+    // NIST AI RMF scoring
+    const nistBreakdown = { govern: 0, map: 0, measure: 0, manage: 0 };
+
+    findings.forEach(finding => {
+        const text = `${finding.title} ${finding.description}`.toLowerCase();
+
+        // GOVERN function
+        NIST_AI_RMF_COMPLIANCE.govern.indicators.forEach(indicator => {
+            if (indicator.pattern.test(text)) {
+                nistBreakdown.govern = Math.min(nistBreakdown.govern + indicator.weight, 4);
+            }
+        });
+
+        // MAP function
+        NIST_AI_RMF_COMPLIANCE.map.indicators.forEach(indicator => {
+            if (indicator.pattern.test(text)) {
+                nistBreakdown.map = Math.min(nistBreakdown.map + indicator.weight, 4);
+            }
+        });
+
+        // MEASURE function
+        NIST_AI_RMF_COMPLIANCE.measure.indicators.forEach(indicator => {
+            if (indicator.pattern.test(text)) {
+                nistBreakdown.measure = Math.min(nistBreakdown.measure + indicator.weight, 4);
+            }
+        });
+
+        // MANAGE function
+        NIST_AI_RMF_COMPLIANCE.manage.indicators.forEach(indicator => {
+            if (indicator.pattern.test(text)) {
+                nistBreakdown.manage = Math.min(nistBreakdown.manage + indicator.weight, 4);
+            }
+        });
+    });
+
+    scores.nistAIRMF.breakdown = nistBreakdown;
+    scores.nistAIRMF.score = Object.values(nistBreakdown).reduce((a, b) => a + b, 0);
+
+    return scores;
+}
+
+/**
+ * Assess EU AI Act compliance and risk classification
+ * @param {Array} findings - All findings from analysis
+ * @param {Array} models - Model information from governance
+ * @returns {Object} EU AI Act compliance assessment
+ */
+function assessEUAIActCompliance(findings, models) {
+    let riskLevel = 'minimal';
+    let riskReasons = [];
+    let complianceScore = 0;
+
+    // Check for high-risk indicators in findings
+    for (const finding of findings) {
+        const text = `${finding.title} ${finding.description}`.toLowerCase();
+
+        for (const pattern of EU_AI_ACT_RISK_INDICATORS.highRisk.patterns) {
+            if (pattern.pattern.test(text)) {
+                if (riskLevel !== 'high') {
+                    riskLevel = 'high';
+                    riskReasons.push(pattern.reason);
+                }
+                break;
+            }
+        }
+
+        if (riskLevel === 'high') break;
+    }
+
+    // Check for limited-risk indicators if not high-risk
+    if (riskLevel === 'minimal') {
+        for (const finding of findings) {
+            const text = `${finding.title} ${finding.description}`.toLowerCase();
+
+            for (const pattern of EU_AI_ACT_RISK_INDICATORS.limitedRisk.patterns) {
+                if (pattern.pattern.test(text)) {
+                    riskLevel = 'limited';
+                    riskReasons.push(pattern.reason);
+                    break;
+                }
+            }
+
+            if (riskLevel === 'limited') break;
+        }
+    }
+
+    // Check model types for additional risk assessment
+    for (const model of models || []) {
+        const modelText = `${model.name} ${model.type} ${model.intended_use || ''}`.toLowerCase();
+
+        // Biometric models are high-risk
+        if (modelText.includes('facial') || modelText.includes('biometric') || modelText.includes('recognition')) {
+            riskLevel = 'high';
+            riskReasons.push('Biometric identification system');
+        }
+
+        // Large language models used for critical decisions
+        if (model.type === 'text-generation' && (modelText.includes('decision') || modelText.includes('assessment'))) {
+            if (riskLevel !== 'high') {
+                riskLevel = 'limited';
+                riskReasons.push('Generative AI for decision-making');
+            }
+        }
+    }
+
+    // Calculate comprehensive compliance scores
+    const complianceScores = calculateComplianceScores(findings, riskLevel);
+
+    const docFindings = findings.filter(f => f.category === 'governance');
+    const hasDocumentation = docFindings.length > 0;
+
+    // EU AI Act compliance score (basic)
+    if (riskLevel === 'high') {
+        complianceScore = hasDocumentation ? 0.7 : 0.3;
+    } else if (riskLevel === 'limited') {
+        complianceScore = hasDocumentation ? 0.8 : 0.5;
+    } else {
+        complianceScore = hasDocumentation ? 0.9 : 0.6;
+    }
+
+    return {
+        riskCategory: riskLevel,
+        riskReasons: [...new Set(riskReasons)], // Remove duplicates
+        complianceScore: complianceScore,
+        detailedCompliance: complianceScores,
+        requiresTransparency: riskLevel === 'high' || riskLevel === 'limited',
+        requiresConformity: riskLevel === 'high',
+        assessmentBasis: 'EU AI Act Annex III risk classification based on detected components and intended use'
+    };
+}
+
+/**
+ * Calculate carbon footprint estimate for a model
+ * Based on model parameters and conservative estimates
+ * @param {Object} modelParameters - Model parameters from config.json
+ * @returns {Object} Carbon footprint estimate
+ */
+function calculateCarbonFootprint(modelParameters) {
+    if (!modelParameters || !modelParameters.num_parameters) {
+        return null;
+    }
+
+    const numParams = modelParameters.num_parameters;
+    const paramsInBillions = numParams / 1e9;
+
+    // Conservative estimate: ~0.5 kg CO2 per billion parameters for training
+    // This is a rough estimate based on industry reports
+    // Actual carbon footprint depends on many factors including hardware, location, etc.
+    const co2PerBillionParams = 0.5; // kg CO2
+    const estimatedCO2 = paramsInBillions * co2PerBillionParams;
+
+    return {
+        estimatedCO2: estimatedCO2,
+        unit: 'kg',
+        methodology: 'conservative-estimate',
+        parametersUsed: numParams,
+        note: 'Estimate based on model parameters. Actual carbon footprint depends on training hardware, location, and optimization techniques.',
+        sources: [
+            'Based on industry estimates of ~0.5 kg CO2 per billion parameters',
+            'Does not account for inference emissions or data center efficiency variations'
+        ]
+    };
+}
+
+/**
  * Generate Extended AIBOM format
  * Includes standard CycloneDX BOM plus extended metadata sections
  */
@@ -55,8 +240,8 @@ function extractExtendedMetadata(findings, analysisResult) {
         protocols: extractProtocolMetadata(findings),
         ai_development_tools: extractAiDevToolsMetadata(findings),
         model_governance: extractGovernanceMetadata(findings, analysisResult),
-        risk_assessment: extractRiskAssessment(findings),
-        data_pipeline: extractDataPipeline(findings),
+        risk_assessment: extractRiskAssessment(findings, analysisResult),
+        data_pipeline: extractDataPipelineMetadata(findings),
         analysis_notes: extractAnalysisNotes(findings, analysisResult)
     };
 }
@@ -77,7 +262,8 @@ function extractHardwareMetadata(findings) {
     const hardware = {
         detected: true,
         compute_types: [],
-        details: []
+        details: [],
+        distributed_training: []
     };
     
     for (const finding of hardwareFindings) {
@@ -93,8 +279,20 @@ function extractHardwareMetadata(findings) {
                 }))
             });
         }
+
+        // Extract distributed training information
+        if (finding.hardwareInfo?.type === 'distributed_training') {
+            hardware.distributed_training.push({
+                frameworks: finding.hardwareInfo.frameworks || [],
+                description: finding.description,
+                evidence: finding.evidence.map(e => ({
+                    file: e.file,
+                    snippet: e.snippet
+                }))
+            });
+        }
     }
-    
+
     return hardware;
 }
 
@@ -339,6 +537,10 @@ function extractGovernanceMetadata(findings, analysisResult) {
             readme_present: false
         },
         detected_considerations: [],
+        quantitative_analysis: {
+            performance_metrics: [],
+            carbon_footprints: []
+        },
         // Include extracted documentation text from README.md
         extracted_documentation: parsedDocs ? {
             intended_use: parsedDocs.intendedUse || [],
@@ -355,14 +557,38 @@ function extractGovernanceMetadata(findings, analysisResult) {
     // Extract model information
     for (const finding of modelFindings) {
         if (finding.modelInfo) {
+            const modelInfo = finding.modelInfo;
             governance.models.push({
-                provider: finding.modelInfo.provider,
-                name: finding.modelInfo.modelName,
-                type: finding.modelInfo.modelType,
+                provider: modelInfo.provider,
+                name: modelInfo.modelName,
+                type: modelInfo.modelType,
                 intended_use: finding.description,
-                detection_source: finding.modelInfo.detectionSource || 'code-analysis',
-                locations: finding.modelInfo.locations || []
+                detection_source: modelInfo.detectionSource || 'code-analysis',
+                locations: modelInfo.locations || []
             });
+
+            // Extract performance metrics from HuggingFace data
+            if (modelInfo.huggingface?.cardData?.eval_results) {
+                const evalResults = modelInfo.huggingface.cardData.eval_results;
+                governance.quantitative_analysis.performance_metrics.push({
+                    model: `${modelInfo.provider}/${modelInfo.modelName}`,
+                    metrics: evalResults,
+                    source: 'huggingface-eval-results',
+                    detection_source: modelInfo.detectionSource || 'code-analysis'
+                });
+            }
+
+            // Calculate carbon footprint if model parameters are available
+            if (modelInfo.huggingface?.modelParameters) {
+                const carbonFootprint = calculateCarbonFootprint(modelInfo.huggingface.modelParameters);
+                if (carbonFootprint) {
+                    governance.quantitative_analysis.carbon_footprints.push({
+                        model: `${modelInfo.provider}/${modelInfo.modelName}`,
+                        carbonFootprint: carbonFootprint,
+                        detection_source: modelInfo.detectionSource || 'code-analysis'
+                    });
+                }
+            }
         }
     }
     
@@ -442,16 +668,20 @@ function extractGovernanceMetadata(findings, analysisResult) {
 /**
  * Extract risk assessment information
  */
-function extractRiskAssessment(findings) {
+function extractRiskAssessment(findings, analysisResult) {
     const riskFindings = findings.filter(f => f.category === 'risk');
     const governanceFindings = findings.filter(f => f.category === 'governance');
-    
+
+    // Extract model information for EU AI Act assessment
+    const models = findings.filter(f => f.modelInfo).map(f => f.modelInfo);
+
     const risks = {
         overall_risk_level: 'low',
         missing_documentation: [],
         identified_risks: [],
         positive_indicators: [],
-        recommendations: []
+        recommendations: [],
+        eu_ai_act: assessEUAIActCompliance(findings, models)
     };
     
     let riskScore = 0;
@@ -524,64 +754,124 @@ function extractRiskAssessment(findings) {
 /**
  * Extract data pipeline information
  */
-function extractDataPipeline(findings) {
+function extractDataPipelineMetadata(findings) {
     const depFindings = findings.filter(f => f.category === 'dependencies');
-    
+    const dataPipelineFindings = findings.filter(f => f.category === 'data-pipeline');
+
     const dataPipeline = {
         detected: false,
         data_loading: [],
         preprocessing: [],
         feature_engineering: [],
+        data_versioning: [],
+        datasets: [],
         frameworks: []
     };
-    
-    // Check dependencies for data pipeline libraries
-    for (const finding of depFindings) {
-        const depName = finding.dependencyInfo?.name?.toLowerCase() || finding.title.toLowerCase();
-        
-        // Data loading libraries
-        if (depName.includes('datasets') || depName.includes('pandas') || depName.includes('numpy')) {
+
+    // Process data pipeline detector findings
+    for (const finding of dataPipelineFindings) {
+        if (finding.dataPipelineInfo) {
             dataPipeline.detected = true;
-            dataPipeline.data_loading.push({
-                library: finding.dependencyInfo?.name || finding.title,
-                version: finding.dependencyInfo?.version
-            });
-        }
-        
-        // Preprocessing libraries
-        if (depName.includes('sklearn') || depName.includes('scikit-learn') || 
-            depName.includes('nltk') || depName.includes('spacy') ||
-            depName.includes('torchvision') || depName.includes('albumentations')) {
-            dataPipeline.detected = true;
-            dataPipeline.preprocessing.push({
-                library: finding.dependencyInfo?.name || finding.title,
-                version: finding.dependencyInfo?.version
-            });
-        }
-        
-        // ML frameworks
-        if (depName.includes('torch') || depName.includes('tensorflow') || 
-            depName.includes('jax') || depName.includes('keras')) {
-            dataPipeline.detected = true;
-            dataPipeline.frameworks.push({
-                library: finding.dependencyInfo?.name || finding.title,
-                version: finding.dependencyInfo?.version
-            });
+            const info = finding.dataPipelineInfo;
+
+            // Add datasets
+            if (info.datasets && info.datasets.length > 0) {
+                dataPipeline.datasets.push(...info.datasets);
+            }
+
+            // Categorize tools
+            const toolEntry = {
+                tool: info.tool,
+                category: info.category,
+                evidence: finding.evidence?.[0] ? `${finding.evidence[0].file}:${finding.evidence[0].line}` : null
+            };
+
+            switch (info.category) {
+                case 'loading':
+                    dataPipeline.data_loading.push(toolEntry);
+                    break;
+                case 'preprocessing':
+                    dataPipeline.preprocessing.push(toolEntry);
+                    break;
+                case 'feature_engineering':
+                    dataPipeline.feature_engineering.push(toolEntry);
+                    break;
+                case 'data_versioning':
+                    dataPipeline.data_versioning.push(toolEntry);
+                    break;
+            }
         }
     }
-    
-    // Deduplicate
-    dataPipeline.data_loading = deduplicateByLibrary(dataPipeline.data_loading);
-    dataPipeline.preprocessing = deduplicateByLibrary(dataPipeline.preprocessing);
-    dataPipeline.frameworks = deduplicateByLibrary(dataPipeline.frameworks);
-    
+
+    // Check dependencies for data pipeline libraries (fallback)
+    for (const finding of depFindings) {
+        const depName = finding.dependencyInfo?.name?.toLowerCase() || finding.title.toLowerCase();
+
+        // Data loading libraries
+        if (depName.includes('datasets') || depName.includes('pandas') || depName.includes('numpy') ||
+            depName.includes('kaggle')) {
+            if (!dataPipeline.data_loading.some(item => item.library === finding.dependencyInfo?.name)) {
+                dataPipeline.detected = true;
+                dataPipeline.data_loading.push({
+                    library: finding.dependencyInfo?.name || finding.title,
+                    version: finding.dependencyInfo?.version,
+                    source: 'dependency'
+                });
+            }
+        }
+
+        // Preprocessing libraries
+        if (depName.includes('sklearn') || depName.includes('scikit-learn') ||
+            depName.includes('nltk') || depName.includes('spacy') ||
+            depName.includes('torchvision') || depName.includes('albumentations')) {
+            if (!dataPipeline.preprocessing.some(item => item.library === finding.dependencyInfo?.name)) {
+                dataPipeline.detected = true;
+                dataPipeline.preprocessing.push({
+                    library: finding.dependencyInfo?.name || finding.title,
+                    version: finding.dependencyInfo?.version,
+                    source: 'dependency'
+                });
+            }
+        }
+
+        // ML frameworks
+        if (depName.includes('torch') || depName.includes('tensorflow') ||
+            depName.includes('jax') || depName.includes('keras')) {
+            if (!dataPipeline.frameworks.some(item => item.library === finding.dependencyInfo?.name)) {
+                dataPipeline.detected = true;
+                dataPipeline.frameworks.push({
+                    library: finding.dependencyInfo?.name || finding.title,
+                    version: finding.dependencyInfo?.version,
+                    source: 'dependency'
+                });
+            }
+        }
+
+        // Data versioning
+        if (depName.includes('dvc') || depName.includes('pachyderm')) {
+            if (!dataPipeline.data_versioning.some(item => item.library === finding.dependencyInfo?.name)) {
+                dataPipeline.detected = true;
+                dataPipeline.data_versioning.push({
+                    library: finding.dependencyInfo?.name || finding.title,
+                    version: finding.dependencyInfo?.version,
+                    source: 'dependency'
+                });
+            }
+        }
+    }
+
+    // Deduplicate datasets
+    dataPipeline.datasets = dataPipeline.datasets.filter((dataset, index, self) =>
+        index === self.findIndex(d => d.name === dataset.name && d.source === dataset.source)
+    );
+
     if (!dataPipeline.detected) {
         return {
             detected: false,
             note: 'No data pipeline components detected'
         };
     }
-    
+
     return dataPipeline;
 }
 

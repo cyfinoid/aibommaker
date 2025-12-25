@@ -1590,7 +1590,94 @@ async function modelsIdentifierDetector({ tree, getFileContent, owner, repo, tok
                 }, null, 2)
             });
         }
-        
+
+        // Detect model lineage relationships
+        if (data.hfDetails?.cardData?.base_model) {
+            const baseModel = data.hfDetails.cardData.base_model;
+            // Check if base model is already in our modelsFound
+            const baseModelKey = Object.keys(modelsFound).find(key => {
+                const modelData = modelsFound[key];
+                return modelData.modelName === baseModel ||
+                       modelData.modelName.includes(baseModel) ||
+                       baseModel.includes(modelData.modelName);
+            });
+
+            if (baseModelKey) {
+                // This is a fine-tuned version of an existing model
+                if (!data.relatedModels) data.relatedModels = [];
+                data.relatedModels.push({
+                    model: baseModel,
+                    relationship: 'fine-tuned-from',
+                    source: 'huggingface-base-model'
+                });
+                console.log(`[Detector: AI Models] 🔗 Detected lineage: ${data.modelName} is fine-tuned from ${baseModel}`);
+            } else {
+                // Base model not found, still record the relationship
+                if (!data.relatedModels) data.relatedModels = [];
+                data.relatedModels.push({
+                    model: baseModel,
+                    relationship: 'fine-tuned-from',
+                    source: 'huggingface-base-model',
+                    note: 'Base model not detected in this repository'
+                });
+                console.log(`[Detector: AI Models] 🔗 Recorded lineage: ${data.modelName} is fine-tuned from ${baseModel} (base model not found locally)`);
+            }
+        }
+
+        // Detect fine-tuning techniques used on this model
+        const fineTuningTechniques = [];
+        const content = allFindings.find(f =>
+            f.category === 'code' &&
+            f.evidence?.some(e => e.file === data.locations[0]?.file)
+        )?.evidence?.[0]?.snippet || '';
+
+        for (const pattern of FINE_TUNING_PATTERNS.patterns) {
+            if (pattern.pattern.test(content)) {
+                fineTuningTechniques.push({
+                    technique: pattern.technique,
+                    weight: pattern.weight
+                });
+            }
+        }
+
+        if (fineTuningTechniques.length > 0) {
+            if (!data.fineTuning) data.fineTuning = [];
+            data.fineTuning.push(...fineTuningTechniques);
+        }
+
+        // Detect lineage from naming patterns (e.g., model-instruct, model-chat, model-v2)
+        const modelNameLower = data.modelName.toLowerCase();
+        for (const [existingKey, existingModel] of Object.entries(modelsFound)) {
+            if (existingKey === key) continue; // Don't compare with itself
+
+            const existingNameLower = existingModel.modelName.toLowerCase();
+
+            // Check for common fine-tuning naming patterns
+            const isInstructVariant = modelNameLower.includes('instruct') &&
+                                    existingNameLower === modelNameLower.replace('-instruct', '').replace('instruct', '');
+            const isChatVariant = modelNameLower.includes('chat') &&
+                                existingNameLower === modelNameLower.replace('-chat', '').replace('chat', '');
+            const isV2Variant = modelNameLower.includes('v2') &&
+                               existingNameLower === modelNameLower.replace('-v2', '').replace('v2', '');
+            const isLoraVariant = modelNameLower.includes('lora') &&
+                                 existingNameLower === modelNameLower.replace('-lora', '').replace('lora', '');
+
+            if (isInstructVariant || isChatVariant || isV2Variant || isLoraVariant) {
+                if (!data.relatedModels) data.relatedModels = [];
+                const relationship = isInstructVariant ? 'instruct-tuned' :
+                                   isChatVariant ? 'chat-tuned' :
+                                   isV2Variant ? 'v2-version' : 'lora-tuned';
+
+                data.relatedModels.push({
+                    model: existingModel.modelName,
+                    relationship: relationship,
+                    source: 'naming-pattern'
+                });
+                console.log(`[Detector: AI Models] 🔗 Detected lineage via naming: ${data.modelName} is ${relationship} from ${existingModel.modelName}`);
+                break; // Only add one relationship per naming pattern
+            }
+        }
+
         findings.push({
             id: `model-${key}`,
             title: `AI Model Identified: ${data.modelName}`,
@@ -1620,26 +1707,229 @@ async function modelsIdentifierDetector({ tree, getFileContent, owner, repo, tok
     return findings;
 }
 
+async function fineTuningDetector({ tree, getFileContent }) {
+    console.log('[Detector: Fine-tuning] Starting fine-tuning technique detection...');
+    const findings = [];
+
+    // Get file extensions to scan based on repository languages
+    const codeExtensions = ['.py', '.js', '.ts', '.jsx', '.tsx', '.ipynb'];
+
+    // Scan code files for fine-tuning patterns
+    const codeFiles = tree.filter(entry => {
+        const ext = entry.path.match(/\.[^.]+$/)?.[0] || '';
+        return codeExtensions.includes(ext) && (!entry.size || entry.size < 500000);
+    }).slice(0, 100); // Limit to 100 files
+
+    console.log(`[Detector: Fine-tuning] Scanning ${codeFiles.length} code files for fine-tuning patterns...`);
+
+    const fineTuningTechniques = new Map();
+
+    for (const file of codeFiles) {
+        const content = await getFileContent(file.path);
+        if (!content) continue;
+
+        for (const pattern of FINE_TUNING_PATTERNS.patterns) {
+            if (pattern.pattern.test(content)) {
+                const key = pattern.technique;
+                if (!fineTuningTechniques.has(key)) {
+                    fineTuningTechniques.set(key, {
+                        technique: pattern.technique,
+                        weight: pattern.weight,
+                        locations: []
+                    });
+                }
+
+                const match = content.match(pattern.pattern);
+                fineTuningTechniques.get(key).locations.push({
+                    file: file.path,
+                    line: content.substring(0, match.index).split('\n').length,
+                    snippet: match[0].substring(0, 100)
+                });
+            }
+        }
+    }
+
+    // Create findings
+    for (const [key, data] of fineTuningTechniques) {
+        const title = `${data.technique} Fine-tuning Technique Detected`;
+        const description = `Found ${data.technique} fine-tuning technique in ${data.locations.length} location(s)`;
+
+        const evidence = data.locations.slice(0, 5).map(loc => ({
+            file: loc.file,
+            line: loc.line,
+            snippet: loc.snippet
+        }));
+
+        findings.push({
+            id: `finetuning-${key.toLowerCase().replace(/\s+/g, '-')}`,
+            title,
+            category: 'finetuning',
+            severity: 'info',
+            weight: data.weight,
+            description,
+            evidence,
+            fineTuningInfo: {
+                technique: data.technique,
+                locations: data.locations
+            }
+        });
+    }
+
+    console.log(`[Detector: Fine-tuning] Complete. Findings: ${findings.length}`);
+    return findings;
+}
+
+async function dataPipelineDetector({ tree, getFileContent }) {
+    console.log('[Detector: Data Pipeline] Starting data pipeline detection...');
+    const findings = [];
+    const datasetsFound = new Map();
+
+    // Get file extensions to scan based on repository languages
+    const codeExtensions = ['.py', '.js', '.ts', '.jsx', '.tsx', '.java', '.scala', '.go', '.rs'];
+
+    // Scan code files for data loading patterns
+    const codeFiles = tree.filter(entry => {
+        const ext = entry.path.match(/\.[^.]+$/)?.[0] || '';
+        return codeExtensions.includes(ext) && (!entry.size || entry.size < 500000);
+    }).slice(0, 100); // Limit to 100 files
+
+    console.log(`[Detector: Data Pipeline] Scanning ${codeFiles.length} code files for data loading patterns...`);
+
+    for (const file of codeFiles) {
+        const content = await getFileContent(file.path);
+        if (!content) continue;
+
+        // Check for data loading patterns
+        for (const category of Object.values(DATA_PIPELINE_PATTERNS)) {
+            if (!category.patterns) continue;
+
+            for (const pattern of category.patterns) {
+                const regex = new RegExp(pattern.pattern, 'gi');
+                let match;
+                while ((match = regex.exec(content)) !== null) {
+                    const key = `${pattern.tool}-${file.path}`;
+                    if (!datasetsFound.has(key)) {
+                        datasetsFound.set(key, {
+                            tool: pattern.tool,
+                            file: file.path,
+                            category: Object.keys(DATA_PIPELINE_PATTERNS).find(k => DATA_PIPELINE_PATTERNS[k] === category),
+                            weight: pattern.weight,
+                            locations: []
+                        });
+                    }
+
+                    const datasetInfo = datasetsFound.get(key);
+                    let datasetName = null;
+                    let datasetSource = 'custom';
+
+                    // Extract dataset name if pattern supports it
+                    if (pattern.extractDataset && match[1]) {
+                        datasetName = match[1];
+                        // Determine source
+                        if (pattern.tool === 'HuggingFace Datasets') {
+                            datasetSource = 'huggingface';
+                        } else if (pattern.tool.includes('Kaggle')) {
+                            datasetSource = 'kaggle';
+                        }
+                    }
+
+                    datasetInfo.locations.push({
+                        line: content.substring(0, match.index).split('\n').length,
+                        snippet: match[0].substring(0, 100),
+                        dataset: datasetName,
+                        source: datasetSource
+                    });
+                }
+            }
+        }
+    }
+
+    // Check for data versioning files and tools
+    const dataVersioningFiles = tree.filter(entry => {
+        const path = entry.path.toLowerCase();
+        return DATA_PIPELINE_PATTERNS.data_versioning.files.some(file =>
+            path.includes(file.replace('/', ''))
+        );
+    });
+
+    console.log(`[Detector: Data Pipeline] Found ${dataVersioningFiles.length} data versioning files`);
+
+    for (const file of dataVersioningFiles.slice(0, 10)) {
+        const content = await getFileContent(file.path);
+        if (!content) continue;
+
+        const key = `data-versioning-${file.path}`;
+        datasetsFound.set(key, {
+            tool: 'Data Versioning',
+            file: file.path,
+            category: 'data_versioning',
+            weight: 4,
+            locations: [{
+                line: 1,
+                snippet: `Data versioning file: ${file.path}`,
+                dataset: null,
+                source: 'versioning'
+            }]
+        });
+    }
+
+    // Create findings
+    for (const [key, data] of datasetsFound) {
+        const title = `${data.tool} Data Pipeline Detected`;
+        const description = `Found ${data.tool} usage for data ${data.category} in ${data.locations.length} location(s)`;
+
+        const evidence = data.locations.slice(0, 5).map(loc => ({
+            file: data.file,
+            line: loc.line,
+            snippet: loc.snippet
+        }));
+
+        findings.push({
+            id: `data-pipeline-${key.replace(/[^a-zA-Z0-9]/g, '-')}`,
+            title,
+            category: 'data-pipeline',
+            severity: 'info',
+            weight: data.weight,
+            description,
+            evidence,
+            dataPipelineInfo: {
+                tool: data.tool,
+                category: data.category,
+                datasets: data.locations
+                    .filter(loc => loc.dataset)
+                    .map(loc => ({
+                        name: loc.dataset,
+                        source: loc.source,
+                        location: `${data.file}:${loc.line}`
+                    }))
+            }
+        });
+    }
+
+    console.log(`[Detector: Data Pipeline] Complete. Findings: ${findings.length}`);
+    return findings;
+}
+
 async function promptsDetector({ tree, getFileContent }) {
     console.log('[Detector: Prompts] Starting prompt template detection...');
     const findings = [];
     const PROMPT_PATHS = ['prompts', 'templates', 'llm', 'ai'];
-    const promptFiles = tree.filter(entry => 
-        PROMPT_PATHS.some(p => entry.path.toLowerCase().includes(p)) && 
+    const promptFiles = tree.filter(entry =>
+        PROMPT_PATHS.some(p => entry.path.toLowerCase().includes(p)) &&
         entry.path.match(/\.(txt|md|json|yaml)$/)
     );
-    
+
     console.log(`[Detector: Prompts] Found ${promptFiles.length} potential prompt files`);
-    
+
     const foundPrompts = [];
     for (const file of promptFiles.slice(0, 20)) {
         const content = await getFileContent(file.path);
         if (!content) continue;
-        
-        const foundIndicators = PROMPT_INDICATORS.filter(ind => 
+
+        const foundIndicators = PROMPT_INDICATORS.filter(ind =>
             content.toLowerCase().includes(ind.toLowerCase())
         );
-        
+
         if (foundIndicators.length > 0) {
             foundPrompts.push({ file: file.path, indicators: foundIndicators });
         }
@@ -1689,6 +1979,7 @@ async function hardwareDetector({ tree, getFileContent, allFindings = [] }) {
         gpuModels: new Set(),     // Specific GPU models (A10G, H100, T4, etc.)
         tpu: new Set(),
         specialized: new Set(),
+        distributedTraining: new Set(), // Distributed training frameworks
         evidence: []
     };
     
@@ -1729,6 +2020,18 @@ async function hardwareDetector({ tree, getFileContent, allFindings = [] }) {
                     file: 'Dependencies',
                     snippet: `Specialized hardware: ${depFinding.dependencyInfo?.name || depFinding.title}`,
                     type: 'specialized'
+                });
+            }
+        }
+
+        // Check distributed training dependencies
+        for (const dtDep of HARDWARE_PATTERNS.distributed_training.dependencies) {
+            if (depName.includes(dtDep.toLowerCase()) || dtDep.toLowerCase().includes(depName)) {
+                hardwareInfo.distributedTraining.add(dtDep);
+                hardwareInfo.evidence.push({
+                    file: 'Dependencies',
+                    snippet: `Distributed training: ${depFinding.dependencyInfo?.name || depFinding.title}`,
+                    type: 'distributed_training'
                 });
             }
         }
@@ -1811,8 +2114,23 @@ async function hardwareDetector({ tree, getFileContent, allFindings = [] }) {
                 });
             }
         }
+
+        // Check distributed training patterns (Python files primarily)
+        if (isPythonFile) {
+            for (const pattern of HARDWARE_PATTERNS.distributed_training.patterns) {
+                if (pattern.pattern.test(content)) {
+                    hardwareInfo.distributedTraining.add(pattern.framework);
+                    const match = content.match(pattern.pattern);
+                    hardwareInfo.evidence.push({
+                        file: file.path,
+                        snippet: match ? match[0].substring(0, 100) : `${pattern.framework} usage detected`,
+                        type: 'distributed_training'
+                    });
+                }
+            }
+        }
     }
-    
+
     // Create findings
     if (hardwareInfo.gpu.size > 0 || hardwareInfo.gpuModels.size > 0) {
         const gpuParts = [];
@@ -1877,7 +2195,24 @@ async function hardwareDetector({ tree, getFileContent, allFindings = [] }) {
             }
         });
     }
-    
+
+    if (hardwareInfo.distributedTraining.size > 0) {
+        console.log(`[Detector: Hardware] ✓ Found distributed training: ${Array.from(hardwareInfo.distributedTraining).join(', ')}`);
+        findings.push({
+            id: 'hardware-distributed-training',
+            title: 'Distributed Training Framework Detected',
+            category: 'hardware',
+            severity: 'high',
+            weight: 5,
+            description: `Distributed training frameworks: ${Array.from(hardwareInfo.distributedTraining).join(', ')}`,
+            evidence: hardwareInfo.evidence.filter(e => e.type === 'distributed_training').slice(0, 5),
+            hardwareInfo: {
+                type: 'distributed_training',
+                frameworks: Array.from(hardwareInfo.distributedTraining)
+            }
+        });
+    }
+
     console.log(`[Detector: Hardware] Complete. Findings: ${findings.length}`);
     return findings;
 }
@@ -1892,7 +2227,10 @@ async function infrastructureDetector({ tree, getFileContent, allFindings = [] }
         containerization: new Set(),
         orchestration: new Set(),
         cloud: new Set(),
-        mlops: new Set(),
+        mlops: new Map(), // Change to Map to store detailed info per platform
+        hpo: new Set(), // Hyperparameter optimization frameworks
+        modelServing: new Set(), // Model serving frameworks
+        monitoring: new Set(), // Model monitoring tools
         evidence: []
     };
     
@@ -1968,8 +2306,49 @@ async function infrastructureDetector({ tree, getFileContent, allFindings = [] }
                 }
             }
         }
+
+        // Check HPO patterns (Python files primarily)
+        if (isPythonFile) {
+            for (const pattern of HPO_PATTERNS.patterns) {
+                if (pattern.pattern.test(content)) {
+                    infraInfo.hpo.add(pattern.framework);
+                    const match = content.match(pattern.pattern);
+                    infraInfo.evidence.push({
+                        file: file.path,
+                        snippet: match ? match[0].substring(0, 100) : `${pattern.framework} usage detected`,
+                        type: 'hpo'
+                    });
+                }
+            }
+        }
+
+        // Check model serving patterns
+        for (const pattern of INFRASTRUCTURE_PATTERNS.model_serving.patterns) {
+            if (pattern.pattern.test(content)) {
+                infraInfo.modelServing.add(pattern.framework);
+                const match = content.match(pattern.pattern);
+                infraInfo.evidence.push({
+                    file: file.path,
+                    snippet: match ? match[0].substring(0, 100) : pattern.framework,
+                    type: 'model_serving'
+                });
+            }
+        }
+
+        // Check monitoring patterns
+        for (const pattern of MONITORING_PATTERNS.patterns) {
+            if (pattern.pattern.test(content)) {
+                infraInfo.monitoring.add(pattern.tool);
+                const match = content.match(pattern.pattern);
+                infraInfo.evidence.push({
+                    file: file.path,
+                    snippet: match ? match[0].substring(0, 100) : pattern.tool,
+                    type: 'monitoring'
+                });
+            }
+        }
     }
-    
+
     // Check for cloud patterns in code and config files
     const configFiles = tree.filter(entry => 
         entry.path.match(/\.(py|js|ts|yaml|yml|json|toml|ini|cfg)$/) && entry.type === 'blob'
@@ -1997,12 +2376,36 @@ async function infrastructureDetector({ tree, getFileContent, allFindings = [] }
         // Check MLOps patterns
         for (const pattern of INFRASTRUCTURE_PATTERNS.mlops.patterns) {
             if (pattern.pattern.test(content)) {
-                infraInfo.mlops.add(pattern.platform);
                 const match = content.match(pattern.pattern);
+                const platform = pattern.platform;
+
+                if (!infraInfo.mlops.has(platform)) {
+                    infraInfo.mlops.set(platform, {
+                        detected: true,
+                        projects: new Set(),
+                        tags: new Set(),
+                        apiKeys: new Set()
+                    });
+                }
+
+                const platformInfo = infraInfo.mlops.get(platform);
+
+                // Extract project name if pattern supports it
+                if (pattern.extractProject && match && match[1]) {
+                    platformInfo.projects.add(match[1]);
+                }
+
+                // Extract API key if pattern supports it (for security awareness)
+                if (pattern.extractApiKey && match && match[1]) {
+                    platformInfo.apiKeys.add('[REDACTED]'); // Don't store actual keys
+                }
+
                 infraInfo.evidence.push({
                     file: file.path,
-                    snippet: match ? match[0].substring(0, 100) : pattern.platform,
-                    type: 'mlops'
+                    snippet: match ? match[0].substring(0, 100) : platform,
+                    type: 'mlops',
+                    platform: platform,
+                    project: pattern.extractProject && match ? match[1] : null
                 });
             }
         }
@@ -2015,16 +2418,87 @@ async function infrastructureDetector({ tree, getFileContent, allFindings = [] }
         
         for (const mlopsDep of INFRASTRUCTURE_PATTERNS.mlops.dependencies) {
             if (depName.includes(mlopsDep.toLowerCase())) {
-                infraInfo.mlops.add(mlopsDep);
+                // Map dependency name to platform name
+                const platformMap = {
+                    'mlflow': 'MLflow',
+                    'wandb': 'Weights & Biases',
+                    'tensorboard': 'TensorBoard',
+                    'clearml': 'ClearML',
+                    'neptune-client': 'Neptune',
+                    'comet-ml': 'Comet ML',
+                    'aim': 'Aim',
+                    'sacred': 'Sacred'
+                };
+
+                const platform = platformMap[mlopsDep] || mlopsDep;
+
+                if (!infraInfo.mlops.has(platform)) {
+                    infraInfo.mlops.set(platform, {
+                        detected: true,
+                        projects: new Set(),
+                        tags: new Set(),
+                        apiKeys: new Set()
+                    });
+                }
+
                 infraInfo.evidence.push({
                     file: 'Dependencies',
                     snippet: `MLOps tool: ${depFinding.dependencyInfo?.name || depFinding.title}`,
-                    type: 'mlops'
+                    type: 'mlops',
+                    platform: platform
                 });
             }
         }
     }
-    
+
+    // Check HPO dependencies (reuse existing depFindings)
+    for (const depFinding of depFindings) {
+        const depName = depFinding.dependencyInfo?.name?.toLowerCase() || depFinding.title.toLowerCase();
+
+        for (const hpoDep of HPO_PATTERNS.dependencies) {
+            if (depName.includes(hpoDep.toLowerCase())) {
+                infraInfo.hpo.add(hpoDep);
+                infraInfo.evidence.push({
+                    file: 'Dependencies',
+                    snippet: `HPO library: ${depFinding.dependencyInfo?.name || depFinding.title}`,
+                    type: 'hpo'
+                });
+            }
+        }
+    }
+
+    // Check model serving dependencies
+    for (const depFinding of depFindings) {
+        const depName = depFinding.dependencyInfo?.name?.toLowerCase() || depFinding.title.toLowerCase();
+
+        for (const servingDep of INFRASTRUCTURE_PATTERNS.model_serving.dependencies) {
+            if (depName.includes(servingDep.toLowerCase())) {
+                infraInfo.modelServing.add(servingDep);
+                infraInfo.evidence.push({
+                    file: 'Dependencies',
+                    snippet: `Model serving: ${depFinding.dependencyInfo?.name || depFinding.title}`,
+                    type: 'model_serving'
+                });
+            }
+        }
+    }
+
+    // Check monitoring dependencies
+    for (const depFinding of depFindings) {
+        const depName = depFinding.dependencyInfo?.name?.toLowerCase() || depFinding.title.toLowerCase();
+
+        for (const monitoringDep of MONITORING_PATTERNS.dependencies) {
+            if (depName.includes(monitoringDep.toLowerCase())) {
+                infraInfo.monitoring.add(monitoringDep);
+                infraInfo.evidence.push({
+                    file: 'Dependencies',
+                    snippet: `Monitoring tool: ${depFinding.dependencyInfo?.name || depFinding.title}`,
+                    type: 'monitoring'
+                });
+            }
+        }
+    }
+
     // Create findings
     if (infraInfo.containerization.size > 0) {
         console.log(`[Detector: Infrastructure] ✓ Found containerization: ${Array.from(infraInfo.containerization).join(', ')}`);
@@ -2078,22 +2552,86 @@ async function infrastructureDetector({ tree, getFileContent, allFindings = [] }
     }
     
     if (infraInfo.mlops.size > 0) {
-        console.log(`[Detector: Infrastructure] ✓ Found MLOps tools: ${Array.from(infraInfo.mlops).join(', ')}`);
+        const platforms = Array.from(infraInfo.mlops.keys());
+        console.log(`[Detector: Infrastructure] ✓ Found MLOps tools: ${platforms.join(', ')}`);
+
+        // Create detailed description with project information
+        const platformDetails = Array.from(infraInfo.mlops.entries()).map(([platform, info]) => {
+            const projects = Array.from(info.projects);
+            const projectStr = projects.length > 0 ? ` (projects: ${projects.join(', ')})` : '';
+            return `${platform}${projectStr}`;
+        });
+
         findings.push({
             id: 'infra-mlops',
-            title: 'MLOps Tools Detected',
+            title: 'MLOps Experiment Tracking Detected',
             category: 'infrastructure',
             severity: 'medium',
             weight: 3,
-            description: `MLOps platforms: ${Array.from(infraInfo.mlops).join(', ')}`,
+            description: `Experiment tracking platforms: ${platformDetails.join(', ')}`,
             evidence: infraInfo.evidence.filter(e => e.type === 'mlops').slice(0, 5),
             infraInfo: {
                 type: 'mlops',
-                platforms: Array.from(infraInfo.mlops)
+                platforms: Array.from(infraInfo.mlops.entries()).map(([platform, info]) => ({
+                    platform,
+                    projects: Array.from(info.projects),
+                    hasApiKeys: info.apiKeys.size > 0
+                }))
             }
         });
     }
-    
+
+    if (infraInfo.hpo.size > 0) {
+        console.log(`[Detector: Infrastructure] ✓ Found HPO frameworks: ${Array.from(infraInfo.hpo).join(', ')}`);
+        findings.push({
+            id: 'infra-hpo',
+            title: 'Hyperparameter Optimization Detected',
+            category: 'infrastructure',
+            severity: 'medium',
+            weight: 3,
+            description: `HPO frameworks: ${Array.from(infraInfo.hpo).join(', ')}`,
+            evidence: infraInfo.evidence.filter(e => e.type === 'hpo').slice(0, 5),
+            infraInfo: {
+                type: 'hpo',
+                frameworks: Array.from(infraInfo.hpo)
+            }
+        });
+    }
+
+    if (infraInfo.modelServing.size > 0) {
+        console.log(`[Detector: Infrastructure] ✓ Found model serving: ${Array.from(infraInfo.modelServing).join(', ')}`);
+        findings.push({
+            id: 'infra-model-serving',
+            title: 'Model Serving Framework Detected',
+            category: 'infrastructure',
+            severity: 'medium',
+            weight: 4,
+            description: `Model serving frameworks: ${Array.from(infraInfo.modelServing).join(', ')}`,
+            evidence: infraInfo.evidence.filter(e => e.type === 'model_serving').slice(0, 5),
+            infraInfo: {
+                type: 'model_serving',
+                frameworks: Array.from(infraInfo.modelServing)
+            }
+        });
+    }
+
+    if (infraInfo.monitoring.size > 0) {
+        console.log(`[Detector: Infrastructure] ✓ Found monitoring tools: ${Array.from(infraInfo.monitoring).join(', ')}`);
+        findings.push({
+            id: 'infra-monitoring',
+            title: 'Model Monitoring Tools Detected',
+            category: 'infrastructure',
+            severity: 'medium',
+            weight: 3,
+            description: `Monitoring tools: ${Array.from(infraInfo.monitoring).join(', ')}`,
+            evidence: infraInfo.evidence.filter(e => e.type === 'monitoring').slice(0, 5),
+            infraInfo: {
+                type: 'monitoring',
+                tools: Array.from(infraInfo.monitoring)
+            }
+        });
+    }
+
     console.log(`[Detector: Infrastructure] Complete. Findings: ${findings.length}`);
     return findings;
 }
@@ -2470,7 +3008,67 @@ async function riskDetector({ tree, getFileContent, allFindings = [], parsedDocs
             }
         });
     }
-    
+
+    // Check for bias and fairness assessment tools (positive governance indicator)
+    const biasFairnessTools = [];
+    for (const depFinding of depFindings) {
+        const depName = depFinding.dependencyInfo?.name?.toLowerCase() || depFinding.title.toLowerCase();
+
+        for (const biasTool of BIAS_FAIRNESS_PATTERNS.dependencies) {
+            if (depName.includes(biasTool.toLowerCase())) {
+                biasFairnessTools.push({
+                    tool: biasTool,
+                    dependency: depFinding.dependencyInfo?.name || depFinding.title,
+                    version: depFinding.dependencyInfo?.version
+                });
+            }
+        }
+    }
+
+    // Check for bias/fairness patterns in code
+    const codeFiles = tree.filter(entry =>
+        entry.path.match(/\.(py|js|ts|java|scala|go|rs)$/) &&
+        entry.type === 'blob'
+    ).slice(0, 50);
+
+    for (const file of codeFiles) {
+        const content = await getFileContent(file.path);
+        if (!content) continue;
+
+        for (const pattern of BIAS_FAIRNESS_PATTERNS.patterns) {
+            if (pattern.pattern.test(content)) {
+                const existingTool = biasFairnessTools.find(t => t.tool === pattern.tool);
+                if (!existingTool) {
+                    biasFairnessTools.push({
+                        tool: pattern.tool,
+                        detectedIn: file.path,
+                        pattern: pattern.pattern.source
+                    });
+                }
+            }
+        }
+    }
+
+    if (biasFairnessTools.length > 0) {
+        console.log(`[Detector: Risk] ✓ Found ${biasFairnessTools.length} bias/fairness assessment tools`);
+        findings.push({
+            id: 'governance-bias-fairness-tools',
+            title: 'Bias & Fairness Assessment Tools Detected',
+            category: 'governance',
+            severity: 'info',
+            weight: 0,
+            description: `Bias and fairness assessment tools detected: ${biasFairnessTools.map(t => t.tool).join(', ')}`,
+            evidence: biasFairnessTools.slice(0, 3).map(tool => ({
+                file: tool.detectedIn || 'Dependencies',
+                snippet: tool.dependency ? `Dependency: ${tool.dependency}` : `Pattern detected in code`
+            })),
+            governanceInfo: {
+                type: 'bias_fairness_assessment',
+                tools: biasFairnessTools
+            }
+        });
+    }
+
     console.log(`[Detector: Risk] Complete. Findings: ${findings.length}`);
     return { findings, risks, parsedDocs };
 }

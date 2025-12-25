@@ -150,6 +150,8 @@ async function analyzeRepository(input, onProgress = null) {
         { name: 'Configuration', fn: configDetector },
         { name: 'CI/CD', fn: ciDetector },
         { name: 'Model Files', fn: modelsDetector },
+        { name: 'Fine-tuning', fn: fineTuningDetector },
+        { name: 'Data Pipeline', fn: dataPipelineDetector },
         { name: 'Prompts', fn: promptsDetector },
         { name: 'Protocols', fn: protocolDetector }, // MCP, A2A, and plugin systems
         { name: 'AI Dev Tools', fn: aiDevToolsDetector }, // Cursor, Copilot, Claude Code (low confidence)

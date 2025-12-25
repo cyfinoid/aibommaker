@@ -422,6 +422,7 @@ function createMLModelComponents(findings) {
                 const cardData = huggingface?.cardData || {};
                 const config = huggingface?.config || {};
                 const evalResults = cardData.eval_results || modelCardData?.eval_results || null;
+                const modelParams = huggingface?.modelParameters || {};
                 
                 if (huggingface) {
                     // Tasks
@@ -564,6 +565,44 @@ function createMLModelComponents(findings) {
                         });
                     }
                     
+                    // Model parameters extracted from config.json
+                    if (modelParams.num_parameters) {
+                        modelCard.properties.push({
+                            name: 'num_parameters',
+                            value: String(modelParams.num_parameters)
+                        });
+                    }
+                    if (modelParams.vocab_size) {
+                        modelCard.properties.push({
+                            name: 'vocab_size',
+                            value: String(modelParams.vocab_size)
+                        });
+                    }
+                    if (modelParams.contextWindow) {
+                        modelCard.properties.push({
+                            name: 'contextWindow',
+                            value: String(modelParams.contextWindow)
+                        });
+                    }
+                    if (modelParams.hidden_size) {
+                        modelCard.properties.push({
+                            name: 'hidden_size',
+                            value: String(modelParams.hidden_size)
+                        });
+                    }
+                    if (modelParams.num_layers) {
+                        modelCard.properties.push({
+                            name: 'num_layers',
+                            value: String(modelParams.num_layers)
+                        });
+                    }
+                    if (modelParams.num_attention_heads) {
+                        modelCard.properties.push({
+                            name: 'num_attention_heads',
+                            value: String(modelParams.num_attention_heads)
+                        });
+                    }
+
                     // Metrics and decision thresholds
                     if (modelCardData?.metric || modelCardData?.metrics) {
                         const metrics = modelCardData.metric || modelCardData.metrics;

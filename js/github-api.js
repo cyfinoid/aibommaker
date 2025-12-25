@@ -316,10 +316,36 @@ async function fetchHuggingFaceModelInfo(modelId) {
         if (data.cardData?.eval_results) {
             evalResults = data.cardData.eval_results;
         }
-        
+
         // Extract cardData fields
         const cardData = data.cardData || {};
-        
+
+        // Extract model parameters from config.json
+        const modelParameters = {};
+        if (configData) {
+            modelParameters.num_parameters = configData.num_parameters ||
+                                           configData.n_parameters ||
+                                           configData.total_params ||
+                                           null;
+            modelParameters.vocab_size = configData.vocab_size || null;
+            modelParameters.contextWindow = configData.max_position_embeddings ||
+                                          configData.max_seq_len ||
+                                          configData.max_seq_length ||
+                                          null;
+            modelParameters.hidden_size = configData.hidden_size ||
+                                         configData.d_model ||
+                                         configData.n_embd ||
+                                         null;
+            modelParameters.num_layers = configData.num_layers ||
+                                        configData.n_layer ||
+                                        configData.num_hidden_layers ||
+                                        null;
+            modelParameters.num_attention_heads = configData.num_attention_heads ||
+                                                configData.n_head ||
+                                                configData.num_heads ||
+                                                null;
+        }
+
         return {
             verified: true,
             id: data.id,
@@ -348,7 +374,9 @@ async function fetchHuggingFaceModelInfo(modelId) {
             suppliedBy: data.author || modelId.split('/')[0],
             typeOfModel: configData?.model_type || cardData.model_type || 'transformer',
             architectures: configData?.architectures || [],
-            safetensors: data.safetensors
+            safetensors: data.safetensors,
+            // Model parameters extracted from config
+            modelParameters: modelParameters
         };
     } catch (error) {
         console.warn(`[HuggingFace API] ⚠️  Exception fetching ${modelId}:`, error.message);

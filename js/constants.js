@@ -975,6 +975,31 @@ const MODEL_FILE_PATTERNS = [
 
 // Hardware detection patterns for GPU/TPU/specialized compute
 const HARDWARE_PATTERNS = {
+    distributed_training: {
+        dependencies: ['deepspeed', 'horovod', 'megatron', 'torch.distributed', 'ray[train]'],
+        patterns: [
+            // DeepSpeed
+            { pattern: /deepspeed|DeepSpeed/i, framework: 'DeepSpeed', weight: 5 },
+            { pattern: /from\s+deepspeed/i, framework: 'DeepSpeed', weight: 5 },
+            { pattern: /import\s+deepspeed/i, framework: 'DeepSpeed', weight: 5 },
+            // Horovod
+            { pattern: /horovod|Horovod/i, framework: 'Horovod', weight: 5 },
+            { pattern: /import\s+horovod/i, framework: 'Horovod', weight: 5 },
+            // Megatron-LM
+            { pattern: /megatron|Megatron/i, framework: 'Megatron-LM', weight: 5 },
+            { pattern: /from\s+megatron/i, framework: 'Megatron-LM', weight: 5 },
+            // PyTorch Distributed
+            { pattern: /torch\.distributed|torch\.nn\.parallel/i, framework: 'PyTorch Distributed', weight: 4 },
+            { pattern: /DistributedDataParallel|DDP/i, framework: 'PyTorch DDP', weight: 4 },
+            { pattern: /FullyShardedDataParallel|FSDP/i, framework: 'PyTorch FSDP', weight: 4 },
+            // Ray
+            { pattern: /ray\.train|ray\[train\]/i, framework: 'Ray Train', weight: 4 },
+            { pattern: /from\s+ray\.train/i, framework: 'Ray Train', weight: 4 },
+            // Accelerate
+            { pattern: /accelerate|Accelerate/i, framework: 'HuggingFace Accelerate', weight: 4 },
+            { pattern: /from\s+accelerate/i, framework: 'HuggingFace Accelerate', weight: 4 }
+        ]
+    },
     gpu: {
         dependencies: ['torch', 'tensorflow-gpu', 'cuda', 'cudnn', 'cupy', 'pycuda', 'cupy-cuda'],
         patterns: [
@@ -1012,12 +1037,30 @@ const HARDWARE_PATTERNS = {
         ]
     },
     specialized: {
-        dependencies: ['tensorrt', 'openvino', 'onnxruntime-gpu', 'onnxruntime', 'coreml'],
+        dependencies: ['tensorrt', 'openvino', 'onnxruntime-gpu', 'onnxruntime', 'coreml', 'tflite', 'edgetpu', 'mps'],
         patterns: [
-            { pattern: /tensorrt/i, type: 'TensorRT', weight: 4 },
+            // NVIDIA TensorRT
+            { pattern: /tensorrt|trt\b/i, type: 'TensorRT', weight: 4 },
+            { pattern: /torch_tensorrt|torch2trt/i, type: 'TensorRT', weight: 4 },
+            // Intel OpenVINO
             { pattern: /openvino/i, type: 'OpenVINO', weight: 4 },
-            { pattern: /onnxruntime/i, type: 'ONNX Runtime', weight: 4 },
-            { pattern: /coreml/i, type: 'CoreML', weight: 4 }
+            { pattern: /openvino\.convert_model/i, type: 'OpenVINO', weight: 4 },
+            // ONNX Runtime
+            { pattern: /\b(onnxruntime|ort)\b/i, type: 'ONNX Runtime', weight: 4 },
+            { pattern: /\bonnx\.export\b/i, type: 'ONNX Export', weight: 4 },
+            // Apple CoreML
+            { pattern: /coreml|core_ml/i, type: 'CoreML', weight: 4 },
+            { pattern: /coremltools/i, type: 'CoreML Tools', weight: 4 },
+            // TensorFlow Lite
+            { pattern: /tflite|\.tflite/i, type: 'TensorFlow Lite', weight: 4 },
+            { pattern: /tf\.lite|TFLiteConverter/i, type: 'TensorFlow Lite', weight: 4 },
+            // Google Edge TPU
+            { pattern: /edgetpu|edge_tpu/i, type: 'Edge TPU', weight: 4 },
+            // Apple Metal Performance Shaders
+            { pattern: /\bmps\b|metal.*performance/i, type: 'Metal Performance Shaders', weight: 3 },
+            // Generic edge optimization
+            { pattern: /quantize|quantization/i, type: 'Model Quantization', weight: 3 },
+            { pattern: /prune|pruning/i, type: 'Model Pruning', weight: 3 }
         ]
     }
 };
@@ -1058,13 +1101,65 @@ const INFRASTRUCTURE_PATTERNS = {
             { pattern: /replicate\.com/i, platform: 'Replicate', weight: 4 }
         ]
     },
-    mlops: {
-        dependencies: ['mlflow', 'wandb', 'tensorboard', 'clearml', 'neptune-client', 'comet-ml'],
+    model_serving: {
+        dependencies: ['torchserve', 'tensorflow-serving', 'tritonserver', 'bento', 'cortex', 'seldon-core', 'kserve'],
         patterns: [
-            { pattern: /mlflow/i, platform: 'MLflow', weight: 4 },
-            { pattern: /wandb/i, platform: 'Weights & Biases', weight: 4 },
+            // TorchServe
+            { pattern: /torchserve|torch\.serve/i, framework: 'TorchServe', weight: 5 },
+            { pattern: /torch\.model_archiver/i, framework: 'TorchServe', weight: 4 },
+            // TensorFlow Serving
+            { pattern: /tensorflow.*serving|tf\.serving/i, framework: 'TensorFlow Serving', weight: 5 },
+            { pattern: /saved_model|SavedModel/i, framework: 'TensorFlow Serving', weight: 3 },
+            // Triton Inference Server
+            { pattern: /triton|tritonserver/i, framework: 'Triton Inference Server', weight: 5 },
+            { pattern: /tritonclient/i, framework: 'Triton Client', weight: 4 },
+            // BentoML
+            { pattern: /bentoml|bento/i, framework: 'BentoML', weight: 5 },
+            { pattern: /@bentoml/i, framework: 'BentoML', weight: 4 },
+            // Cortex
+            { pattern: /cortex/i, framework: 'Cortex', weight: 4 },
+            // Seldon
+            { pattern: /seldon/i, framework: 'Seldon', weight: 4 },
+            // KServe
+            { pattern: /kserve/i, framework: 'KServe', weight: 4 },
+            // Generic serving patterns
+            { pattern: /model.*serving|inference.*server/i, framework: 'Model Serving', weight: 3 }
+        ]
+    },
+    mlops: {
+        dependencies: ['mlflow', 'wandb', 'tensorboard', 'clearml', 'neptune-client', 'comet-ml', 'aim', 'sacred'],
+        patterns: [
+            // Weights & Biases
+            { pattern: /wandb\.init\s*\(\s*['"]([^'"]+)['"]/i, platform: 'Weights & Biases', weight: 5, extractProject: true },
+            { pattern: /wandb\.init\s*\(\s*project\s*=\s*['"]([^'"]+)['"]/i, platform: 'Weights & Biases', weight: 5, extractProject: true },
+            { pattern: /from\s+wandb/i, platform: 'Weights & Biases', weight: 4 },
+            { pattern: /import\s+wandb/i, platform: 'Weights & Biases', weight: 4 },
+            // MLflow
+            { pattern: /mlflow\.start_run\s*\(\s*experiment_name\s*=\s*['"]([^'"]+)['"]/i, platform: 'MLflow', weight: 5, extractProject: true },
+            { pattern: /mlflow\.set_experiment\s*\(\s*['"]([^'"]+)['"]/i, platform: 'MLflow', weight: 5, extractProject: true },
+            { pattern: /from\s+mlflow/i, platform: 'MLflow', weight: 4 },
+            { pattern: /import\s+mlflow/i, platform: 'MLflow', weight: 4 },
+            // ClearML
+            { pattern: /clearml\.Task\.init\s*\(\s*project_name\s*=\s*['"]([^'"]+)['"]/i, platform: 'ClearML', weight: 5, extractProject: true },
+            { pattern: /from\s+clearml/i, platform: 'ClearML', weight: 4 },
+            { pattern: /import\s+clearml/i, platform: 'ClearML', weight: 4 },
+            // Comet ML
+            { pattern: /comet_ml\.Experiment\s*\(\s*api_key\s*=\s*['"]([^'"]+)['"]/i, platform: 'Comet ML', weight: 4, extractApiKey: true },
+            { pattern: /comet_ml\.Experiment\s*\(\s*project_name\s*=\s*['"]([^'"]+)['"]/i, platform: 'Comet ML', weight: 5, extractProject: true },
+            { pattern: /from\s+comet_ml/i, platform: 'Comet ML', weight: 4 },
+            { pattern: /import\s+comet_ml/i, platform: 'Comet ML', weight: 4 },
+            // Neptune
+            { pattern: /neptune\.init\s*\(\s*project\s*=\s*['"]([^'"]+)['"]/i, platform: 'Neptune', weight: 5, extractProject: true },
+            { pattern: /from\s+neptune/i, platform: 'Neptune', weight: 4 },
+            { pattern: /import\s+neptune/i, platform: 'Neptune', weight: 4 },
+            // TensorBoard
             { pattern: /tensorboard/i, platform: 'TensorBoard', weight: 3 },
-            { pattern: /clearml/i, platform: 'ClearML', weight: 4 }
+            // Aim
+            { pattern: /from\s+aim\b/i, platform: 'Aim', weight: 4 },
+            { pattern: /import\s+aim\b/i, platform: 'Aim', weight: 4 },
+            // Sacred
+            { pattern: /from\s+sacred/i, platform: 'Sacred', weight: 4 },
+            { pattern: /import\s+sacred/i, platform: 'Sacred', weight: 4 }
         ]
     }
 };
@@ -1086,11 +1181,21 @@ const DOCUMENTATION_FILES = [
 // Data pipeline and preprocessing patterns
 const DATA_PIPELINE_PATTERNS = {
     loading: {
-        dependencies: ['datasets', 'huggingface-datasets', 'pandas', 'numpy', 'dask', 'ray'],
+        dependencies: ['datasets', 'huggingface-datasets', 'pandas', 'numpy', 'dask', 'ray', 'kaggle', 'kagglehub'],
         patterns: [
-            { pattern: /datasets\.load_dataset/i, tool: 'HuggingFace Datasets', weight: 4 },
-            { pattern: /pd\.read_csv|pd\.read_json|pd\.read_parquet/i, tool: 'Pandas', weight: 3 },
-            { pattern: /np\.load|np\.loadtxt/i, tool: 'NumPy', weight: 2 }
+            // HuggingFace datasets
+            { pattern: /datasets\.load_dataset\(['"]([^'"]+)['"]/i, tool: 'HuggingFace Datasets', weight: 5, extractDataset: true },
+            { pattern: /load_dataset\(['"]([^'"]+)['"]/i, tool: 'HuggingFace Datasets', weight: 5, extractDataset: true },
+            // Kaggle datasets
+            { pattern: /kagglehub\.dataset_download\(['"]([^'"]+)['"]/i, tool: 'Kaggle Datasets', weight: 4, extractDataset: true },
+            { pattern: /kaggle\.api\.dataset_download/i, tool: 'Kaggle API', weight: 4 },
+            // Pandas loading
+            { pattern: /pd\.read_csv\(['"]([^'"]*\.(csv|tsv))['"]/i, tool: 'Pandas CSV', weight: 3, extractDataset: true },
+            { pattern: /pd\.read_json\(['"]([^'"]*\.json)['"]/i, tool: 'Pandas JSON', weight: 3, extractDataset: true },
+            { pattern: /pd\.read_parquet\(['"]([^'"]*\.parquet)['"]/i, tool: 'Pandas Parquet', weight: 3, extractDataset: true },
+            // NumPy loading
+            { pattern: /np\.load\(['"]([^'"]*\.npy)['"]/i, tool: 'NumPy', weight: 2, extractDataset: true },
+            { pattern: /np\.loadtxt\(['"]([^'"]*\.txt)['"]/i, tool: 'NumPy', weight: 2, extractDataset: true }
         ]
     },
     preprocessing: {
@@ -1099,14 +1204,36 @@ const DATA_PIPELINE_PATTERNS = {
             { pattern: /from\s+sklearn\.preprocessing/i, tool: 'scikit-learn preprocessing', weight: 3 },
             { pattern: /AutoTokenizer|Tokenizer/i, tool: 'Tokenization', weight: 4 },
             { pattern: /transforms\.|Compose\(/i, tool: 'Data augmentation', weight: 3 },
-            { pattern: /ImageDataGenerator|augment/i, tool: 'Image augmentation', weight: 3 }
+            { pattern: /ImageDataGenerator|\baugment\b/i, tool: 'Image augmentation', weight: 3 }
         ]
     },
     feature_engineering: {
         patterns: [
-            { pattern: /FeatureExtractor|feature_extraction/i, tool: 'Feature extraction', weight: 3 },
-            { pattern: /TfidfVectorizer|CountVectorizer/i, tool: 'Text vectorization', weight: 3 },
-            { pattern: /PCA|TSNE|UMAP/i, tool: 'Dimensionality reduction', weight: 3 }
+            // Tokenization
+            { pattern: /AutoTokenizer|Tokenizer/i, tool: 'Tokenization', weight: 4 },
+            { pattern: /nltk\.word_tokenize|nltk\.sent_tokenize/i, tool: 'NLTK Tokenization', weight: 3 },
+            { pattern: /spacy\.load.*tokenize/i, tool: 'spaCy Tokenization', weight: 3 },
+            // Normalization
+            { pattern: /StandardScaler|MinMaxScaler|Normalizer/i, tool: 'Feature Scaling', weight: 3 },
+            { pattern: /LabelEncoder|OneHotEncoder/i, tool: 'Categorical Encoding', weight: 3 },
+            { pattern: /TfidfVectorizer|CountVectorizer/i, tool: 'Text Vectorization', weight: 3 },
+            // Feature Selection
+            { pattern: /SelectKBest|SelectPercentile|RFE/i, tool: 'Feature Selection', weight: 3 },
+            { pattern: /PCA|TSNE|UMAP|TruncatedSVD/i, tool: 'Dimensionality Reduction', weight: 3 },
+            { pattern: /FeatureExtractor|feature_extraction/i, tool: 'Feature Extraction', weight: 3 },
+            // Text Processing
+            { pattern: /Stemmer|Lemmatizer/i, tool: 'Text Normalization', weight: 3 },
+            { pattern: /stopwords|StopWords/i, tool: 'Stopword Removal', weight: 3 }
+        ]
+    },
+    data_versioning: {
+        files: ['dvc.yaml', '.dvc/', 'data_version.txt', 'pachyderm.json'],
+        dependencies: ['dvc', 'pachyderm', 'dvc[s3]', 'dvc[gdrive]'],
+        patterns: [
+            { pattern: /dvc\s+(add|commit|push|pull)/i, tool: 'DVC', weight: 4 },
+            { pattern: /pachctl/i, tool: 'Pachyderm', weight: 4 },
+            { pattern: /from\s+dvc/i, tool: 'DVC Python', weight: 4 },
+            { pattern: /import\s+pachyderm/i, tool: 'Pachyderm Python', weight: 4 }
         ]
     }
 };
@@ -1118,6 +1245,225 @@ const RISK_KEYWORDS = {
     bias: ['bias', 'fairness', 'discrimination', 'equity', 'demographic parity'],
     limitations: ['limitation', 'constraint', 'does not support', 'not recommended', 'known issue'],
     ethical: ['ethical', 'privacy', 'consent', 'harmful', 'misuse', 'dual use']
+};
+
+// ============================================================================
+// FINE-TUNING TECHNIQUES PATTERNS
+// ============================================================================
+const FINE_TUNING_PATTERNS = {
+    dependencies: ['peft', 'lora', 'qlora', 'adapters', 'bitsandbytes', 'accelerate'],
+    patterns: [
+        // Parameter-Efficient Fine-Tuning (PEFT)
+        { pattern: /peft|PEFT/i, technique: 'PEFT', weight: 5 },
+        { pattern: /from\s+peft/i, technique: 'PEFT', weight: 5 },
+        // LoRA (Low-Rank Adaptation)
+        { pattern: /lora|LoRA/i, technique: 'LoRA', weight: 5 },
+        { pattern: /LoraConfig|LoraModel/i, technique: 'LoRA', weight: 5 },
+        // QLoRA (Quantized LoRA)
+        { pattern: /qlora|QLoRA/i, technique: 'QLoRA', weight: 5 },
+        // Adapters
+        { pattern: /adapter|Adapter/i, technique: 'Adapters', weight: 4 },
+        { pattern: /AdapterConfig|add_adapter/i, technique: 'Adapters', weight: 4 },
+        // Bit and Bytes (quantization for QLoRA)
+        { pattern: /bitsandbytes|BitsAndBytes/i, technique: 'Quantization', weight: 4 },
+        { pattern: /from\s+bitsandbytes/i, technique: 'Quantization', weight: 4 },
+        // Accelerate (for distributed training/fine-tuning)
+        { pattern: /accelerate|Accelerate/i, technique: 'Accelerate', weight: 3 },
+        { pattern: /from\s+accelerate/i, technique: 'Accelerate', weight: 3 },
+        // Generic fine-tuning patterns
+        { pattern: /fine.*tun|finetun/i, technique: 'Fine-tuning', weight: 3 },
+        { pattern: /train.*model|model.*train/i, technique: 'Model Training', weight: 2 },
+        { pattern: /checkpoint|Checkpoint/i, technique: 'Checkpointing', weight: 2 }
+    ]
+};
+
+// ============================================================================
+// BIAS & FAIRNESS ASSESSMENT PATTERNS
+// ============================================================================
+const BIAS_FAIRNESS_PATTERNS = {
+    dependencies: ['aif360', 'fairlearn', 'fairness-indicators', 'responsible-ai-toolbox', 'fairml'],
+    patterns: [
+        // AI Fairness 360 (AIF360)
+        { pattern: /aif360|aif-360/i, tool: 'AI Fairness 360', weight: 4 },
+        { pattern: /from\s+aif360/i, tool: 'AI Fairness 360', weight: 4 },
+        // Fairlearn
+        { pattern: /fairlearn/i, tool: 'Fairlearn', weight: 4 },
+        { pattern: /from\s+fairlearn/i, tool: 'Fairlearn', weight: 4 },
+        // TensorFlow Fairness Indicators
+        { pattern: /fairness.*indicators|fairness_indicators/i, tool: 'Fairness Indicators', weight: 4 },
+        { pattern: /tfma.*fairness/i, tool: 'TensorFlow Model Analysis Fairness', weight: 4 },
+        // Responsible AI Toolbox
+        { pattern: /responsible.*ai.*toolbox|rrai/i, tool: 'Responsible AI Toolbox', weight: 4 },
+        { pattern: /responsibleai/i, tool: 'Responsible AI Toolbox', weight: 4 },
+        // FairML
+        { pattern: /\bfairml\b/i, tool: 'FairML', weight: 3 },
+        // Generic bias/fairness patterns
+        { pattern: /demographic.*parity|equal.*opportunity/i, tool: 'Fairness Metrics', weight: 3 },
+        { pattern: /bias.*detection|bias.*assessment/i, tool: 'Bias Detection', weight: 3 },
+        { pattern: /fairness.*score|fairness.*metric/i, tool: 'Fairness Evaluation', weight: 3 },
+        { pattern: /disparate.*impact|adverse.*impact/i, tool: 'Impact Assessment', weight: 3 }
+    ]
+};
+
+// ============================================================================
+// MODEL MONITORING PATTERNS
+// ============================================================================
+const MONITORING_PATTERNS = {
+    dependencies: ['evidently', 'whylogs', 'arize', 'fiddler', 'alibi-detect', 'deepchecks'],
+    patterns: [
+        // Evidently AI
+        { pattern: /\bevidently\b|evidently\.ai/i, tool: 'Evidently AI', weight: 4 },
+        { pattern: /from\s+evidently/i, tool: 'Evidently AI', weight: 4 },
+        // WhyLogs
+        { pattern: /whylogs|why-logs/i, tool: 'WhyLogs', weight: 4 },
+        { pattern: /from\s+whylogs/i, tool: 'WhyLogs', weight: 4 },
+        // Arize AI
+        { pattern: /\barize\b/i, tool: 'Arize AI', weight: 4 },
+        { pattern: /from\s+arize/i, tool: 'Arize AI', weight: 4 },
+        // Fiddler AI
+        { pattern: /\bfiddler\b|fiddler\.ai/i, tool: 'Fiddler AI', weight: 4 },
+        { pattern: /from\s+fiddler/i, tool: 'Fiddler AI', weight: 4 },
+        // Alibi Detect
+        { pattern: /alibi.*detect|alibi_detect/i, tool: 'Alibi Detect', weight: 4 },
+        { pattern: /from\s+alibi_detect/i, tool: 'Alibi Detect', weight: 4 },
+        // DeepChecks
+        { pattern: /deepchecks/i, tool: 'DeepChecks', weight: 4 },
+        { pattern: /from\s+deepchecks/i, tool: 'DeepChecks', weight: 4 },
+        // Generic monitoring patterns
+        { pattern: /drift.*detection|data.*drift/i, tool: 'Drift Detection', weight: 3 },
+        { pattern: /model.*monitoring|performance.*monitoring/i, tool: 'Model Monitoring', weight: 3 },
+        { pattern: /anomaly.*detection/i, tool: 'Anomaly Detection', weight: 3 }
+    ]
+};
+
+// ============================================================================
+// HYPERPARAMETER OPTIMIZATION PATTERNS
+// ============================================================================
+const HPO_PATTERNS = {
+    dependencies: ['optuna', 'ray[tune]', 'hyperopt', 'nevergrad', 'scikit-optimize', 'bayesian-optimization'],
+    patterns: [
+        // Optuna
+        { pattern: /optuna\.create_study\s*\(/i, framework: 'Optuna', weight: 5 },
+        { pattern: /optuna\.Trial/i, framework: 'Optuna', weight: 4 },
+        { pattern: /from\s+optuna/i, framework: 'Optuna', weight: 4 },
+        { pattern: /import\s+optuna/i, framework: 'Optuna', weight: 4 },
+        // Ray Tune
+        { pattern: /ray\.tune\.run\s*\(/i, framework: 'Ray Tune', weight: 5 },
+        { pattern: /ray\.tune\.report\s*\(/i, framework: 'Ray Tune', weight: 4 },
+        { pattern: /from\s+ray\s+import\s+tune/i, framework: 'Ray Tune', weight: 4 },
+        { pattern: /import\s+ray/i, framework: 'Ray Tune', weight: 3 },
+        // Hyperopt
+        { pattern: /hyperopt\.fmin\s*\(/i, framework: 'Hyperopt', weight: 5 },
+        { pattern: /hyperopt\.Trials/i, framework: 'Hyperopt', weight: 4 },
+        { pattern: /from\s+hyperopt/i, framework: 'Hyperopt', weight: 4 },
+        { pattern: /import\s+hyperopt/i, framework: 'Hyperopt', weight: 4 },
+        // Nevergrad
+        { pattern: /nevergrad\.Instrumentation/i, framework: 'Nevergrad', weight: 4 },
+        { pattern: /nevergrad\.Optimizer/i, framework: 'Nevergrad', weight: 4 },
+        { pattern: /from\s+nevergrad/i, framework: 'Nevergrad', weight: 4 },
+        { pattern: /import\s+nevergrad/i, framework: 'Nevergrad', weight: 4 },
+        // Scikit-Optimize
+        { pattern: /skopt\.gp_minimize/i, framework: 'Scikit-Optimize', weight: 4 },
+        { pattern: /from\s+skopt/i, framework: 'Scikit-Optimize', weight: 4 },
+        { pattern: /import\s+skopt/i, framework: 'Scikit-Optimize', weight: 4 },
+        // Generic HPO patterns
+        { pattern: /grid_search|GridSearchCV/i, framework: 'Grid Search', weight: 3 },
+        { pattern: /random_search|RandomizedSearchCV/i, framework: 'Random Search', weight: 3 },
+        { pattern: /bayesian.*optimization/i, framework: 'Bayesian Optimization', weight: 3 }
+    ]
+};
+
+// ============================================================================
+// EU AI ACT RISK CLASSIFICATION
+// ============================================================================
+const EU_AI_ACT_RISK_INDICATORS = {
+    // High-risk AI systems (Annex III)
+    highRisk: {
+        patterns: [
+            // Biometric identification and categorization
+            { pattern: /facial.*recognition|face.*recognition/i, risk: 'high', category: 'biometric', reason: 'Biometric identification system' },
+            { pattern: /emotion.*recognition|mood.*detection/i, risk: 'limited', category: 'biometric', reason: 'Emotion recognition system' },
+            // Critical infrastructure
+            { pattern: /critical.*infrastructure|infrastructure.*management/i, risk: 'high', category: 'infrastructure', reason: 'Critical infrastructure management' },
+            { pattern: /power.*grid|energy.*system/i, risk: 'high', category: 'infrastructure', reason: 'Energy infrastructure' },
+            { pattern: /transport.*management|traffic.*control/i, risk: 'high', category: 'infrastructure', reason: 'Transport management' },
+            { pattern: /water.*management|drinking.*water/i, risk: 'high', category: 'infrastructure', reason: 'Water management' },
+            // Education and vocational training
+            { pattern: /education.*assessment|student.*evaluation/i, risk: 'high', category: 'education', reason: 'Educational assessment system' },
+            { pattern: /vocational.*training|career.*guidance/i, risk: 'high', category: 'education', reason: 'Vocational training system' },
+            // Employment and workers management
+            { pattern: /employment.*decision|hiring.*decision/i, risk: 'high', category: 'employment', reason: 'Employment decision system' },
+            { pattern: /worker.*management|employee.*evaluation/i, risk: 'high', category: 'employment', reason: 'Worker management system' },
+            // Access to essential services
+            { pattern: /credit.*scoring|loan.*approval/i, risk: 'high', category: 'finance', reason: 'Credit scoring system' },
+            { pattern: /insurance.*pricing|risk.*assessment/i, risk: 'high', category: 'finance', reason: 'Insurance assessment' },
+            // Law enforcement
+            { pattern: /law.*enforcement|crime.*prediction/i, risk: 'high', category: 'law_enforcement', reason: 'Law enforcement system' },
+            { pattern: /migration.*control|border.*control/i, risk: 'high', category: 'law_enforcement', reason: 'Migration control' },
+            // Democratic processes
+            { pattern: /voting.*system|election.*monitoring/i, risk: 'high', category: 'democracy', reason: 'Democratic process system' }
+        ]
+    },
+    // Limited-risk AI systems
+    limitedRisk: {
+        patterns: [
+            { pattern: /chatbot|conversational.*ai/i, risk: 'limited', category: 'chatbot', reason: 'Chatbot or conversational AI' },
+            { pattern: /emotion.*recognition|mood.*detection/i, risk: 'limited', category: 'emotion', reason: 'Emotion recognition' },
+            { pattern: /biometric.*categorization/i, risk: 'limited', category: 'biometric', reason: 'Biometric categorization' }
+        ]
+    },
+    // Minimal-risk AI systems (default)
+    minimalRisk: {
+        patterns: [
+            { pattern: /spam.*filter|content.*moderation/i, risk: 'minimal', category: 'content', reason: 'Content moderation' },
+            { pattern: /recommendation.*system/i, risk: 'minimal', category: 'recommendation', reason: 'Recommendation system' },
+            { pattern: /image.*generation|text.*generation/i, risk: 'minimal', category: 'generation', reason: 'Generative AI' }
+        ]
+    }
+};
+
+// ============================================================================
+// NIST AI RMF COMPLIANCE INDICATORS
+// ============================================================================
+const NIST_AI_RMF_COMPLIANCE = {
+    // GOVERN function - Governance and organizational structures
+    govern: {
+        indicators: [
+            { pattern: /model.*card|MODEL_CARD/i, weight: 1, category: 'documentation' },
+            { pattern: /readme|README/i, weight: 1, category: 'documentation' },
+            { pattern: /security|SECURITY/i, weight: 1, category: 'documentation' },
+            { pattern: /ethical|ETHICS/i, weight: 1, category: 'documentation' },
+            { pattern: /bias|BIAS/i, weight: 1, category: 'documentation' },
+            { pattern: /fairness|FAIRNESS/i, weight: 1, category: 'documentation' }
+        ]
+    },
+    // MAP function - Mapping and inventory
+    map: {
+        indicators: [
+            { pattern: /sbom|SBOM|bill.*of.*materials/i, weight: 2, category: 'inventory' },
+            { pattern: /dependency|DEPENDENCY/i, weight: 1, category: 'inventory' },
+            { pattern: /model.*provenance|data.*lineage/i, weight: 2, category: 'inventory' },
+            { pattern: /training.*data|dataset/i, weight: 1, category: 'inventory' }
+        ]
+    },
+    // MEASURE function - Measuring performance and effectiveness
+    measure: {
+        indicators: [
+            { pattern: /evaluation|benchmark|metric/i, weight: 2, category: 'measurement' },
+            { pattern: /performance.*test|validation/i, weight: 1, category: 'measurement' },
+            { pattern: /bias.*assessment|fairness.*evaluation/i, weight: 2, category: 'measurement' },
+            { pattern: /monitoring|drift.*detection/i, weight: 1, category: 'measurement' }
+        ]
+    },
+    // MANAGE function - Managing AI risks
+    manage: {
+        indicators: [
+            { pattern: /risk.*assessment|risk.*management/i, weight: 2, category: 'risk_management' },
+            { pattern: /incident.*response|crisis.*management/i, weight: 1, category: 'risk_management' },
+            { pattern: /transparency|explainability/i, weight: 2, category: 'risk_management' },
+            { pattern: /accountability|oversight/i, weight: 1, category: 'risk_management' }
+        ]
+    }
 };
 
 // ============================================================================
