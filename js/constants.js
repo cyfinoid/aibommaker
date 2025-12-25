@@ -8,416 +8,907 @@ const GITHUB_API_BASE = 'https://api.github.com';
 const HUGGINGFACE_API_BASE = 'https://huggingface.co/api';
 
 // ============================================================================
-// AI PACKAGE REGISTRY - Extensible categorized lists of AI-related packages
+// AI SIGNATURES - Structured detection patterns with rich metadata
 // ============================================================================
-// To add new packages: Simply add to the appropriate category array.
-// Each package entry can be a string (package name) or an object with metadata.
+// Inspired by xbom's YAML signatures but implemented as JavaScript objects
+// Single source of truth for all AI/ML/MCP detection patterns
 // ============================================================================
-
-const AI_PACKAGE_REGISTRY = {
-    // ==========================================================================
-    // LLM Provider SDKs - Direct API access to LLM providers
-    // ==========================================================================
-    llm_providers: {
+const AI_SIGNATURES = {
+  // ==========================================================================
+  // LLM PROVIDERS - Direct API access to LLM providers
+  // ==========================================================================
+  llm_providers: [
+    {
+      id: 'openai.client',
+      vendor: 'OpenAI',
+      product: 'OpenAI',
+      service: 'AI Client',
+      description: 'OpenAI client SDK for accessing GPT models',
+      tags: ['ai', 'text', 'llm', 'api'],
+      category: 'llm_providers',
+      packages: {
+        python: ['openai'],
+        node: ['openai'],
+        go: ['github.com/sashabaranov/go-openai'],
+        java: ['com.openai:openai-java'],
+        rust: ['async-openai']
+      },
+      codePatterns: {
         python: [
-            'openai', 'anthropic', 'google-generativeai', 'cohere', 'mistralai',
-            'replicate', 'together', 'groq', 'fireworks-ai', 'anyscale',
-            'ai21', 'aleph-alpha-client', 'stability-sdk', 'deepseek-ai'
+          { pattern: /import\s+openai/i, weight: 5 },
+          { pattern: /from\s+openai\s+import/i, weight: 5 },
+          { pattern: /openai\.ChatCompletion/i, weight: 5 },
+          { pattern: /openai\.chat\.completions/i, weight: 5 },
+          { pattern: /openai\.Embedding/i, weight: 5 },
+          { pattern: /OpenAI\(/i, weight: 5 }
         ],
-        node: [
-            'openai', '@anthropic-ai/sdk', '@google/generative-ai', 'cohere-ai',
-            '@mistralai/mistralai', 'replicate', 'groq-sdk', '@ai-sdk/openai',
-            '@ai-sdk/anthropic', '@ai-sdk/google', '@ai-sdk/mistral'
-        ],
-        go: [
-            'github.com/sashabaranov/go-openai',
-            'github.com/anthropics/anthropic-sdk-go',
-            'github.com/google/generative-ai-go',
-            'github.com/cohere-ai/cohere-go'
-        ],
-        java: [
-            'com.openai:openai-java',
-            'com.anthropic:anthropic-sdk-java',
-            'com.google.cloud:google-cloud-aiplatform'
-        ],
-        rust: ['async-openai', 'anthropic-sdk', 'mistral-rs']
+        javascript: [
+          { pattern: /from\s+['"]openai['"]/i, weight: 5 },
+          { pattern: /require\s*\(\s*['"]openai['"]/i, weight: 5 },
+          { pattern: /new\s+OpenAI\s*\(/i, weight: 5 },
+          { pattern: /\.chat\.completions\.create/i, weight: 5 }
+        ]
+      },
+      apiEndpoints: [
+        { pattern: /api\.openai\.com/i, weight: 4 }
+      ],
+      models: [
+        { pattern: /gpt-4o-mini/i, name: 'GPT-4o Mini' },
+        { pattern: /gpt-4o/i, name: 'GPT-4o' },
+        { pattern: /gpt-4-turbo|gpt-4-1106/i, name: 'GPT-4 Turbo' },
+        { pattern: /gpt-4(?![o\.])/i, name: 'GPT-4' },
+        { pattern: /gpt-3\.5-turbo/i, name: 'GPT-3.5 Turbo' },
+        { pattern: /o1-preview/i, name: 'o1-preview' },
+        { pattern: /o1-mini/i, name: 'o1-mini' },
+        { pattern: /o3-mini/i, name: 'o3-mini' }
+      ]
     },
-    
-    // ==========================================================================
-    // LLM Frameworks - Orchestration and abstraction layers
-    // ==========================================================================
-    llm_frameworks: {
+    {
+      id: 'anthropic.client',
+      vendor: 'Anthropic',
+      product: 'Anthropic',
+      service: 'AI Client',
+      description: 'Anthropic client SDK for accessing Claude models',
+      tags: ['ai', 'text', 'llm', 'api'],
+      category: 'llm_providers',
+      packages: {
+        python: ['anthropic'],
+        node: ['@anthropic-ai/sdk'],
+        go: ['github.com/anthropics/anthropic-sdk-go'],
+        java: ['com.anthropic:anthropic-sdk-java']
+      },
+      codePatterns: {
         python: [
-            'langchain', 'langchain-core', 'langchain-openai', 'langchain-anthropic',
-            'langchain-google-genai', 'langchain-community', 'langgraph',
-            'llama-index', 'llama-index-core', 'llama-index-llms-openai',
-            'haystack-ai', 'dspy-ai', 'guidance', 'outlines', 'instructor',
-            'litellm', 'magentic', 'marvin', 'promptflow', 'semantic-kernel',
-            'autogen', 'crewai', 'agency-swarm'
+          { pattern: /import\s+anthropic/i, weight: 5 },
+          { pattern: /from\s+anthropic\s+import/i, weight: 5 },
+          { pattern: /Anthropic\(/i, weight: 5 },
+          { pattern: /messages\.create\(/i, weight: 4 }
         ],
-        node: [
-            'langchain', '@langchain/core', '@langchain/openai', '@langchain/anthropic',
-            '@langchain/google-genai', '@langchain/community', '@langchain/langgraph',
-            'llamaindex', 'ai', '@vercel/ai', 'flowise', 'langflow'
+        javascript: [
+          { pattern: /from\s+['"]@anthropic-ai\/sdk['"]/i, weight: 5 },
+          { pattern: /require\s*\(\s*['"]@anthropic-ai\/sdk['"]/i, weight: 5 },
+          { pattern: /new\s+Anthropic\s*\(/i, weight: 5 }
+        ]
+      },
+      apiEndpoints: [
+        { pattern: /api\.anthropic\.com/i, weight: 4 }
+      ],
+      models: [
+        { pattern: /claude-3-opus/i, name: 'Claude 3 Opus' },
+        { pattern: /claude-3\.5-sonnet|claude-3-5-sonnet/i, name: 'Claude 3.5 Sonnet' },
+        { pattern: /claude-3\.5-haiku|claude-3-5-haiku/i, name: 'Claude 3.5 Haiku' },
+        { pattern: /claude-3-sonnet/i, name: 'Claude 3 Sonnet' },
+        { pattern: /claude-3-haiku/i, name: 'Claude 3 Haiku' },
+        { pattern: /claude-opus-4|claude-4-opus/i, name: 'Claude Opus 4' },
+        { pattern: /claude-sonnet-4|claude-4-sonnet/i, name: 'Claude Sonnet 4' }
+      ]
+    },
+    {
+      id: 'google.generativeai',
+      vendor: 'Google',
+      product: 'Google AI',
+      service: 'Generative AI Client',
+      description: 'Google Generative AI SDK for accessing Gemini models',
+      tags: ['ai', 'text', 'llm', 'api'],
+      category: 'llm_providers',
+      packages: {
+        python: ['google-generativeai'],
+        node: ['@google/generative-ai']
+      },
+      codePatterns: {
+        python: [
+          { pattern: /import\s+google\.generativeai/i, weight: 5 },
+          { pattern: /genai\.GenerativeModel/i, weight: 5 },
+          { pattern: /\.generate_content\(/i, weight: 4 }
         ],
+        javascript: [
+          { pattern: /from\s+['"]@google\/generative-ai['"]/i, weight: 5 },
+          { pattern: /GoogleGenerativeAI/i, weight: 5 }
+        ]
+      },
+      apiEndpoints: [
+        { pattern: /generativelanguage\.googleapis\.com/i, weight: 4 }
+      ],
+      models: [
+        { pattern: /gemini-2\.0-flash/i, name: 'Gemini 2.0 Flash' },
+        { pattern: /gemini-2\.0-pro/i, name: 'Gemini 2.0 Pro' },
+        { pattern: /gemini-1\.5-pro/i, name: 'Gemini 1.5 Pro' },
+        { pattern: /gemini-1\.5-flash/i, name: 'Gemini 1.5 Flash' },
+        { pattern: /gemini-pro/i, name: 'Gemini Pro' },
+        { pattern: /gemma-2|gemma2/i, name: 'Gemma 2' }
+      ]
+    }
+  ],
+
+  // ==========================================================================
+  // LLM FRAMEWORKS - Orchestration and abstraction layers
+  // ==========================================================================
+  llm_frameworks: [
+    {
+      id: 'langchain.core',
+      vendor: 'LangChain',
+      product: 'LangChain',
+      service: 'Core Framework',
+      description: 'LangChain core library for LLM application development',
+      tags: ['ai', 'text', 'framework', 'orchestration'],
+      category: 'llm_frameworks',
+      packages: {
+        python: ['langchain', 'langchain-core'],
+        node: ['langchain', '@langchain/core'],
         go: ['github.com/tmc/langchaingo'],
-        java: ['dev.langchain4j:langchain4j', 'dev.langchain4j:langchain4j-open-ai'],
-        rust: ['llm-chain', 'langchain-rust']
-    },
-    
-    // ==========================================================================
-    // Local LLM Inference - Running models locally
-    // ==========================================================================
-    local_inference: {
+        java: ['dev.langchain4j:langchain4j']
+      },
+      codePatterns: {
         python: [
-            'llama-cpp-python', 'vllm', 'transformers', 'huggingface-hub',
-            'accelerate', 'bitsandbytes', 'auto-gptq', 'exllama', 'exllamav2',
-            'ctransformers', 'gpt4all', 'mlx', 'mlx-lm', 'ollama'
+          { pattern: /from\s+langchain/i, weight: 4 },
+          { pattern: /import\s+langchain/i, weight: 4 }
         ],
-        node: ['@huggingface/inference', 'ollama', 'node-llama-cpp'],
-        go: ['github.com/ollama/ollama'],
-        rust: ['llama-cpp-rs', 'candle', 'candle-core']
-    },
-    
-    // ==========================================================================
-    // Vector Databases & Embeddings - Semantic search infrastructure
-    // ==========================================================================
-    vector_stores: {
-        python: [
-            'pinecone-client', 'chromadb', 'weaviate-client', 'qdrant-client',
-            'faiss-cpu', 'faiss-gpu', 'milvus', 'pymilvus', 'pgvector',
-            'lancedb', 'vespa', 'opensearch-py', 'elasticsearch',
-            'sentence-transformers', 'fastembed'
-        ],
-        node: [
-            '@pinecone-database/pinecone', 'chromadb', 'weaviate-client',
-            'qdrant-client', 'vectordb', '@lancedb/lancedb', '@upstash/vector'
-        ],
-        go: ['github.com/pinecone-io/go-pinecone', 'github.com/weaviate/weaviate-go-client'],
-        java: ['io.pinecone:pinecone-client', 'io.weaviate:client']
-    },
-    
-    // ==========================================================================
-    // AI Agents & Autonomous Systems
-    // ==========================================================================
-    ai_agents: {
-        python: [
-            'autogen', 'crewai', 'agency-swarm', 'agentops', 'langchain-agents',
-            'superagi', 'agents', 'llama-agents', 'phidata', 'composio',
-            'browser-use', 'lavague', 'agent-protocol'
-        ],
-        node: [
-            '@langchain/langgraph', 'autogen', 'agent-protocol',
-            '@browserbasehq/stagehand', 'browser-use'
+        javascript: [
+          { pattern: /from\s+['"]langchain/i, weight: 4 },
+          { pattern: /require\s*\(\s*['"]langchain/i, weight: 4 },
+          { pattern: /from\s+['"]@langchain\//i, weight: 4 }
         ]
+      }
     },
-    
-    // ==========================================================================
-    // MCP (Model Context Protocol) - Anthropic's protocol for tool integration
-    // ==========================================================================
-    mcp_protocol: {
+    {
+      id: 'llamaindex.core',
+      vendor: 'LlamaCloud',
+      product: 'LlamaIndex',
+      service: 'Core Framework',
+      description: 'LlamaIndex (formerly LlamaIndex) for LLM application development',
+      tags: ['ai', 'text', 'framework', 'orchestration', 'rag'],
+      category: 'llm_frameworks',
+      packages: {
+        python: ['llama-index', 'llama-index-core'],
+        node: ['llamaindex']
+      },
+      codePatterns: {
         python: [
-            'mcp', 'anthropic-mcp', 'mcp-server', 'mcp-client',
-            'mcp-server-sqlite', 'mcp-server-git', 'mcp-server-filesystem',
-            'mcp-server-github', 'mcp-server-postgres', 'mcp-server-slack'
-        ],
-        node: [
-            '@modelcontextprotocol/sdk', '@modelcontextprotocol/server-filesystem',
-            '@modelcontextprotocol/server-github', '@modelcontextprotocol/server-gitlab',
-            '@modelcontextprotocol/server-postgres', '@modelcontextprotocol/server-sqlite',
-            '@modelcontextprotocol/server-slack', '@modelcontextprotocol/server-memory',
-            '@modelcontextprotocol/server-brave-search', '@modelcontextprotocol/server-fetch',
-            '@modelcontextprotocol/server-puppeteer', '@modelcontextprotocol/server-sequential-thinking',
-            '@anthropic-ai/mcp', 'mcp-framework'
-        ],
-        rust: ['mcp-rust', 'mcp-server']
-    },
-    
-    // ==========================================================================
-    // A2A (Agent-to-Agent) & Multi-Agent Protocols
-    // ==========================================================================
-    a2a_protocols: {
-        python: [
-            'agent-protocol', 'a2a', 'agent-communication-protocol',
-            'openagents', 'agentverse', 'fetchai-uagents', 'uagents'
-        ],
-        node: [
-            'agent-protocol', '@agent-protocol/client', '@agent-protocol/sdk',
-            'agentverse'
+          { pattern: /from\s+llama_index/i, weight: 4 },
+          { pattern: /import\s+llama_index/i, weight: 4 }
         ]
-    },
-    
-    // ==========================================================================
-    // AI Plugin Systems & Tool Calling
-    // ==========================================================================
-    plugin_systems: {
-        python: [
-            'openai-function-calling', 'toolformer', 'gorilla-llm', 'composio',
-            'langchain-tools', 'semantic-kernel-plugins', 'openapi-llm'
-        ],
-        node: [
-            '@langchain/tools', 'ai-plugin', 'chatgpt-plugin', 'composio-core'
-        ]
-    },
-    
-    // ==========================================================================
-    // RAG (Retrieval Augmented Generation) & Document Processing
-    // ==========================================================================
-    rag_document: {
-        python: [
-            'unstructured', 'llama-parse', 'docling', 'pymupdf', 'pypdf',
-            'pdfplumber', 'markdownify', 'trafilatura', 'beautifulsoup4',
-            'llama-index-readers', 'langchain-document-loaders'
-        ],
-        node: [
-            'pdf-parse', '@langchain/document-loaders', 'cheerio', 'puppeteer',
-            'unstructured-client'
-        ]
-    },
-    
-    // ==========================================================================
-    // Prompt Engineering & Evaluation
-    // ==========================================================================
-    prompt_eval: {
-        python: [
-            'promptfoo', 'ragas', 'deepeval', 'langsmith', 'phoenix-ai',
-            'arize-phoenix', 'langfuse', 'traceloop', 'openllmetry',
-            'prompttools', 'giskard'
-        ],
-        node: [
-            'promptfoo', 'langsmith', '@langfuse/langfuse', 'langwatch'
-        ]
+      }
     }
+  ],
+
+  // ==========================================================================
+  // LOCAL INFERENCE - Running models locally
+  // ==========================================================================
+  local_inference: [
+    {
+      id: 'llamacpp.python',
+      vendor: 'Llama.cpp',
+      product: 'llama-cpp-python',
+      service: 'Local LLM Inference',
+      description: 'Python bindings for llama.cpp - efficient local LLM inference',
+      tags: ['ai', 'text', 'llm', 'local', 'inference', 'cpp'],
+      category: 'local_inference',
+      packages: {
+        python: ['llama-cpp-python']
+      }
+    },
+    {
+      id: 'transformers.huggingface',
+      vendor: 'HuggingFace',
+      product: 'Transformers',
+      service: 'Local Model Inference',
+      description: 'HuggingFace Transformers library for running models locally',
+      tags: ['ai', 'text', 'llm', 'local', 'inference', 'huggingface'],
+      category: 'local_inference',
+      packages: {
+        python: ['transformers', 'huggingface-hub']
+      },
+      codePatterns: {
+        python: [
+          { pattern: /from\s+transformers\s+import/i, weight: 4 },
+          { pattern: /import\s+transformers/i, weight: 4 },
+          { pattern: /pipeline\(|AutoModel/i, weight: 3 }
+        ]
+      }
+    },
+    {
+      id: 'vllm.inference',
+      vendor: 'vLLM',
+      product: 'vLLM',
+      service: 'High-throughput LLM Serving',
+      description: 'vLLM library for efficient LLM inference and serving',
+      tags: ['ai', 'text', 'llm', 'local', 'inference', 'serving', 'gpu'],
+      category: 'local_inference',
+      packages: {
+        python: ['vllm']
+      }
+    },
+    {
+      id: 'ollama.client',
+      vendor: 'Ollama',
+      product: 'Ollama',
+      service: 'Local LLM Server',
+      description: 'Ollama client for running and managing local LLMs',
+      tags: ['ai', 'text', 'llm', 'local', 'inference', 'server'],
+      category: 'local_inference',
+      packages: {
+        python: ['ollama'],
+        node: ['ollama']
+      }
+    }
+  ],
+
+  // ==========================================================================
+  // VECTOR STORES - Semantic search infrastructure
+  // ==========================================================================
+  vector_stores: [
+    {
+      id: 'chromadb.client',
+      vendor: 'Chroma',
+      product: 'ChromaDB',
+      service: 'Vector Database',
+      description: 'Open-source embedding database for AI applications',
+      tags: ['ai', 'embeddings', 'vector', 'database', 'search'],
+      category: 'vector_stores',
+      packages: {
+        python: ['chromadb'],
+        node: ['chromadb']
+      }
+    },
+    {
+      id: 'pinecone.client',
+      vendor: 'Pinecone',
+      product: 'Pinecone',
+      service: 'Vector Database',
+      description: 'Managed vector database for AI applications',
+      tags: ['ai', 'embeddings', 'vector', 'database', 'search', 'managed'],
+      category: 'vector_stores',
+      packages: {
+        python: ['pinecone-client'],
+        node: ['@pinecone-database/pinecone'],
+        go: ['github.com/pinecone-io/go-pinecone']
+      }
+    },
+    {
+      id: 'weaviate.client',
+      vendor: 'Weaviate',
+      product: 'Weaviate',
+      service: 'Vector Database',
+      description: 'Open-source vector database with hybrid search capabilities',
+      tags: ['ai', 'embeddings', 'vector', 'database', 'search', 'hybrid'],
+      category: 'vector_stores',
+      packages: {
+        python: ['weaviate-client'],
+        go: ['github.com/weaviate/weaviate-go-client']
+      }
+    },
+    {
+      id: 'qdrant.client',
+      vendor: 'Qdrant',
+      product: 'Qdrant',
+      service: 'Vector Database',
+      description: 'Open-source vector similarity search engine',
+      tags: ['ai', 'embeddings', 'vector', 'database', 'search'],
+      category: 'vector_stores',
+      packages: {
+        python: ['qdrant-client'],
+        node: ['qdrant-client']
+      }
+    },
+    {
+      id: 'sentence.transformers',
+      vendor: 'HuggingFace',
+      product: 'Sentence Transformers',
+      service: 'Text Embeddings',
+      description: 'Library for computing dense vector representations for sentences',
+      tags: ['ai', 'embeddings', 'text', 'transformers'],
+      category: 'vector_stores',
+      packages: {
+        python: ['sentence-transformers']
+      }
+    }
+  ],
+
+  // ==========================================================================
+  // AI AGENTS - Autonomous systems and multi-agent frameworks
+  // ==========================================================================
+  ai_agents: [
+    {
+      id: 'crewai.framework',
+      vendor: 'CrewAI',
+      product: 'CrewAI',
+      service: 'Multi-Agent Framework',
+      description: 'Framework for orchestrating role-playing AI agents',
+      tags: ['ai', 'agents', 'multi-agent', 'orchestration'],
+      category: 'ai_agents',
+      packages: {
+        python: ['crewai']
+      },
+      codePatterns: {
+        python: [
+          { pattern: /from\s+crewai\s+import/i, weight: 4 },
+          { pattern: /import\s+crewai/i, weight: 4 },
+          { pattern: /Crew\(|Agent\(|Task\(/i, weight: 3 }
+        ]
+      }
+    },
+    {
+      id: 'autogen.microsoft',
+      vendor: 'Microsoft',
+      product: 'AutoGen',
+      service: 'Multi-Agent Framework',
+      description: 'Microsoft AutoGen framework for building multi-agent systems',
+      tags: ['ai', 'agents', 'multi-agent', 'orchestration', 'microsoft'],
+      category: 'ai_agents',
+      packages: {
+        python: ['autogen']
+      },
+      codePatterns: {
+        python: [
+          { pattern: /from\s+autogen\s+import/i, weight: 4 },
+          { pattern: /import\s+autogen/i, weight: 4 },
+          { pattern: /AutoGen\(|AssistantAgent\(|UserProxyAgent\(/i, weight: 3 }
+        ]
+      }
+    }
+  ],
+
+  // ==========================================================================
+  // MCP PROTOCOL - Model Context Protocol implementations
+  // ==========================================================================
+  mcp_protocol: [
+    {
+      id: 'mcp.sdk',
+      vendor: 'Anthropic',
+      product: 'Model Context Protocol',
+      service: 'SDK',
+      description: 'Model Context Protocol SDK and implementations',
+      tags: ['protocol', 'mcp', 'tools', 'agents'],
+      category: 'mcp_protocol',
+      packages: {
+        python: ['mcp', 'anthropic-mcp', 'mcp-server', 'mcp-client'],
+        node: ['@modelcontextprotocol/sdk', '@anthropic-ai/mcp', 'mcp-framework']
+      },
+      codePatterns: {
+        python: [
+          { pattern: /from\s+mcp\s+import/i, weight: 4, category: 'protocol' },
+          { pattern: /import\s+mcp/i, weight: 4, category: 'protocol' },
+          { pattern: /mcp\.server|mcp\.client/i, weight: 5, category: 'protocol' },
+          { pattern: /McpServer\(|McpClient\(/i, weight: 5, category: 'protocol' }
+        ],
+        javascript: [
+          { pattern: /from\s+['"]@modelcontextprotocol/i, weight: 5, category: 'protocol' },
+          { pattern: /require\s*\(['"]@modelcontextprotocol/i, weight: 5, category: 'protocol' },
+          { pattern: /McpServer|McpClient/i, weight: 4, category: 'protocol' },
+          { pattern: /StdioServerTransport|SSEServerTransport/i, weight: 4, category: 'protocol' }
+        ]
+      },
+      configFiles: [
+        'mcp.json',
+        'mcp-config.json',
+        'mcp-servers.json',
+        'mcp_config.json',
+        'mcp_servers.json',
+        '.mcp/config.json',
+        '.mcp/servers.json',
+        'claude_desktop_config.json',
+        '.cursor/mcp.json',
+        'cursor-mcp.json'
+      ],
+      jsonPatterns: [
+        { key: 'mcpServers', type: 'MCP Server Config' },
+        { key: 'mcp-servers', type: 'MCP Server Config' },
+        { key: 'modelContextProtocol', type: 'MCP Config' }
+      ]
+    }
+  ],
+
+  // ==========================================================================
+  // A2A PROTOCOLS - Agent-to-Agent communication protocols
+  // ==========================================================================
+  a2a_protocols: [
+    {
+      id: 'agent.protocol',
+      vendor: 'Agent Protocol',
+      product: 'Agent Protocol',
+      service: 'A2A Communication',
+      description: 'Agent-to-Agent communication protocol for AI agents',
+      tags: ['protocol', 'a2a', 'agents', 'communication'],
+      category: 'a2a_protocols',
+      packages: {
+        python: ['agent-protocol', 'a2a', 'agent-communication-protocol', 'uagents'],
+        node: ['agent-protocol', '@agent-protocol/client', '@agent-protocol/sdk']
+      },
+      codePatterns: {
+        python: [
+          { pattern: /agent-protocol|AgentProtocol/i, weight: 4, category: 'protocol' },
+          { pattern: /from\s+agent_protocol/i, weight: 4, category: 'protocol' },
+          { pattern: /TaskRequest|TaskResponse|AgentMessage/i, weight: 3, category: 'protocol' }
+        ],
+        javascript: [
+          { pattern: /agent-protocol/i, weight: 4, category: 'protocol' },
+          { pattern: /@agent-protocol\//i, weight: 4, category: 'protocol' }
+        ]
+      }
+    }
+  ],
+
+  // ==========================================================================
+  // PLUGIN SYSTEMS - Tool calling and function execution
+  // ==========================================================================
+  plugin_systems: [
+    {
+      id: 'langchain.tools',
+      vendor: 'LangChain',
+      product: 'LangChain Tools',
+      service: 'Tool Integration',
+      description: 'LangChain tools and function calling capabilities',
+      tags: ['ai', 'tools', 'function-calling', 'plugins'],
+      category: 'plugin_systems',
+      codePatterns: {
+        python: [
+          { pattern: /tool\s*\(\s*["'].*["']\s*,\s*["'].*["']\s*\)/i, weight: 3 },
+          { pattern: /\.register_tool\s*\(|\.add_tool\s*\(/i, weight: 4 },
+          { pattern: /ToolMessage|CallToolResult/i, weight: 3 }
+        ]
+      }
+    }
+  ],
+
+  // ==========================================================================
+  // RAG DOCUMENT PROCESSING - Document loading and processing
+  // ==========================================================================
+  rag_document: [
+    {
+      id: 'unstructured.io',
+      vendor: 'Unstructured',
+      product: 'Unstructured',
+      service: 'Document Processing',
+      description: 'Open-source document processing library for RAG applications',
+      tags: ['ai', 'documents', 'processing', 'rag', 'parsing'],
+      category: 'rag_document',
+      packages: {
+        python: ['unstructured'],
+        node: ['unstructured-client']
+      }
+    },
+    {
+      id: 'llamaparse.cloud',
+      vendor: 'LlamaCloud',
+      product: 'LlamaParse',
+      service: 'Document Parsing',
+      description: 'Advanced document parsing for LLM applications',
+      tags: ['ai', 'documents', 'processing', 'rag', 'parsing', 'cloud'],
+      category: 'rag_document',
+      packages: {
+        python: ['llama-parse']
+      }
+    }
+  ],
+
+  // ==========================================================================
+  // PROMPT EVALUATION - Testing and evaluation tools
+  // ==========================================================================
+  prompt_eval: [
+    {
+      id: 'ragas.evaluation',
+      vendor: 'Exploding Gradients',
+      product: 'RAGAS',
+      service: 'RAG Evaluation',
+      description: 'Framework for evaluating RAG (Retrieval-Augmented Generation) systems',
+      tags: ['ai', 'evaluation', 'rag', 'testing', 'metrics'],
+      category: 'prompt_eval',
+      packages: {
+        python: ['ragas']
+      }
+    },
+    {
+      id: 'deepeval.testing',
+      vendor: 'DeepEval',
+      product: 'DeepEval',
+      service: 'LLM Evaluation',
+      description: 'Open-source evaluation framework for LLM applications',
+      tags: ['ai', 'evaluation', 'testing', 'metrics'],
+      category: 'prompt_eval',
+      packages: {
+        python: ['deepeval']
+      }
+    },
+    {
+      id: 'promptfoo.testing',
+      vendor: 'PromptFoo',
+      product: 'PromptFoo',
+      service: 'Prompt Testing',
+      description: 'Open-source tool for testing and evaluating LLM prompts',
+      tags: ['ai', 'evaluation', 'prompts', 'testing'],
+      category: 'prompt_eval',
+      packages: {
+        python: ['promptfoo'],
+        node: ['promptfoo']
+      }
+    }
+  ],
+
+  // ==========================================================================
+  // AI DEV TOOLS - IDE plugins and AI-assisted coding (low confidence)
+  // ==========================================================================
+  ai_dev_tools: [
+    {
+      id: 'anthropic.claude.code',
+      vendor: 'Anthropic',
+      product: 'Claude Code',
+      service: 'AI-Assisted Coding',
+      description: 'Anthropic Claude Code for AI-assisted development',
+      tags: ['ai', 'development', 'coding', 'assistant', 'ide'],
+      category: 'ai_dev_tools',
+      packages: {
+        node: ['@anthropic-ai/claude-code']
+      },
+      configFiles: [
+        'CLAUDE.md',
+        'claude.md',
+        '.claude'
+      ]
+    },
+    {
+      id: 'cursor.ide',
+      vendor: 'Cursor',
+      product: 'Cursor IDE',
+      service: 'AI-Assisted Coding',
+      description: 'Cursor IDE with AI-assisted development features',
+      tags: ['ai', 'development', 'coding', 'assistant', 'ide'],
+      category: 'ai_dev_tools',
+      configFiles: [
+        '.cursor',
+        '.cursor/rules',
+        '.cursorrules',
+        '.cursorignore',
+        'cursor.json'
+      ]
+    },
+    {
+      id: 'github.copilot',
+      vendor: 'GitHub',
+      product: 'GitHub Copilot',
+      service: 'AI Code Completion',
+      description: 'GitHub Copilot AI coding assistant',
+      tags: ['ai', 'development', 'coding', 'completion', 'ide'],
+      category: 'ai_dev_tools',
+      configFiles: [
+        '.github/copilot',
+        '.github/copilot-instructions.md',
+        'copilot-instructions.md'
+      ]
+    }
+  ]
 };
 
-// ==========================================================================
-// AI DEVELOPMENT TOOLS - IDE plugins, copilots, and AI-assisted coding
-// Confidence: Low - These indicate AI-assisted development, not AI functionality
-// ==========================================================================
-const AI_DEV_TOOLS = {
-    // IDE Extensions and Copilots (detected via config files or dependencies)
-    ide_copilots: {
-        // Config files that indicate AI tool usage
-        config_files: [
-            '.cursor',                    // Cursor IDE directory
-            '.cursor/rules',              // Cursor custom rules
-            '.cursorrules',               // Cursor rules file
-            '.cursorignore',              // Cursor ignore file
-            'cursor.json',                // Cursor config
-            '.github/copilot',            // GitHub Copilot config
-            '.github/copilot-instructions.md', // Copilot instructions
-            'copilot-instructions.md',    // Copilot instructions (root)
-            '.aider',                     // Aider AI config
-            '.aider.conf.yml',            // Aider config
-            '.aider.input.history',       // Aider history
-            'aider.conf.yml',             // Aider config
-            '.continue',                  // Continue.dev config
-            'continue.json',              // Continue config
-            '.cody',                      // Sourcegraph Cody
-            'cody.json',                  // Cody config
-            '.windsurf',                  // Windsurf/Codeium config
-            '.codeium',                   // Codeium config
-            '.tabnine',                   // TabNine config
-            '.amazonq',                   // Amazon Q config
-            '.aws/amazonq',               // Amazon Q AWS config
-            'CLAUDE.md',                  // Claude Code conventions file
-            'claude.md',                  // Claude Code conventions file (lowercase)
-            '.claude',                    // Claude config directory
-        ],
-        // Node.js dependencies that indicate AI tooling
-        node: [
-            '@anthropic-ai/claude-code',
-            '@cursor/sdk',
-            'aider-chat',
-            'continue-dev'
-        ],
-        // Python dependencies
-        python: [
-            'aider-chat',
-            'claude-dev'
-        ],
-        // VSCode extension identifiers (from extensions.json or workspace recommendations)
-        vscode_extensions: [
-            'github.copilot',
-            'github.copilot-chat',
-            'anthropic.claude-vscode',
-            'continue.continue',
-            'codeium.codeium',
-            'tabnine.tabnine-vscode',
-            'amazonwebservices.aws-toolkit-vscode',
-            'sourcegraph.cody-ai'
-        ]
-    },
-    
-    // AI Code Generation and Review Tools
-    code_gen_tools: {
-        python: [
-            'gpt-engineer', 'aider-chat', 'mentat', 'codegen', 'smol-developer',
-            'auto-gpt', 'babyagi', 'jarvis', 'devika', 'opendevin', 'swe-agent',
-            'openhands'
-        ],
-        node: [
-            'smol-ai', 'gpt-pilot', 'code-gpt'
-        ]
-    },
-    
-    // AI-Assisted Testing
-    testing_tools: {
-        python: [
-            'codium-ai', 'cover-agent', 'qodo-cover', 'pythagora-io',
-            'testpilot', 'testgen-llm'
-        ],
-        node: [
-            '@qodo/cover-agent', 'testpilot'
-        ]
-    }
-};
+// ============================================================================
+// BACKWARD COMPATIBILITY - Generate existing constants from signatures
+// ============================================================================
+// Helper functions to generate the old constant structures from signatures
+// ============================================================================
 
-// ==========================================================================
-// PROTOCOL & STANDARD DETECTION - MCP, A2A, OpenAPI for LLMs
-// ==========================================================================
-const AI_PROTOCOL_PATTERNS = {
+function generatePackageRegistry() {
+  const registry = {
+    llm_providers: {},
+    llm_frameworks: {},
+    local_inference: {},
+    vector_stores: {},
+    ai_agents: {},
+    mcp_protocol: {},
+    a2a_protocols: {},
+    plugin_systems: {},
+    rag_document: {},
+    prompt_eval: {}
+  };
+
+  // Flatten all signatures and group by category
+  const allSignatures = Object.values(AI_SIGNATURES).flat();
+
+  for (const sig of allSignatures) {
+    const category = sig.category;
+    if (!registry[category]) continue;
+
+    if (sig.packages) {
+      for (const [lang, pkgs] of Object.entries(sig.packages)) {
+        if (!registry[category][lang]) registry[category][lang] = [];
+        registry[category][lang].push(...pkgs);
+      }
+    }
+  }
+
+  return registry;
+}
+
+function generateSDKPatterns() {
+  const patterns = { python: [], javascript: [] };
+
+  const allSignatures = Object.values(AI_SIGNATURES).flat();
+
+  for (const sig of allSignatures) {
+    if (sig.codePatterns) {
+      for (const [lang, langPatterns] of Object.entries(sig.codePatterns)) {
+        const targetLang = lang === 'javascript' ? 'javascript' : lang;
+        if (!patterns[targetLang]) patterns[targetLang] = [];
+
+        patterns[targetLang].push(...langPatterns.map(p => ({
+          ...p,
+          provider: sig.vendor,
+          category: sig.category
+        })));
+      }
+    }
+  }
+
+  return patterns;
+}
+
+function generateModelPatterns() {
+  const patterns = [];
+
+  const allSignatures = Object.values(AI_SIGNATURES).flat();
+
+  for (const sig of allSignatures) {
+    if (sig.models) {
+      for (const model of sig.models) {
+        patterns.push({
+          pattern: model.pattern,
+          provider: sig.vendor,
+          model: model.name
+        });
+      }
+    }
+  }
+
+  return patterns;
+}
+
+function generateAPIEndpoints() {
+  const endpoints = [];
+
+  const allSignatures = Object.values(AI_SIGNATURES).flat();
+
+  for (const sig of allSignatures) {
+    if (sig.apiEndpoints) {
+      for (const endpoint of sig.apiEndpoints) {
+        endpoints.push({
+          pattern: endpoint.pattern,
+          provider: sig.vendor,
+          weight: endpoint.weight
+        });
+      }
+    }
+  }
+
+  return endpoints;
+}
+
+function generateExtendedDependencies() {
+  const extended = {
+    python: [
+      ...AI_PACKAGE_REGISTRY.llm_providers.python || [],
+      ...AI_PACKAGE_REGISTRY.llm_frameworks.python || [],
+      ...AI_PACKAGE_REGISTRY.local_inference.python || [],
+      ...AI_PACKAGE_REGISTRY.vector_stores.python || [],
+      ...AI_PACKAGE_REGISTRY.ai_agents?.python || [],
+      ...AI_PACKAGE_REGISTRY.mcp_protocol?.python || [],
+      ...AI_PACKAGE_REGISTRY.a2a_protocols?.python || [],
+      ...AI_PACKAGE_REGISTRY.plugin_systems?.python || [],
+      ...AI_PACKAGE_REGISTRY.rag_document?.python || [],
+      ...AI_PACKAGE_REGISTRY.prompt_eval?.python || []
+    ],
+    node: [
+      ...AI_PACKAGE_REGISTRY.llm_providers.node || [],
+      ...AI_PACKAGE_REGISTRY.llm_frameworks.node || [],
+      ...AI_PACKAGE_REGISTRY.local_inference.node || [],
+      ...AI_PACKAGE_REGISTRY.vector_stores.node || [],
+      ...AI_PACKAGE_REGISTRY.ai_agents?.node || [],
+      ...AI_PACKAGE_REGISTRY.mcp_protocol?.node || [],
+      ...AI_PACKAGE_REGISTRY.a2a_protocols?.node || [],
+      ...AI_PACKAGE_REGISTRY.plugin_systems?.node || [],
+      ...AI_PACKAGE_REGISTRY.rag_document?.node || [],
+      ...AI_PACKAGE_REGISTRY.prompt_eval?.node || []
+    ],
+    go: [...AI_PACKAGE_REGISTRY.llm_providers.go || [], ...AI_PACKAGE_REGISTRY.llm_frameworks.go || []],
+    java: [...AI_PACKAGE_REGISTRY.llm_providers.java || [], ...AI_PACKAGE_REGISTRY.llm_frameworks.java || []],
+    rust: [
+      ...AI_PACKAGE_REGISTRY.llm_providers.rust || [],
+      ...AI_PACKAGE_REGISTRY.llm_frameworks.rust || [],
+      ...AI_PACKAGE_REGISTRY.mcp_protocol?.rust || []
+    ]
+  };
+
+  return extended;
+}
+
+function generateProtocolPatterns() {
+  return {
     // MCP (Model Context Protocol) detection
     mcp: {
-        config_files: [
-            // Standard MCP config files
-            'mcp.json',
-            'mcp-config.json',
-            'mcp-servers.json',
-            'mcp_config.json',
-            'mcp_servers.json',
-            '.mcp/config.json',
-            '.mcp/servers.json',
-            // Claude Desktop config (contains MCP servers)
-            'claude_desktop_config.json',
-            // Cursor MCP config
-            '.cursor/mcp.json',
-            'cursor-mcp.json',
-            // Cline/Roo config
-            'cline_mcp_settings.json',
-            'roo_mcp_settings.json',
-            // Generic tool configs that may contain MCP
-            '.config/mcp/servers.json',
-            'config/mcp.json'
-        ],
-        code_patterns: [
-            { pattern: /McpServer|MCP\.Server|mcp\.server/i, type: 'MCP Server' },
-            { pattern: /McpClient|MCP\.Client|mcp\.client/i, type: 'MCP Client' },
-            { pattern: /@modelcontextprotocol/i, type: 'MCP SDK' },
-            { pattern: /from\s+mcp\s+import|import\s+mcp/i, type: 'MCP Python' },
-            { pattern: /tool\s*\(\s*["'].*["']\s*,\s*["'].*["']\s*\)/i, type: 'MCP Tool Definition' },
-            { pattern: /\.register_tool\s*\(|\.add_tool\s*\(/i, type: 'MCP Tool Registration' },
-            { pattern: /ToolResult|CallToolResult/i, type: 'MCP Tool Result' }
-        ],
-        json_patterns: [
-            // Look for MCP server configuration in JSON
-            { key: 'mcpServers', type: 'MCP Server Config' },
-            { key: 'mcp-servers', type: 'MCP Server Config' },
-            { key: 'modelContextProtocol', type: 'MCP Config' }
-        ]
+      config_files: [
+        // Standard MCP config files
+        'mcp.json',
+        'mcp-config.json',
+        'mcp-servers.json',
+        'mcp_config.json',
+        'mcp_servers.json',
+        '.mcp/config.json',
+        '.mcp/servers.json',
+        // Claude Desktop config (contains MCP servers)
+        'claude_desktop_config.json',
+        // Cursor MCP config
+        '.cursor/mcp.json',
+        'cursor-mcp.json',
+        // Cline/Roo config
+        'cline_mcp_settings.json',
+        'roo_mcp_settings.json',
+        // Generic tool configs that may contain MCP
+        '.config/mcp/servers.json',
+        'config/mcp.json'
+      ],
+      code_patterns: [
+        { pattern: /McpServer|MCP\.Server|mcp\.server/i, type: 'MCP Server' },
+        { pattern: /McpClient|MCP\.Client|mcp\.client/i, type: 'MCP Client' },
+        { pattern: /@modelcontextprotocol/i, type: 'MCP SDK' },
+        { pattern: /from\s+mcp\s+import|import\s+mcp/i, type: 'MCP Python' },
+        { pattern: /tool\s*\(\s*["'].*["']\s*,\s*["'].*["']\s*\)/i, type: 'MCP Tool Definition' },
+        { pattern: /\.register_tool\s*\(|\.add_tool\s*\(/i, type: 'MCP Tool Registration' },
+        { pattern: /ToolResult|CallToolResult/i, type: 'MCP Tool Result' }
+      ],
+      json_patterns: [
+        // Look for MCP server configuration in JSON
+        { key: 'mcpServers', type: 'MCP Server Config' },
+        { key: 'mcp-servers', type: 'MCP Server Config' },
+        { key: 'modelContextProtocol', type: 'MCP Config' }
+      ]
     },
-    
+
     // A2A (Agent-to-Agent) Protocol
     a2a: {
-        config_files: [
-            'a2a.json',
-            'agent-protocol.json',
-            '.agent-protocol/config.json'
-        ],
-        code_patterns: [
-            { pattern: /agent-protocol|AgentProtocol/i, type: 'Agent Protocol' },
-            { pattern: /agent_protocol|from\s+agent_protocol/i, type: 'A2A Python' },
-            { pattern: /TaskRequest|TaskResponse|AgentMessage/i, type: 'A2A Messages' },
-            { pattern: /agent\.communicate|send_to_agent/i, type: 'A2A Communication' }
-        ]
+      config_files: [
+        'a2a.json',
+        'agent-protocol.json',
+        '.agent-protocol/config.json'
+      ],
+      code_patterns: [
+        { pattern: /agent-protocol|AgentProtocol/i, type: 'Agent Protocol' },
+        { pattern: /agent_protocol|from\s+agent_protocol/i, type: 'A2A Python' },
+        { pattern: /TaskRequest|TaskResponse|AgentMessage/i, type: 'A2A Messages' },
+        { pattern: /agent\.communicate|send_to_agent/i, type: 'A2A Communication' }
+      ]
     },
-    
+
     // OpenAPI/OpenAI Function Calling
     function_calling: {
-        code_patterns: [
-            { pattern: /function_call|tool_choice|tools\s*[=:]\s*\[/i, type: 'Function Calling' },
-            { pattern: /\.functions\s*=|"functions"\s*:/i, type: 'OpenAI Functions' },
-            { pattern: /ToolMessage|tool_calls|parallel_tool_calls/i, type: 'Tool Calls' }
-        ]
+      code_patterns: [
+        { pattern: /function_call|tool_choice|tools\s*[=:]\s*\[/i, type: 'Function Calling' },
+        { pattern: /\.functions\s*=|"functions"\s*:/i, type: 'OpenAI Functions' },
+        { pattern: /ToolMessage|tool_calls|parallel_tool_calls/i, type: 'Tool Calls' }
+      ]
     },
-    
+
     // Semantic Kernel Plugins
     semantic_kernel: {
-        config_files: [
-            'sk-config.json',
-            'semantic-kernel.json'
-        ],
-        code_patterns: [
-            { pattern: /semantic[-_]?kernel|from\s+semantic_kernel/i, type: 'Semantic Kernel' },
-            { pattern: /@kernel_function|KernelPlugin/i, type: 'SK Plugin' }
-        ]
+      config_files: [
+        'sk-config.json',
+        'semantic-kernel.json'
+      ],
+      code_patterns: [
+        { pattern: /semantic[-_]?kernel|from\s+semantic_kernel/i, type: 'Semantic Kernel' },
+        { pattern: /@kernel_function|KernelPlugin/i, type: 'SK Plugin' }
+      ]
     }
-};
+  };
+}
 
-// ==========================================================================
-// BACKWARD COMPATIBILITY - Generate LLM_DEPENDENCIES from registry
-// ==========================================================================
-const LLM_DEPENDENCIES = {
-    python: [
-        ...AI_PACKAGE_REGISTRY.llm_providers.python || [],
-        ...AI_PACKAGE_REGISTRY.llm_frameworks.python || [],
-        ...AI_PACKAGE_REGISTRY.local_inference.python || [],
-        ...AI_PACKAGE_REGISTRY.vector_stores.python || []
-    ],
-    node: [
-        ...AI_PACKAGE_REGISTRY.llm_providers.node || [],
-        ...AI_PACKAGE_REGISTRY.llm_frameworks.node || [],
-        ...AI_PACKAGE_REGISTRY.local_inference.node || [],
-        ...AI_PACKAGE_REGISTRY.vector_stores.node || []
-    ],
-    go: [
-        ...AI_PACKAGE_REGISTRY.llm_providers.go || [],
-        ...AI_PACKAGE_REGISTRY.llm_frameworks.go || [],
-        ...AI_PACKAGE_REGISTRY.local_inference.go || [],
-        ...AI_PACKAGE_REGISTRY.vector_stores.go || []
-    ],
-    java: [
-        ...AI_PACKAGE_REGISTRY.llm_providers.java || [],
-        ...AI_PACKAGE_REGISTRY.llm_frameworks.java || [],
-        ...AI_PACKAGE_REGISTRY.vector_stores.java || []
-    ],
-    rust: [
-        ...AI_PACKAGE_REGISTRY.llm_providers.rust || [],
-        ...AI_PACKAGE_REGISTRY.llm_frameworks.rust || [],
-        ...AI_PACKAGE_REGISTRY.local_inference.rust || []
-    ]
-};
+function generateDevTools() {
+  return {
+    // IDE Extensions and Copilots (detected via config files or dependencies)
+    ide_copilots: {
+      // Config files that indicate AI tool usage
+      config_files: [
+        '.cursor',                    // Cursor IDE directory
+        '.cursor/rules',              // Cursor custom rules
+        '.cursorrules',               // Cursor rules file
+        '.cursorignore',              // Cursor ignore file
+        'cursor.json',                // Cursor config
+        '.github/copilot',            // GitHub Copilot config
+        '.github/copilot-instructions.md', // Copilot instructions
+        'copilot-instructions.md',    // Copilot instructions (root)
+        '.aider',                     // Aider AI config
+        '.aider.conf.yml',            // Aider config
+        '.aider.input.history',       // Aider history
+        'aider.conf.yml',             // Aider config
+        '.continue',                  // Continue.dev config
+        'continue.json',              // Continue config
+        '.cody',                      // Sourcegraph Cody
+        'cody.json',                  // Cody config
+        '.windsurf',                  // Windsurf/Codeium config
+        '.codeium',                   // Codeium config
+        '.tabnine',                   // TabNine config
+        '.amazonq',                   // Amazon Q config
+        '.aws/amazonq',               // Amazon Q AWS config
+        'CLAUDE.md',                  // Claude Code conventions file
+        'claude.md',                  // Claude Code conventions file (lowercase)
+        '.claude',                    // Claude config directory
+      ],
+      // Node.js dependencies that indicate AI tooling
+      node: [
+        '@anthropic-ai/claude-code',
+        '@cursor/sdk',
+        'aider-chat',
+        'continue-dev'
+      ],
+      // Python dependencies
+      python: [
+        'aider-chat',
+        'claude-dev'
+      ],
+      // VSCode extension identifiers (from extensions.json or workspace recommendations)
+      vscode_extensions: [
+        'github.copilot',
+        'github.copilot-chat',
+        'anthropic.claude-vscode',
+        'continue.continue',
+        'codeium.codeium',
+        'tabnine.tabnine-vscode',
+        'amazonwebservices.aws-toolkit-vscode',
+        'sourcegraph.cody-ai'
+      ]
+    },
 
-// ==========================================================================
-// EXTENDED DEPENDENCIES - All AI-adjacent packages (includes protocols, agents)
-// ==========================================================================
-const AI_EXTENDED_DEPENDENCIES = {
-    python: [
-        ...LLM_DEPENDENCIES.python,
-        ...AI_PACKAGE_REGISTRY.ai_agents?.python || [],
-        ...AI_PACKAGE_REGISTRY.mcp_protocol?.python || [],
-        ...AI_PACKAGE_REGISTRY.a2a_protocols?.python || [],
-        ...AI_PACKAGE_REGISTRY.plugin_systems?.python || [],
-        ...AI_PACKAGE_REGISTRY.rag_document?.python || [],
-        ...AI_PACKAGE_REGISTRY.prompt_eval?.python || []
-    ],
-    node: [
-        ...LLM_DEPENDENCIES.node,
-        ...AI_PACKAGE_REGISTRY.ai_agents?.node || [],
-        ...AI_PACKAGE_REGISTRY.mcp_protocol?.node || [],
-        ...AI_PACKAGE_REGISTRY.a2a_protocols?.node || [],
-        ...AI_PACKAGE_REGISTRY.plugin_systems?.node || [],
-        ...AI_PACKAGE_REGISTRY.rag_document?.node || [],
-        ...AI_PACKAGE_REGISTRY.prompt_eval?.node || []
-    ],
-    go: [...LLM_DEPENDENCIES.go],
-    java: [...LLM_DEPENDENCIES.java],
-    rust: [
-        ...LLM_DEPENDENCIES.rust,
-        ...AI_PACKAGE_REGISTRY.mcp_protocol?.rust || []
-    ]
-};
+    // AI Code Generation and Review Tools
+    code_gen_tools: {
+      python: [
+        'gpt-engineer', 'aider-chat', 'mentat', 'codegen', 'smol-developer',
+        'auto-gpt', 'babyagi', 'jarvis', 'devika', 'opendevin', 'swe-agent',
+        'openhands'
+      ],
+      node: [
+        'smol-ai', 'gpt-pilot', 'code-gpt'
+      ]
+    },
 
+    // AI-Assisted Testing
+    testing_tools: {
+      python: [
+        'codium-ai', 'cover-agent', 'qodo-cover', 'pythagora-io',
+        'testpilot', 'testgen-llm'
+      ],
+      node: [
+        '@qodo/cover-agent', 'testpilot'
+      ]
+    }
+  };
+}
+
+// Generate backward-compatible constants
+const AI_PACKAGE_REGISTRY = generatePackageRegistry();
+const SDK_PATTERNS = generateSDKPatterns();
+const MODEL_PATTERNS = generateModelPatterns();
+const API_ENDPOINTS = generateAPIEndpoints();
+const AI_EXTENDED_DEPENDENCIES = generateExtendedDependencies();
+const AI_PROTOCOL_PATTERNS = generateProtocolPatterns();
+const AI_DEV_TOOLS = generateDevTools();
+
+// ============================================================================
+// STATIC CONSTANTS - Not signature-based
 const MANIFEST_FILES = {
     python: ['requirements.txt', 'pyproject.toml', 'Pipfile', 'Pipfile.lock', 'setup.py', 'poetry.lock'],
     node: ['package.json', 'package-lock.json', 'yarn.lock', 'pnpm-lock.yaml'],
@@ -426,107 +917,7 @@ const MANIFEST_FILES = {
     rust: ['Cargo.toml', 'Cargo.lock']
 };
 
-const SDK_PATTERNS = {
-    python: [
-        // OpenAI
-        { pattern: /import\s+openai/i, provider: 'OpenAI', weight: 5 },
-        { pattern: /from\s+openai\s+import/i, provider: 'OpenAI', weight: 5 },
-        { pattern: /openai\.ChatCompletion/i, provider: 'OpenAI', weight: 5 },
-        { pattern: /openai\.chat\.completions/i, provider: 'OpenAI', weight: 5 },
-        { pattern: /openai\.Embedding/i, provider: 'OpenAI', weight: 5 },
-        { pattern: /OpenAI\(/i, provider: 'OpenAI', weight: 5 },
-        
-        // Anthropic
-        { pattern: /import\s+anthropic/i, provider: 'Anthropic', weight: 5 },
-        { pattern: /from\s+anthropic\s+import/i, provider: 'Anthropic', weight: 5 },
-        { pattern: /Anthropic\(/i, provider: 'Anthropic', weight: 5 },
-        { pattern: /messages\.create\(/i, provider: 'Anthropic', weight: 4 },
-        
-        // Google
-        { pattern: /import\s+google\.generativeai/i, provider: 'Google', weight: 5 },
-        { pattern: /genai\.GenerativeModel/i, provider: 'Google', weight: 5 },
-        { pattern: /\.generate_content\(/i, provider: 'Google', weight: 4 },
-        
-        // LangChain
-        { pattern: /from\s+langchain/i, provider: 'LangChain', weight: 4 },
-        { pattern: /import\s+langchain/i, provider: 'LangChain', weight: 4 },
-        
-        // LiteLLM
-        { pattern: /import\s+litellm/i, provider: 'LiteLLM', weight: 5 },
-        { pattern: /from\s+litellm\s+import/i, provider: 'LiteLLM', weight: 5 },
-        { pattern: /litellm\./i, provider: 'LiteLLM', weight: 4 },
-        
-        // LlamaIndex
-        { pattern: /from\s+llama_index/i, provider: 'LlamaIndex', weight: 4 },
-        { pattern: /import\s+llama_index/i, provider: 'LlamaIndex', weight: 4 },
-        
-        // MCP (Model Context Protocol)
-        { pattern: /from\s+mcp\s+import/i, provider: 'MCP', weight: 4, category: 'protocol' },
-        { pattern: /import\s+mcp/i, provider: 'MCP', weight: 4, category: 'protocol' },
-        { pattern: /mcp\.server|mcp\.client/i, provider: 'MCP', weight: 5, category: 'protocol' },
-        { pattern: /McpServer\(|McpClient\(/i, provider: 'MCP', weight: 5, category: 'protocol' },
-        
-        // Agent Protocol / A2A
-        { pattern: /from\s+agent_protocol/i, provider: 'Agent Protocol', weight: 4, category: 'protocol' },
-        { pattern: /import\s+agent_protocol/i, provider: 'Agent Protocol', weight: 4, category: 'protocol' },
-        
-        // CrewAI / AutoGen
-        { pattern: /from\s+crewai/i, provider: 'CrewAI', weight: 4, category: 'agents' },
-        { pattern: /from\s+autogen/i, provider: 'AutoGen', weight: 4, category: 'agents' },
-        { pattern: /import\s+autogen/i, provider: 'AutoGen', weight: 4, category: 'agents' }
-    ],
-    
-    javascript: [
-        // OpenAI
-        { pattern: /from\s+['"]openai['"]/i, provider: 'OpenAI', weight: 5 },
-        { pattern: /require\s*\(\s*['"]openai['"]/i, provider: 'OpenAI', weight: 5 },
-        { pattern: /new\s+OpenAI\s*\(/i, provider: 'OpenAI', weight: 5 },
-        { pattern: /\.chat\.completions\.create/i, provider: 'OpenAI', weight: 5 },
-        
-        // Anthropic
-        { pattern: /from\s+['"]@anthropic-ai\/sdk['"]/i, provider: 'Anthropic', weight: 5 },
-        { pattern: /require\s*\(\s*['"]@anthropic-ai\/sdk['"]/i, provider: 'Anthropic', weight: 5 },
-        { pattern: /new\s+Anthropic\s*\(/i, provider: 'Anthropic', weight: 5 },
-        
-        // Google
-        { pattern: /from\s+['"]@google\/generative-ai['"]/i, provider: 'Google', weight: 5 },
-        { pattern: /GoogleGenerativeAI/i, provider: 'Google', weight: 5 },
-        
-        // LangChain
-        { pattern: /from\s+['"]langchain/i, provider: 'LangChain', weight: 4 },
-        { pattern: /require\s*\(\s*['"]langchain/i, provider: 'LangChain', weight: 4 },
-        { pattern: /from\s+['"]@langchain\//i, provider: 'LangChain', weight: 4 },
-        
-        // Vercel AI SDK
-        { pattern: /from\s+['"]ai['"]/i, provider: 'Vercel AI', weight: 4 },
-        { pattern: /from\s+['"]@ai-sdk\//i, provider: 'Vercel AI', weight: 4 },
-        { pattern: /generateText|streamText/i, provider: 'Vercel AI', weight: 4 },
-        
-        // MCP (Model Context Protocol)
-        { pattern: /from\s+['"]@modelcontextprotocol/i, provider: 'MCP', weight: 5, category: 'protocol' },
-        { pattern: /require\s*\(['"]@modelcontextprotocol/i, provider: 'MCP', weight: 5, category: 'protocol' },
-        { pattern: /McpServer|McpClient/i, provider: 'MCP', weight: 4, category: 'protocol' },
-        { pattern: /StdioServerTransport|SSEServerTransport/i, provider: 'MCP', weight: 4, category: 'protocol' },
-        
-        // Agent Protocol / A2A
-        { pattern: /from\s+['"]agent-protocol/i, provider: 'Agent Protocol', weight: 4, category: 'protocol' },
-        { pattern: /require\s*\(['"]agent-protocol/i, provider: 'Agent Protocol', weight: 4, category: 'protocol' }
-    ]
-};
 
-const API_ENDPOINTS = [
-    { pattern: /api\.openai\.com/i, provider: 'OpenAI', weight: 4 },
-    { pattern: /api\.anthropic\.com/i, provider: 'Anthropic', weight: 4 },
-    { pattern: /generativelanguage\.googleapis\.com/i, provider: 'Google', weight: 4 },
-    { pattern: /api\.groq\.com/i, provider: 'Groq', weight: 4 },
-    { pattern: /api\.openrouter\.ai/i, provider: 'OpenRouter', weight: 4 },
-    { pattern: /api\.together\.xyz/i, provider: 'Together AI', weight: 4 },
-    { pattern: /api\.cohere\.ai/i, provider: 'Cohere', weight: 4 },
-    { pattern: /api\.replicate\.com/i, provider: 'Replicate', weight: 4 },
-    { pattern: /\/v1\/chat\/completions/i, provider: 'OpenAI-compatible', weight: 3 },
-    { pattern: /\/v1\/completions/i, provider: 'OpenAI-compatible', weight: 3 },
-    { pattern: /\/v1\/embeddings/i, provider: 'OpenAI-compatible', weight: 3 }
-];
 
 // CONFIG_PATTERNS removed - we don't scan for API keys anymore
 // Reasons:
@@ -534,57 +925,6 @@ const API_ENDPOINTS = [
 // 2. Code/dependencies are better AI indicators
 // 3. Security: shouldn't log or expose secret references
 
-const MODEL_PATTERNS = [
-    // OpenAI Models
-    { pattern: /gpt-4o-mini/i, provider: 'OpenAI', model: 'GPT-4o Mini' },
-    { pattern: /gpt-4o/i, provider: 'OpenAI', model: 'GPT-4o' },
-    { pattern: /gpt-4-turbo|gpt-4-1106/i, provider: 'OpenAI', model: 'GPT-4 Turbo' },
-    { pattern: /gpt-4(?![o\.])/i, provider: 'OpenAI', model: 'GPT-4' },
-    { pattern: /gpt-3\.5-turbo/i, provider: 'OpenAI', model: 'GPT-3.5 Turbo' },
-    { pattern: /o1-preview/i, provider: 'OpenAI', model: 'o1-preview' },
-    { pattern: /o1-mini/i, provider: 'OpenAI', model: 'o1-mini' },
-    { pattern: /o3-mini/i, provider: 'OpenAI', model: 'o3-mini' },
-    
-    // Anthropic Models
-    { pattern: /claude-3-opus/i, provider: 'Anthropic', model: 'Claude 3 Opus' },
-    { pattern: /claude-3\.5-sonnet|claude-3-5-sonnet/i, provider: 'Anthropic', model: 'Claude 3.5 Sonnet' },
-    { pattern: /claude-3\.5-haiku|claude-3-5-haiku/i, provider: 'Anthropic', model: 'Claude 3.5 Haiku' },
-    { pattern: /claude-3-sonnet/i, provider: 'Anthropic', model: 'Claude 3 Sonnet' },
-    { pattern: /claude-3-haiku/i, provider: 'Anthropic', model: 'Claude 3 Haiku' },
-    { pattern: /claude-opus-4|claude-4-opus/i, provider: 'Anthropic', model: 'Claude Opus 4' },
-    { pattern: /claude-sonnet-4|claude-4-sonnet/i, provider: 'Anthropic', model: 'Claude Sonnet 4' },
-    
-    // Google Models
-    { pattern: /gemini-2\.0-flash/i, provider: 'Google', model: 'Gemini 2.0 Flash' },
-    { pattern: /gemini-2\.0-pro/i, provider: 'Google', model: 'Gemini 2.0 Pro' },
-    { pattern: /gemini-1\.5-pro/i, provider: 'Google', model: 'Gemini 1.5 Pro' },
-    { pattern: /gemini-1\.5-flash/i, provider: 'Google', model: 'Gemini 1.5 Flash' },
-    { pattern: /gemini-pro/i, provider: 'Google', model: 'Gemini Pro' },
-    { pattern: /gemma-2|gemma2/i, provider: 'Google', model: 'Gemma 2' },
-    
-    // Mistral Models
-    { pattern: /mistral-large/i, provider: 'Mistral', model: 'Mistral Large' },
-    { pattern: /mistral-medium/i, provider: 'Mistral', model: 'Mistral Medium' },
-    { pattern: /mistral-small/i, provider: 'Mistral', model: 'Mistral Small' },
-    { pattern: /mixtral-8x22b/i, provider: 'Mistral', model: 'Mixtral 8x22B' },
-    { pattern: /mixtral-8x7b/i, provider: 'Mistral', model: 'Mixtral 8x7B' },
-    { pattern: /codestral/i, provider: 'Mistral', model: 'Codestral' },
-    
-    // Meta Models
-    { pattern: /llama-3\.3|llama3\.3/i, provider: 'Meta', model: 'Llama 3.3' },
-    { pattern: /llama-3\.2|llama3\.2/i, provider: 'Meta', model: 'Llama 3.2' },
-    { pattern: /llama-3\.1|llama3\.1/i, provider: 'Meta', model: 'Llama 3.1' },
-    { pattern: /llama-3|llama3(?![.\d])/i, provider: 'Meta', model: 'Llama 3' },
-    
-    // DeepSeek Models
-    { pattern: /deepseek-r1/i, provider: 'DeepSeek', model: 'DeepSeek R1' },
-    { pattern: /deepseek-v3/i, provider: 'DeepSeek', model: 'DeepSeek V3' },
-    { pattern: /deepseek-coder/i, provider: 'DeepSeek', model: 'DeepSeek Coder' },
-    
-    // Alibaba Models
-    { pattern: /qwen-2\.5|qwen2\.5/i, provider: 'Alibaba', model: 'Qwen 2.5' },
-    { pattern: /qwq/i, provider: 'Alibaba', model: 'QwQ' }
-];
 
 const PROMPT_INDICATORS = [
     'You are a helpful assistant',
@@ -779,4 +1119,39 @@ const RISK_KEYWORDS = {
     limitations: ['limitation', 'constraint', 'does not support', 'not recommended', 'known issue'],
     ethical: ['ethical', 'privacy', 'consent', 'harmful', 'misuse', 'dual use']
 };
+
+// ============================================================================
+// EXPORTS - For Node.js testing compatibility
+// ============================================================================
+if (typeof module !== 'undefined' && module.exports) {
+    module.exports = {
+        GITHUB_API_BASE,
+        HUGGINGFACE_API_BASE,
+        AI_SIGNATURES,
+        AI_PACKAGE_REGISTRY,
+        SDK_PATTERNS,
+        MODEL_PATTERNS,
+        API_ENDPOINTS,
+        AI_EXTENDED_DEPENDENCIES,
+        AI_PROTOCOL_PATTERNS,
+        AI_DEV_TOOLS,
+        MANIFEST_FILES,
+        PROMPT_INDICATORS,
+        CI_PATTERNS,
+        MODEL_FILE_PATTERNS,
+        HARDWARE_PATTERNS,
+        INFRASTRUCTURE_PATTERNS,
+        DOCUMENTATION_FILES,
+        DATA_PIPELINE_PATTERNS,
+        RISK_KEYWORDS,
+        // Helper functions for testing
+        generatePackageRegistry,
+        generateSDKPatterns,
+        generateModelPatterns,
+        generateAPIEndpoints,
+        generateExtendedDependencies,
+        generateProtocolPatterns,
+        generateDevTools
+    };
+}
 
