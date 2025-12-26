@@ -59,9 +59,10 @@ jobs:
           cp -r lib _site/
           echo "✅ Copied lib/ directory"
 
-          # Copy model cards database
-          cp -r modelcards _site/
-          echo "✅ Copied modelcards/ directory"
+          # Copy model cards database (JSON files only)
+          mkdir -p _site/modelcards
+          find modelcards -name "*.json" -type f -exec sh -c 'mkdir -p "_site/$(dirname "{}")" && cp "{}" "_site/{}"' \;
+          echo "✅ Copied modelcards/ JSON files"
 
           # Add .nojekyll to prevent Jekyll processing
           touch _site/.nojekyll
