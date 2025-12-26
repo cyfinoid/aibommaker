@@ -58,7 +58,11 @@ jobs:
           # Copy library files (syntax highlighting)
           cp -r lib _site/
           echo "✅ Copied lib/ directory"
-          
+
+          # Copy model cards database
+          cp -r modelcards _site/
+          echo "✅ Copied modelcards/ directory"
+
           # Add .nojekyll to prevent Jekyll processing
           touch _site/.nojekyll
           echo "✅ Created .nojekyll file"
@@ -69,6 +73,7 @@ jobs:
           echo "  - CSS files: $(ls -1 _site/*.css 2>/dev/null | wc -l)"
           echo "  - JS modules: $(find _site/js -name '*.js' 2>/dev/null | wc -l)"
           echo "  - Library files: $(find _site/lib -name '*.js' 2>/dev/null | wc -l)"
+          echo "  - Model cards: $(find _site/modelcards -name '*.json' 2>/dev/null | wc -l)"
           echo ""
           echo "📁 Contents of _site/:"
           ls -la _site/
@@ -106,4 +111,5 @@ jobs:
           echo "  - extended-aibom-generator.js (Extended AIBOM format)" >> $GITHUB_STEP_SUMMARY
           echo "  - ui.js (UI rendering)" >> $GITHUB_STEP_SUMMARY
           echo "- lib/ (syntax highlighting)" >> $GITHUB_STEP_SUMMARY
+          echo "- modelcards/ (100+ model cards database)" >> $GITHUB_STEP_SUMMARY
 
