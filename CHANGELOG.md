@@ -7,6 +7,40 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.0.4] - 2025-12-26
+
+### Added
+
+#### Model Card Integration in UI
+- **Live Model Card Display**: Model cards now appear directly in AI model findings
+  - Rich model information including description, intended use, limitations, training data
+  - Ethical considerations, bias/fairness, safety measures, and privacy considerations
+  - Technical specifications like context length and capabilities
+  - Direct links to official provider documentation
+- **Dynamic Model Card Loading**:
+  - Model cards loaded on-demand during UI rendering
+  - Efficient caching prevents multiple fetches of same model card
+  - Filename normalization handles model names with special characters
+- **Enhanced Model Detection**:
+  - Improved pattern matching for model identification
+  - Better integration between detection and model card display
+  - Support for all major AI providers (OpenAI, Anthropic, Google, etc.)
+
+#### Performance Improvements
+- **Model Card Caching**: Prevents redundant loading of model card data
+- **Async UI Loading**: Non-blocking model card fetching during findings display
+- **Memory Optimization**: Efficient storage and retrieval of model metadata
+
+#### BOM Generation Enhancements
+- **Model Card Data Integration**: Model cards enrich BOM output with comprehensive metadata
+- **Improved Component Generation**: Better handling of ML model components
+- **Standard Compliance**: CycloneDX 1.7 and SPDX format enhancements
+
+### Fixed
+- **Model Card Loading**: Fixed multiple loading issues and caching problems
+- **UI Display**: Model cards now properly display in findings interface
+- **Async Operations**: Proper async/await handling throughout the application
+
 ## [0.0.3] - 2025-12-26
 
 ### Added
