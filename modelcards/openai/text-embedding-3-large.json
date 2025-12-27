@@ -1,48 +1,79 @@
 {
-  "modelName": "Text Embedding 3 Large",
-  "provider": "Openai",
+  "modelName": "text-embedding-3-large",
+  "provider": "OpenAI",
   "modelType": "embeddings",
   "modelId": "text-embedding-3-large",
-  "description": "Large embedding model with 3072 dimensions.",
+  "description": "OpenAI's most capable embedding model. Produces 3072-dimensional embeddings for text, optimized for both English and multilingual use cases. Offers excellent performance on retrieval, clustering, and classification tasks.",
+  "releaseDate": "2024-01-25",
   "intendedUse": {
-    "note": "Intended use cases should be verified from official provider documentation."
+    "primaryUses": [
+      "Semantic search and retrieval",
+      "Text clustering and categorization",
+      "Recommendation systems",
+      "Anomaly detection",
+      "Retrieval-Augmented Generation (RAG)",
+      "Document similarity"
+    ],
+    "outOfScope": [
+      "Text generation",
+      "Image processing",
+      "Real-time streaming applications"
+    ]
   },
   "architecture": {
-    "dimensions": "3072 (verified from official documentation)"
+    "type": "Transformer-based embedding model",
+    "dimensions": 3072,
+    "dimensionsConfigurable": true,
+    "maxInputTokens": 8191,
+    "note": "Dimensions can be reduced (e.g., to 256, 512, 1024) with minimal performance loss"
   },
   "trainingData": {
-    "description": "Training data details are not publicly disclosed for SaaS models."
+    "description": "Trained on a large corpus of text data. Specific training data composition is proprietary."
   },
-  "trainingProcedure": "Training methodology details are proprietary and not publicly disclosed.",
+  "trainingProcedure": "Trained using contrastive learning techniques. Specific methodology is proprietary.",
   "evaluation": {
-    "evaluationData": "See official provider documentation for evaluation data and benchmarks.",
-    "metrics": {
-      "note": "See official provider documentation for specific performance metrics."
-    },
-    "performanceSummary": "See official provider documentation for performance characteristics."
+    "performanceSummary": "State-of-the-art performance on MTEB benchmark. Significantly outperforms text-embedding-ada-002 on retrieval and classification tasks.",
+    "benchmarks": {
+      "MTEB-Average": "64.6%",
+      "MIRACL-Average": "54.9%"
+    }
   },
   "limitations": {
-    "note": "Specific limitations should be verified from official provider documentation."
+    "knownLimitations": [
+      "Maximum input of 8191 tokens",
+      "Higher latency than text-embedding-3-small",
+      "May not capture domain-specific nuances without fine-tuning",
+      "Higher cost than smaller embedding models"
+    ]
   },
   "ethicalConsiderations": {
-    "biasAndFairness": "See official provider documentation for bias and fairness evaluations.",
-    "safetyMeasures": "See official provider documentation for safety measures.",
-    "privacyConsiderations": "Review provider's privacy policy. Sensitive data should not be sent without safeguards."
+    "biasAndFairness": "Embeddings may encode biases present in training data. Consider evaluation for specific use cases.",
+    "safetyMeasures": "Input content filtering applied by OpenAI's usage policies.",
+    "privacyConsiderations": "Text sent to the API may be processed by OpenAI. Consider data sensitivity."
   },
   "access": {
-    "note": "See official provider documentation for access, rate limits, pricing, and licensing information."
+    "apiAccess": true,
+    "pricing": {
+      "usage": "$0.13 per 1M tokens"
+    },
+    "rateLimits": "Varies by usage tier",
+    "license": "Proprietary - OpenAI Terms of Use"
   },
   "requirements": {
-    "note": "See official provider documentation for hardware and software requirements."
+    "deployment": "API-only (cloud-hosted by OpenAI)",
+    "hardware": "Not applicable - SaaS model"
   },
   "references": {
-    "important": "All information must be verified against official provider documentation.",
-    "modelSpecificDocs": "https://platform.openai.com/docs/models/embeddings",
-    "officialDocs": "https://platform.openai.com/docs/models",
-    "gptOssCard": "https://openai.com/index/gpt-oss-model-card/",
-    "pricing": "https://openai.com/pricing"
+    "modelPage": "https://platform.openai.com/docs/models/embeddings",
+    "announcement": "https://openai.com/blog/new-embedding-models-and-api-updates",
+    "pricing": "https://openai.com/api/pricing/"
   },
-  "citation": "See official Openai documentation for citation information.",
-  "additionalInfo": "This model card includes information verified from official provider documentation where available. All information should be verified against official provider documentation.",
-  "lastUpdated": "2025-11-14"
+  "capabilities": [
+    "Text embeddings",
+    "Semantic similarity",
+    "Search and retrieval",
+    "Clustering",
+    "Classification"
+  ],
+  "lastUpdated": "2025-12-26"
 }

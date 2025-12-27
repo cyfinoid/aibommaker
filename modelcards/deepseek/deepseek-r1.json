@@ -1,42 +1,102 @@
 {
-  "modelName": "Deepseek R1",
-  "provider": "Deepseek",
+  "modelName": "DeepSeek-R1",
+  "provider": "DeepSeek",
   "modelType": "text-generation",
   "modelId": "deepseek-r1",
-  "description": "This model was detected in code repositories. See official documentation.",
+  "description": "DeepSeek-R1 is a 671B parameter (37B active) reasoning model trained using large-scale reinforcement learning. It achieves performance comparable to OpenAI o1 on math, coding, and reasoning tasks. Includes distilled versions for efficient deployment.",
+  "releaseDate": "2025-01-20",
   "intendedUse": {
-    "note": "Intended use cases should be verified from official provider documentation."
+    "primaryUses": [
+      "Complex reasoning and analysis",
+      "Mathematical problem solving",
+      "Competition mathematics (AIME, MATH)",
+      "Code generation and understanding",
+      "Multi-step logical reasoning"
+    ],
+    "outOfScope": [
+      "Medical diagnosis or treatment advice",
+      "Legal advice",
+      "Real-time applications (reasoning takes time)"
+    ]
   },
-  "architecture": {},
+  "architecture": {
+    "type": "Mixture-of-Experts (MoE) Transformer",
+    "totalParameters": "671B",
+    "activeParameters": "37B",
+    "contextLength": 128000,
+    "baseModel": "DeepSeek-V3-Base",
+    "distilledVariants": [
+      {"name": "DeepSeek-R1-Distill-Qwen-1.5B", "parameters": "1.5B"},
+      {"name": "DeepSeek-R1-Distill-Qwen-7B", "parameters": "7B"},
+      {"name": "DeepSeek-R1-Distill-Llama-8B", "parameters": "8B"},
+      {"name": "DeepSeek-R1-Distill-Qwen-14B", "parameters": "14B"},
+      {"name": "DeepSeek-R1-Distill-Qwen-32B", "parameters": "32B"},
+      {"name": "DeepSeek-R1-Distill-Llama-70B", "parameters": "70B"}
+    ],
+    "modalities": {
+      "input": ["text"],
+      "output": ["text"]
+    }
+  },
   "trainingData": {
-    "description": "Training data details are not publicly disclosed for SaaS models."
+    "description": "Built on DeepSeek-V3-Base with reinforcement learning for reasoning capabilities."
   },
-  "trainingProcedure": "Training methodology details are proprietary and not publicly disclosed.",
+  "trainingProcedure": "Large-scale RL without supervised fine-tuning (R1-Zero), then RL + SFT pipeline (R1). Self-verification and reflection capabilities.",
   "evaluation": {
-    "evaluationData": "See official provider documentation for evaluation data and benchmarks.",
-    "metrics": {
-      "note": "See official provider documentation for specific performance metrics."
-    },
-    "performanceSummary": "See official provider documentation for performance characteristics."
+    "performanceSummary": "Comparable to OpenAI o1 on reasoning benchmarks. State-of-the-art on math competition tasks.",
+    "benchmarks": {
+      "MMLU_Pro": "84.0%",
+      "AIME_2024": "79.8% (pass@1)",
+      "MATH_500": "97.3% (pass@1)",
+      "LiveCodeBench": "65.9% (pass@1)",
+      "Codeforces_Rating": "2029"
+    }
   },
   "limitations": {
-    "note": "Specific limitations should be verified from official provider documentation."
+    "knownLimitations": [
+      "Full model requires massive compute (671B parameters)",
+      "Reasoning generates long chain-of-thought (increased latency)",
+      "May generate incorrect reasoning chains",
+      "Recommended temperature 0.5-0.7"
+    ]
   },
   "ethicalConsiderations": {
-    "biasAndFairness": "See official provider documentation for bias and fairness evaluations.",
-    "safetyMeasures": "See official provider documentation for safety measures.",
-    "privacyConsiderations": "Review provider's privacy policy. Sensitive data should not be sent without safeguards."
+    "biasAndFairness": "Evaluated for bias with mitigation applied.",
+    "safetyMeasures": "Safety tuning applied during RL+SFT pipeline.",
+    "privacyConsiderations": "Open weights allow local deployment."
   },
   "access": {
-    "note": "See official provider documentation for access, rate limits, pricing, and licensing information."
+    "openWeights": true,
+    "apiAccess": true,
+    "license": "MIT License",
+    "commercialUse": true,
+    "distillationAllowed": true,
+    "availableOn": [
+      "Hugging Face",
+      "DeepSeek API"
+    ]
   },
   "requirements": {
-    "note": "See official provider documentation for hardware and software requirements."
+    "deployment": "Local deployment or API access",
+    "hardware": {
+      "Full_671B": "Multi-GPU cluster required",
+      "Distill_32B": "~64GB VRAM",
+      "Distill_7B": "~14GB VRAM"
+    },
+    "recommendedSettings": {
+      "temperature": "0.5-0.7 (0.6 recommended)",
+      "maxGenerationLength": 32768
+    }
   },
   "references": {
-    "important": "All information must be verified against official provider documentation."
+    "huggingFace": "https://huggingface.co/deepseek-ai/DeepSeek-R1"
   },
-  "citation": "See official Deepseek documentation for citation information.",
-  "additionalInfo": "This model card includes information verified from official provider documentation where available. All information should be verified against official provider documentation.",
-  "lastUpdated": "2025-11-14"
+  "capabilities": [
+    "Advanced reasoning",
+    "Mathematical problem solving",
+    "Code generation",
+    "Self-verification",
+    "Long chain-of-thought"
+  ],
+  "lastUpdated": "2025-12-26"
 }

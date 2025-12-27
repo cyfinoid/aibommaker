@@ -1,42 +1,105 @@
 {
-  "modelName": "Phi3",
+  "modelName": "Phi-3",
   "provider": "Microsoft",
   "modelType": "text-generation",
-  "modelId": "phi3",
-  "description": "This model was detected in code repositories. See official documentation.",
+  "modelId": "phi-3",
+  "description": "Phi-3 is Microsoft's family of small language models optimized for resource-constrained environments. Available in Mini (3.8B), Small (7B), and Medium (14B) sizes, these models achieve performance exceeding many larger models through high-quality training data.",
+  "releaseDate": "2024-04-23",
   "intendedUse": {
-    "note": "Intended use cases should be verified from official provider documentation."
+    "primaryUses": [
+      "On-device inference",
+      "Edge deployment",
+      "Text generation",
+      "Code generation",
+      "Reasoning tasks",
+      "Resource-constrained applications"
+    ],
+    "outOfScope": [
+      "Medical diagnosis or treatment advice",
+      "Legal advice",
+      "High-stakes autonomous decision making"
+    ]
   },
-  "architecture": {},
+  "architecture": {
+    "type": "Decoder-only Transformer",
+    "variants": [
+      {
+        "name": "Phi-3-mini",
+        "parameters": "3.8B",
+        "contextLengths": ["4K", "128K"]
+      },
+      {
+        "name": "Phi-3-small",
+        "parameters": "7B",
+        "contextLengths": ["8K", "128K"]
+      },
+      {
+        "name": "Phi-3-medium",
+        "parameters": "14B",
+        "contextLengths": ["4K", "128K"]
+      }
+    ],
+    "modalities": {
+      "input": ["text"],
+      "output": ["text"]
+    }
+  },
   "trainingData": {
-    "description": "Training data details are not publicly disclosed for SaaS models."
+    "description": "Trained using the 'Textbooks Are All You Need 2.0' approach with high-quality synthetic data and carefully filtered web data. Focus on reasoning and educational content."
   },
-  "trainingProcedure": "Training methodology details are proprietary and not publicly disclosed.",
+  "trainingProcedure": "High-quality data curation following textbook methodology. Small models trained to match larger model performance through data quality.",
   "evaluation": {
-    "evaluationData": "See official provider documentation for evaluation data and benchmarks.",
-    "metrics": {
-      "note": "See official provider documentation for specific performance metrics."
-    },
-    "performanceSummary": "See official provider documentation for performance characteristics."
+    "performanceSummary": "Phi-3 Mini (3.8B) exceeds performance of many 7B-13B models. Strong on reasoning and instruction following.",
+    "benchmarks": {
+      "MMLU_Mini": "~69%",
+      "GSM8K_Mini": "~82%",
+      "HumanEval_Mini": "~58%",
+      "MT_Bench_Mini": "~8.4"
+    }
   },
   "limitations": {
-    "note": "Specific limitations should be verified from official provider documentation."
+    "knownLimitations": [
+      "Smaller models have reduced capability on complex tasks",
+      "May generate incorrect information",
+      "English-focused training",
+      "Knowledge limited to training data cutoff"
+    ]
   },
   "ethicalConsiderations": {
-    "biasAndFairness": "See official provider documentation for bias and fairness evaluations.",
-    "safetyMeasures": "See official provider documentation for safety measures.",
-    "privacyConsiderations": "Review provider's privacy policy. Sensitive data should not be sent without safeguards."
+    "biasAndFairness": "Evaluated for bias with mitigation applied.",
+    "safetyMeasures": "Safety tuning applied to instruct variants.",
+    "privacyConsiderations": "Open weights enable local and edge deployment for privacy-sensitive applications."
   },
   "access": {
-    "note": "See official provider documentation for access, rate limits, pricing, and licensing information."
+    "openWeights": true,
+    "pricing": "Free (open weights)",
+    "license": "MIT License",
+    "availableOn": [
+      "Hugging Face",
+      "Azure AI Model Catalog",
+      "Ollama",
+      "ONNX Runtime"
+    ]
   },
   "requirements": {
-    "note": "See official provider documentation for hardware and software requirements."
+    "deployment": "Local deployment, edge/mobile deployment, or cloud via Azure AI",
+    "hardware": {
+      "Mini_3.8B": "Can run on mobile devices, ~8GB RAM",
+      "Small_7B": "GPU recommended, ~14GB VRAM",
+      "Medium_14B": "GPU required, ~28GB VRAM"
+    }
   },
   "references": {
-    "important": "All information must be verified against official provider documentation."
+    "huggingFaceCollection": "https://huggingface.co/collections/microsoft/phi-3-6626e15e9585a200d2d761e3",
+    "azure": "https://azure.microsoft.com/en-us/products/phi",
+    "technicalReport": "Phi-3 Technical Report: A Highly Capable Language Model Locally on Your Phone"
   },
-  "citation": "See official Microsoft documentation for citation information.",
-  "additionalInfo": "This model card includes information verified from official provider documentation where available. All information should be verified against official provider documentation.",
-  "lastUpdated": "2025-11-14"
+  "capabilities": [
+    "Text generation",
+    "Code generation",
+    "Reasoning",
+    "On-device inference",
+    "Instruction following"
+  ],
+  "lastUpdated": "2025-12-26"
 }

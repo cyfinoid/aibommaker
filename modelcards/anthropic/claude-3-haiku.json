@@ -2,50 +2,83 @@
   "modelName": "Claude 3 Haiku",
   "provider": "Anthropic",
   "modelType": "text-generation",
-  "modelId": "claude-3-haiku",
-  "description": "Claude 3 Haiku is Anthropic's fastest and most cost-effective model.",
+  "modelId": "claude-3-haiku-20240307",
+  "description": "Claude 3 Haiku is Anthropic's fastest and most cost-effective model, designed for lightweight tasks requiring near-instant responses. Ideal for customer interactions, content moderation, and high-volume applications.",
+  "releaseDate": "2024-03-13",
   "intendedUse": {
-    "note": "Intended use cases should be verified from official provider documentation."
+    "primaryUses": [
+      "Customer service and chatbots",
+      "Content moderation",
+      "Quick data extraction",
+      "Simple code generation",
+      "High-volume, cost-sensitive applications",
+      "Real-time interactions"
+    ],
+    "outOfScope": [
+      "Complex reasoning requiring larger models",
+      "Medical diagnosis or treatment advice",
+      "Legal advice"
+    ]
   },
   "architecture": {
-    "contextLength": "200,000 tokens (verified from official documentation)"
+    "type": "Transformer-based multimodal model",
+    "contextLength": 200000,
+    "maxOutputTokens": 4096,
+    "modalities": {
+      "input": ["text", "images"],
+      "output": ["text"]
+    }
   },
   "trainingData": {
-    "description": "Training data details are not publicly disclosed for SaaS models."
+    "description": "Trained on a diverse corpus of text and image data using Constitutional AI (CAI) methods.",
+    "cutoffDate": "2023-08"
   },
-  "trainingProcedure": "Training methodology details are proprietary and not publicly disclosed.",
+  "trainingProcedure": "Trained using Constitutional AI (CAI) and optimized for speed and efficiency.",
   "evaluation": {
-    "evaluationData": "See official provider documentation for evaluation data and benchmarks.",
-    "metrics": {
-      "note": "See official provider documentation for specific performance metrics."
-    },
-    "performanceSummary": "See official provider documentation for performance characteristics."
+    "performanceSummary": "Fastest Claude model with strong performance for its size. Optimized for speed and cost while maintaining safety standards.",
+    "benchmarks": {
+      "MMLU": "75.2%",
+      "HumanEval": "75.9%",
+      "GSM8K": "88.9%"
+    }
   },
   "limitations": {
-    "note": "Specific limitations should be verified from official provider documentation."
+    "knownLimitations": [
+      "Less capable than Sonnet and Opus on complex tasks",
+      "May struggle with nuanced or multi-step reasoning",
+      "May generate incorrect or misleading information",
+      "Knowledge limited to August 2023 cutoff"
+    ]
   },
   "ethicalConsiderations": {
-    "biasAndFairness": "See official provider documentation for bias and fairness evaluations.",
-    "safetyMeasures": "See official provider documentation for safety measures.",
-    "privacyConsiderations": "Review provider's privacy policy. Sensitive data should not be sent without safeguards."
+    "biasAndFairness": "Anthropic uses Constitutional AI to reduce harmful outputs and biases.",
+    "safetyMeasures": "Constitutional AI training and content filtering optimized for speed.",
+    "privacyConsiderations": "API data is not used to train models by default."
   },
   "access": {
-    "note": "See official provider documentation for access, rate limits, pricing, and licensing information."
+    "apiAccess": true,
+    "pricing": {
+      "input": "$0.25 per 1M tokens",
+      "output": "$1.25 per 1M tokens"
+    },
+    "rateLimits": "Varies by usage tier - higher limits available",
+    "license": "Proprietary - Anthropic Terms of Service"
   },
   "requirements": {
-    "note": "See official provider documentation for hardware and software requirements."
+    "deployment": "API-only (cloud-hosted by Anthropic), also available via AWS Bedrock and Google Cloud Vertex AI",
+    "hardware": "Not applicable - SaaS model"
   },
   "references": {
-    "important": "All information must be verified against official provider documentation.",
-    "modelSpecificDocs": "https://docs.anthropic.com/claude/docs/models-overview",
-    "officialDocs": "https://docs.anthropic.com",
+    "modelPage": "https://docs.anthropic.com/en/docs/about-claude/models",
+    "announcement": "https://www.anthropic.com/news/claude-3-haiku",
     "pricing": "https://www.anthropic.com/pricing"
   },
-  "citation": "See official Anthropic documentation for citation information.",
-  "additionalInfo": "This model card includes information verified from official provider documentation where available. All information should be verified against official provider documentation.",
-  "lastUpdated": "2025-11-14",
   "capabilities": [
     "Text generation",
-    "Vision"
-  ]
+    "Vision (image understanding)",
+    "Code generation",
+    "Tool use"
+  ],
+  "knowledgeCutoff": "2023-08",
+  "lastUpdated": "2025-12-26"
 }

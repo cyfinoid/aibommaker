@@ -1,54 +1,91 @@
 {
-  "modelName": "Gpt 4O",
-  "provider": "Openai",
+  "modelName": "GPT-4o",
+  "provider": "OpenAI",
   "modelType": "text-generation",
   "modelId": "gpt-4o",
-  "description": "GPT-4o is OpenAI's flagship model that reasons across audio, vision, and text in real time.",
+  "description": "GPT-4o (\"o\" for omni) is OpenAI's flagship multimodal model that can reason across audio, vision, and text in real time. It matches GPT-4 Turbo performance on text and code while being significantly faster and 50% cheaper.",
+  "releaseDate": "2024-05-13",
   "intendedUse": {
-    "note": "Intended use cases should be verified from official provider documentation."
+    "primaryUses": [
+      "Complex reasoning and analysis",
+      "Code generation and debugging",
+      "Multimodal understanding (text, images, audio)",
+      "Real-time conversational AI",
+      "Document and image analysis",
+      "Creative writing and content generation"
+    ],
+    "outOfScope": [
+      "Medical diagnosis or treatment advice",
+      "Legal advice",
+      "High-stakes autonomous decision making",
+      "Real-time safety-critical systems"
+    ]
   },
   "architecture": {
-    "contextLength": "128,000 tokens (verified from official documentation)"
+    "type": "Transformer-based multimodal model",
+    "contextLength": 128000,
+    "maxOutputTokens": 16384,
+    "modalities": {
+      "input": ["text", "images", "audio"],
+      "output": ["text", "audio"]
+    }
   },
   "trainingData": {
-    "description": "Training data details are not publicly disclosed for SaaS models."
+    "description": "Trained on a diverse mixture of licensed data, data created by human trainers, and publicly available data. Specific training data composition is proprietary.",
+    "cutoffDate": "2023-10"
   },
-  "trainingProcedure": "Training methodology details are proprietary and not publicly disclosed.",
+  "trainingProcedure": "Trained using Reinforcement Learning from Human Feedback (RLHF) with a combination of supervised fine-tuning and reward modeling. Specific training methodology is proprietary.",
   "evaluation": {
-    "evaluationData": "See official provider documentation for evaluation data and benchmarks.",
-    "metrics": {
-      "note": "See official provider documentation for specific performance metrics."
-    },
-    "performanceSummary": "See official provider documentation for performance characteristics."
+    "performanceSummary": "Matches GPT-4 Turbo on text in English and code, with significant improvements in non-English languages. Faster and more cost-efficient than GPT-4 Turbo.",
+    "benchmarks": {
+      "MMLU": "88.7%",
+      "HumanEval": "90.2%",
+      "MATH": "76.6%"
+    }
   },
   "limitations": {
-    "note": "Specific limitations should be verified from official provider documentation."
+    "knownLimitations": [
+      "May generate incorrect or misleading information",
+      "Knowledge limited to training data cutoff date",
+      "Can exhibit biases present in training data",
+      "May not always follow complex multi-step instructions perfectly",
+      "Audio output capabilities may have pronunciation limitations for some languages"
+    ]
   },
   "ethicalConsiderations": {
-    "biasAndFairness": "See official provider documentation for bias and fairness evaluations.",
-    "safetyMeasures": "See official provider documentation for safety measures.",
-    "privacyConsiderations": "Review provider's privacy policy. Sensitive data should not be sent without safeguards."
+    "biasAndFairness": "OpenAI has implemented safety mitigations but the model may still exhibit biases from training data. Regular red-teaming and safety evaluations are conducted.",
+    "safetyMeasures": "Built-in content filtering, usage policies enforcement, and rate limiting. Model refuses harmful requests through RLHF training.",
+    "privacyConsiderations": "Data sent to the API may be used to improve the model unless opted out. Enterprise and API users can opt out of data training."
   },
   "access": {
-    "note": "See official provider documentation for access, rate limits, pricing, and licensing information."
+    "apiAccess": true,
+    "pricing": {
+      "input": "$2.50 per 1M tokens",
+      "output": "$10.00 per 1M tokens",
+      "cachedInput": "$1.25 per 1M tokens"
+    },
+    "rateLimits": "Varies by usage tier (Tier 1-5)",
+    "license": "Proprietary - OpenAI Terms of Use"
   },
   "requirements": {
-    "note": "See official provider documentation for hardware and software requirements."
+    "deployment": "API-only (cloud-hosted by OpenAI)",
+    "hardware": "Not applicable - SaaS model"
   },
   "references": {
-    "important": "All information must be verified against official provider documentation.",
-    "modelSpecificDocs": "https://platform.openai.com/docs/models/gpt-4o",
-    "officialDocs": "https://platform.openai.com/docs/models",
-    "gptOssCard": "https://openai.com/index/gpt-oss-model-card/",
-    "pricing": "https://openai.com/pricing"
+    "modelPage": "https://platform.openai.com/docs/models/gpt-4o",
+    "announcement": "https://openai.com/index/hello-gpt-4o/",
+    "systemCard": "https://openai.com/index/gpt-4o-system-card/",
+    "pricing": "https://openai.com/api/pricing/"
   },
-  "citation": "See official Openai documentation for citation information.",
-  "additionalInfo": "This model card includes information verified from official provider documentation where available. All information should be verified against official provider documentation.",
-  "lastUpdated": "2025-11-14",
   "capabilities": [
     "Text generation",
-    "Vision",
-    "Audio"
+    "Vision (image understanding)",
+    "Audio input and output",
+    "Code generation",
+    "Function calling",
+    "JSON mode",
+    "Structured outputs"
   ],
-  "knowledgeCutoff": "2024-10"
+  "knowledgeCutoff": "2023-10",
+  "lastUpdated": "2025-12-26"
 }

@@ -1,44 +1,115 @@
 {
-  "modelName": "Gemma2",
+  "modelName": "Gemma 2",
   "provider": "Google",
   "modelType": "text-generation",
-  "modelId": "gemma2",
-  "description": "This model was detected in code repositories. See official documentation.",
+  "modelId": "gemma-2",
+  "description": "Gemma 2 is Google's second-generation open-weights model family, available in 2B, 9B, and 27B parameter sizes. It offers state-of-the-art performance for its size class with efficient inference on consumer hardware.",
+  "releaseDate": "2024-06-27",
   "intendedUse": {
-    "note": "Intended use cases should be verified from official provider documentation."
+    "primaryUses": [
+      "Text generation and completion",
+      "Question answering",
+      "Summarization",
+      "Code generation",
+      "Reasoning tasks",
+      "On-device and edge deployment",
+      "Research and experimentation"
+    ],
+    "outOfScope": [
+      "Medical diagnosis or treatment advice",
+      "Legal advice",
+      "High-stakes autonomous decision making",
+      "Generation of harmful content"
+    ]
   },
-  "architecture": {},
-  "trainingData": {
-    "description": "Training data details are not publicly disclosed for SaaS models."
-  },
-  "trainingProcedure": "Training methodology details are proprietary and not publicly disclosed.",
-  "evaluation": {
-    "evaluationData": "See official provider documentation for evaluation data and benchmarks.",
-    "metrics": {
-      "note": "See official provider documentation for specific performance metrics."
+  "architecture": {
+    "type": "Dense Transformer with sliding window and global attention",
+    "contextLength": 8192,
+    "variants": [
+      {
+        "name": "gemma-2-2b",
+        "parameters": "2B",
+        "note": "Optimized for on-device deployment"
+      },
+      {
+        "name": "gemma-2-9b",
+        "parameters": "9B",
+        "note": "Balanced performance and efficiency"
+      },
+      {
+        "name": "gemma-2-27b",
+        "parameters": "27B",
+        "note": "Highest capability"
+      }
+    ],
+    "modalities": {
+      "input": ["text"],
+      "output": ["text"]
     },
-    "performanceSummary": "See official provider documentation for performance characteristics."
+    "features": [
+      "Local sliding window attention",
+      "Global attention layers",
+      "Logit soft-capping",
+      "RMSNorm for pre and post attention normalization"
+    ]
+  },
+  "trainingData": {
+    "description": "Trained on 8 trillion tokens (2B), 8 trillion tokens (9B), and 13 trillion tokens (27B) of primarily English web documents, code, and mathematics data."
+  },
+  "trainingProcedure": "Knowledge distillation from larger models, instruction tuning for -it variants.",
+  "evaluation": {
+    "performanceSummary": "State-of-the-art performance in its size class. Gemma 2 27B outperforms Llama 3 70B on several benchmarks while being much smaller.",
+    "benchmarks": {
+      "MMLU_27B": "75.2%",
+      "HumanEval_27B": "51.8%",
+      "GSM8K_27B": "74.0%"
+    }
   },
   "limitations": {
-    "note": "Specific limitations should be verified from official provider documentation."
+    "knownLimitations": [
+      "Text-only (no vision or audio capabilities)",
+      "8K context window (smaller than some competitors)",
+      "May generate incorrect or misleading information",
+      "English-focused training data",
+      "Requires careful prompting for best results"
+    ]
   },
   "ethicalConsiderations": {
-    "biasAndFairness": "See official provider documentation for bias and fairness evaluations.",
-    "safetyMeasures": "See official provider documentation for safety measures.",
-    "privacyConsiderations": "Review provider's privacy policy. Sensitive data should not be sent without safeguards."
+    "biasAndFairness": "Evaluated for bias with mitigation applied during training.",
+    "safetyMeasures": "Safety tuning applied to instruction-tuned variants.",
+    "privacyConsiderations": "Open weights allow local deployment for privacy-sensitive applications."
   },
   "access": {
-    "note": "See official provider documentation for access, rate limits, pricing, and licensing information."
+    "openWeights": true,
+    "pricing": "Free (open weights)",
+    "license": "Gemma Terms of Use (permissive, allows commercial use)",
+    "availableOn": [
+      "Hugging Face",
+      "Kaggle",
+      "Google Cloud Vertex AI",
+      "Ollama"
+    ]
   },
   "requirements": {
-    "note": "See official provider documentation for hardware and software requirements."
+    "deployment": "Local deployment, cloud deployment via Vertex AI, or through inference providers",
+    "hardware": {
+      "2B": "Can run on CPU, ~4GB RAM minimum",
+      "9B": "GPU recommended, ~16GB VRAM for full precision",
+      "27B": "High-end GPU required, ~48GB VRAM for full precision"
+    }
   },
   "references": {
-    "important": "All information must be verified against official provider documentation.",
-    "officialDocs": "https://ai.google.dev/docs",
-    "pricing": "https://ai.google.dev/pricing"
+    "modelPage": "https://ai.google.dev/gemma",
+    "huggingFace": "https://huggingface.co/google/gemma-2-27b",
+    "announcement": "https://blog.google/technology/developers/google-gemma-2/",
+    "technicalReport": "https://storage.googleapis.com/deepmind-media/gemma/gemma-2-report.pdf"
   },
-  "citation": "See official Google documentation for citation information.",
-  "additionalInfo": "This model card includes information verified from official provider documentation where available. All information should be verified against official provider documentation.",
-  "lastUpdated": "2025-11-14"
+  "capabilities": [
+    "Text generation",
+    "Code generation",
+    "Question answering",
+    "Summarization",
+    "Reasoning"
+  ],
+  "lastUpdated": "2025-12-26"
 }

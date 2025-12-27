@@ -1,51 +1,84 @@
 {
-  "modelName": "Gemini 2.0 Flash Exp",
+  "modelName": "Gemini 2.0 Flash",
   "provider": "Google",
   "modelType": "text-generation",
   "modelId": "gemini-2.0-flash-exp",
-  "description": "Gemini 2.0 Flash Experimental is Google's experimental model.",
+  "description": "Gemini 2.0 Flash is Google's next-generation multimodal model with native multimodal output capabilities. It can generate text, audio, and images natively, and features built-in tool use for agentic workflows. Faster than 1.5 Flash with improved performance.",
+  "releaseDate": "2024-12-11",
   "intendedUse": {
-    "note": "Intended use cases should be verified from official provider documentation."
+    "primaryUses": [
+      "Agentic workflows and autonomous tasks",
+      "Real-time multimodal streaming",
+      "Native voice conversations",
+      "Image generation and editing",
+      "Complex reasoning with tool use",
+      "Interactive applications requiring low latency"
+    ],
+    "outOfScope": [
+      "Medical diagnosis or treatment advice",
+      "Legal advice",
+      "Safety-critical autonomous systems",
+      "Production workloads (while in experimental phase)"
+    ]
   },
   "architecture": {
-    "contextLength": "1,000,000 tokens (verified from official documentation)"
+    "type": "Multimodal Transformer with native output generation",
+    "contextLength": 1000000,
+    "maxOutputTokens": 8192,
+    "modalities": {
+      "input": ["text", "images", "audio", "video"],
+      "output": ["text", "audio", "images"]
+    }
   },
   "trainingData": {
-    "description": "Training data details are not publicly disclosed for SaaS models."
+    "description": "Trained on diverse multimodal data including text, images, audio, and video. Specific composition is proprietary."
   },
-  "trainingProcedure": "Training methodology details are proprietary and not publicly disclosed.",
+  "trainingProcedure": "Advanced training techniques for multimodal output generation and agentic capabilities.",
   "evaluation": {
-    "evaluationData": "See official provider documentation for evaluation data and benchmarks.",
-    "metrics": {
-      "note": "See official provider documentation for specific performance metrics."
-    },
-    "performanceSummary": "See official provider documentation for performance characteristics."
+    "performanceSummary": "Faster than Gemini 1.5 Flash with improved benchmark performance. First Gemini model with native multimodal output capabilities."
   },
   "limitations": {
-    "note": "Specific limitations should be verified from official provider documentation."
+    "knownLimitations": [
+      "Currently in experimental phase - not recommended for production",
+      "Native image generation is experimental",
+      "May generate incorrect or misleading information",
+      "Capabilities and APIs may change before general availability"
+    ]
   },
   "ethicalConsiderations": {
-    "biasAndFairness": "See official provider documentation for bias and fairness evaluations.",
-    "safetyMeasures": "See official provider documentation for safety measures.",
-    "privacyConsiderations": "Review provider's privacy policy. Sensitive data should not be sent without safeguards."
+    "biasAndFairness": "Google applies safety training to reduce harmful outputs in all modalities.",
+    "safetyMeasures": "Built-in safety filters for text, audio, and image outputs.",
+    "privacyConsiderations": "API data handling governed by Google Cloud terms."
   },
   "access": {
-    "note": "See official provider documentation for access, rate limits, pricing, and licensing information."
+    "apiAccess": true,
+    "status": "Experimental - free access during preview",
+    "pricing": {
+      "note": "Free during experimental phase. Expected pricing similar to or lower than Gemini 1.5 Flash at GA."
+    },
+    "license": "Proprietary - Google Cloud Terms of Service"
   },
   "requirements": {
-    "note": "See official provider documentation for hardware and software requirements."
+    "deployment": "API-only (cloud-hosted by Google), Multimodal Live API for streaming",
+    "hardware": "Not applicable - SaaS model"
   },
   "references": {
-    "important": "All information must be verified against official provider documentation.",
-    "modelSpecificDocs": "https://ai.google.dev/docs",
-    "officialDocs": "https://ai.google.dev/docs",
+    "modelPage": "https://ai.google.dev/gemini-api/docs/models/gemini",
+    "announcement": "https://blog.google/technology/google-deepmind/google-gemini-ai-update-december-2024/",
     "pricing": "https://ai.google.dev/pricing"
   },
-  "citation": "See official Google documentation for citation information.",
-  "additionalInfo": "This model card includes information verified from official provider documentation where available. All information should be verified against official provider documentation.",
-  "lastUpdated": "2025-11-14",
   "capabilities": [
     "Text generation",
-    "Vision"
-  ]
+    "Vision (image understanding)",
+    "Audio understanding",
+    "Video understanding",
+    "Native audio output",
+    "Native image generation",
+    "Code generation",
+    "Native tool use",
+    "Google Search integration",
+    "Code execution",
+    "Agentic workflows"
+  ],
+  "lastUpdated": "2025-12-26"
 }

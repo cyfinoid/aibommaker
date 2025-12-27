@@ -3,49 +3,71 @@
   "provider": "Google",
   "modelType": "text-generation",
   "modelId": "gemini-pro",
-  "description": "Gemini Pro is Google's general-purpose model.",
+  "description": "Gemini Pro (1.0) was Google's first-generation general-purpose model in the Gemini family. It offered balanced performance for text generation tasks. This model has been superseded by the Gemini 1.5 series.",
+  "releaseDate": "2023-12-06",
   "intendedUse": {
-    "note": "Intended use cases should be verified from official provider documentation."
+    "primaryUses": [
+      "Text generation and completion",
+      "Multi-turn conversations",
+      "Code generation",
+      "Content creation",
+      "Question answering"
+    ],
+    "outOfScope": [
+      "Medical diagnosis or treatment advice",
+      "Legal advice",
+      "High-stakes autonomous decision making"
+    ]
   },
   "architecture": {
-    "contextLength": "32,768 tokens (verified from official documentation)"
+    "type": "Transformer-based model",
+    "contextLength": 32768,
+    "maxOutputTokens": 8192,
+    "modalities": {
+      "input": ["text"],
+      "output": ["text"]
+    },
+    "note": "Vision capabilities available via separate Gemini Pro Vision variant"
   },
   "trainingData": {
-    "description": "Training data details are not publicly disclosed for SaaS models."
+    "description": "Trained on a diverse corpus of text data. Specific training data composition is proprietary."
   },
-  "trainingProcedure": "Training methodology details are proprietary and not publicly disclosed.",
+  "trainingProcedure": "Trained using advanced techniques including instruction tuning. Specific methodology is proprietary.",
   "evaluation": {
-    "evaluationData": "See official provider documentation for evaluation data and benchmarks.",
-    "metrics": {
-      "note": "See official provider documentation for specific performance metrics."
-    },
-    "performanceSummary": "See official provider documentation for performance characteristics."
+    "performanceSummary": "Competitive performance on text generation benchmarks at launch. Now superseded by Gemini 1.5 models with improved capabilities."
   },
   "limitations": {
-    "note": "Specific limitations should be verified from official provider documentation."
+    "knownLimitations": [
+      "Superseded by Gemini 1.5 Pro and Flash models",
+      "Smaller context window compared to 1.5 series (32K vs 1M+)",
+      "Text-only input (requires Vision variant for images)",
+      "May generate incorrect or misleading information",
+      "Model is being deprecated"
+    ]
   },
   "ethicalConsiderations": {
-    "biasAndFairness": "See official provider documentation for bias and fairness evaluations.",
-    "safetyMeasures": "See official provider documentation for safety measures.",
-    "privacyConsiderations": "Review provider's privacy policy. Sensitive data should not be sent without safeguards."
+    "biasAndFairness": "Google applies safety training to reduce harmful outputs and biases.",
+    "safetyMeasures": "Built-in safety filters and content moderation.",
+    "privacyConsiderations": "API data handling governed by Google Cloud terms."
   },
   "access": {
-    "note": "See official provider documentation for access, rate limits, pricing, and licensing information."
+    "apiAccess": true,
+    "status": "Deprecated - superseded by Gemini 1.5 series",
+    "license": "Proprietary - Google Cloud Terms of Service"
   },
   "requirements": {
-    "note": "See official provider documentation for hardware and software requirements."
+    "deployment": "API-only (cloud-hosted by Google)",
+    "hardware": "Not applicable - SaaS model"
   },
   "references": {
-    "important": "All information must be verified against official provider documentation.",
-    "modelSpecificDocs": "https://ai.google.dev/docs",
-    "officialDocs": "https://ai.google.dev/docs",
+    "modelPage": "https://ai.google.dev/gemini-api/docs/models/gemini",
+    "announcement": "https://blog.google/technology/ai/gemini-api-developers-cloud/",
     "pricing": "https://ai.google.dev/pricing"
   },
-  "citation": "See official Google documentation for citation information.",
-  "additionalInfo": "This model card includes information verified from official provider documentation where available. All information should be verified against official provider documentation.",
-  "lastUpdated": "2025-11-14",
   "capabilities": [
     "Text generation",
-    "Vision"
-  ]
+    "Code generation",
+    "Multi-turn conversation"
+  ],
+  "lastUpdated": "2025-12-26"
 }

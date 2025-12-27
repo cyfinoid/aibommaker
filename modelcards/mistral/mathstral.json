@@ -1,42 +1,84 @@
 {
-  "modelName": "Mathstral",
-  "provider": "Mistral",
+  "modelName": "Mathstral 7B",
+  "provider": "Mistral AI",
   "modelType": "text-generation",
-  "modelId": "mathstral",
-  "description": "This model was detected in code repositories. See official documentation.",
+  "modelId": "mathstral-7b",
+  "description": "Mathstral 7B is Mistral AI's mathematics-specialized 7B parameter model, built on Mistral 7B and optimized for mathematical and scientific reasoning tasks. It achieves competitive performance with larger models on math benchmarks.",
+  "releaseDate": "2024-07-16",
   "intendedUse": {
-    "note": "Intended use cases should be verified from official provider documentation."
+    "primaryUses": [
+      "Mathematical problem solving",
+      "Scientific reasoning",
+      "Competition mathematics (AMC, AIME)",
+      "STEM education support",
+      "Mathematical proofs"
+    ],
+    "outOfScope": [
+      "General text generation",
+      "Medical diagnosis or treatment advice",
+      "Legal advice"
+    ]
   },
-  "architecture": {},
+  "architecture": {
+    "type": "Decoder-only Transformer (Mistral 7B base)",
+    "parameters": "7B",
+    "tensorType": "F32",
+    "modalities": {
+      "input": ["text"],
+      "output": ["text"]
+    }
+  },
   "trainingData": {
-    "description": "Training data details are not publicly disclosed for SaaS models."
+    "description": "Fine-tuned from Mistral 7B on mathematical and scientific reasoning data."
   },
-  "trainingProcedure": "Training methodology details are proprietary and not publicly disclosed.",
+  "trainingProcedure": "Specialized fine-tuning on mathematical datasets and reasoning chains.",
   "evaluation": {
-    "evaluationData": "See official provider documentation for evaluation data and benchmarks.",
-    "metrics": {
-      "note": "See official provider documentation for specific performance metrics."
-    },
-    "performanceSummary": "See official provider documentation for performance characteristics."
+    "performanceSummary": "Strong mathematical reasoning capabilities. Competitive with larger models on competition mathematics benchmarks.",
+    "benchmarks": {
+      "MATH": "56.6%",
+      "GSM8K_8shot": "77.1%",
+      "Odyssey_Math_maj16": "37.2%",
+      "GRE_Math_maj16": "56.9%",
+      "AMC_2023_maj16": "42.4%",
+      "AIME_2024_maj16": "2/30"
+    }
   },
   "limitations": {
-    "note": "Specific limitations should be verified from official provider documentation."
+    "knownLimitations": [
+      "Specialized for math - less capable at general tasks",
+      "May produce incorrect mathematical solutions",
+      "7B parameters limits complex reasoning compared to larger models",
+      "Performance varies by problem type"
+    ]
   },
   "ethicalConsiderations": {
-    "biasAndFairness": "See official provider documentation for bias and fairness evaluations.",
-    "safetyMeasures": "See official provider documentation for safety measures.",
-    "privacyConsiderations": "Review provider's privacy policy. Sensitive data should not be sent without safeguards."
+    "biasAndFairness": "May reflect biases in mathematical training data.",
+    "safetyMeasures": "Chat template support for safe interactions.",
+    "privacyConsiderations": "Open weights allow local deployment."
   },
   "access": {
-    "note": "See official provider documentation for access, rate limits, pricing, and licensing information."
+    "openWeights": true,
+    "pricing": "Free (open weights)",
+    "license": "Apache 2.0",
+    "availableOn": [
+      "Hugging Face",
+      "Ollama"
+    ]
   },
   "requirements": {
-    "note": "See official provider documentation for hardware and software requirements."
+    "deployment": "Local deployment",
+    "hardware": {
+      "7B": "GPU recommended, ~14GB VRAM"
+    }
   },
   "references": {
-    "important": "All information must be verified against official provider documentation."
+    "huggingFace": "https://huggingface.co/mistralai/Mathstral-7B-v0.1"
   },
-  "citation": "See official Mistral documentation for citation information.",
-  "additionalInfo": "This model card includes information verified from official provider documentation where available. All information should be verified against official provider documentation.",
-  "lastUpdated": "2025-11-14"
+  "capabilities": [
+    "Mathematical reasoning",
+    "Scientific problem solving",
+    "Competition mathematics",
+    "Step-by-step solutions"
+  ],
+  "lastUpdated": "2025-12-26"
 }

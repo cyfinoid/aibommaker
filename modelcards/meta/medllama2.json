@@ -1,42 +1,90 @@
 {
-  "modelName": "Medllama2",
-  "provider": "Meta",
+  "modelName": "MedLLaMA",
+  "provider": "Community (not official Meta)",
   "modelType": "text-generation",
-  "modelId": "medllama2",
-  "description": "This model was detected in code repositories. See official documentation.",
+  "modelId": "medllama",
+  "description": "MedLLaMA is a community-developed medical domain fine-tune of LLaMA, NOT an official Meta release. Various versions exist from different researchers, fine-tuned on medical literature and datasets for healthcare-related tasks.",
+  "releaseDate": "2023",
   "intendedUse": {
-    "note": "Intended use cases should be verified from official provider documentation."
+    "primaryUses": [
+      "Medical literature understanding",
+      "Healthcare question answering",
+      "Medical education support",
+      "Research assistance in healthcare domain"
+    ],
+    "outOfScope": [
+      "Clinical diagnosis",
+      "Treatment recommendations",
+      "Patient care decisions",
+      "Any real medical advice - FOR RESEARCH ONLY"
+    ]
   },
-  "architecture": {},
+  "architecture": {
+    "type": "Fine-tuned LLaMA model",
+    "contextLength": 2048,
+    "variants": [
+      {
+        "name": "MedLLaMA_13B",
+        "parameters": "13B",
+        "creator": "chaoyi-wu"
+      },
+      {
+        "name": "PMC_LLaMA_13B",
+        "parameters": "13B",
+        "creator": "Axiong"
+      }
+    ],
+    "modalities": {
+      "input": ["text"],
+      "output": ["text"]
+    }
+  },
   "trainingData": {
-    "description": "Training data details are not publicly disclosed for SaaS models."
+    "description": "Fine-tuned on medical corpora including PubMed Central articles and medical instruction datasets. Base model is LLaMA."
   },
-  "trainingProcedure": "Training methodology details are proprietary and not publicly disclosed.",
+  "trainingProcedure": "Continued pretraining and/or instruction tuning on medical datasets from base LLaMA model.",
   "evaluation": {
-    "evaluationData": "See official provider documentation for evaluation data and benchmarks.",
-    "metrics": {
-      "note": "See official provider documentation for specific performance metrics."
-    },
-    "performanceSummary": "See official provider documentation for performance characteristics."
+    "performanceSummary": "Improved performance on medical benchmarks compared to base LLaMA. However, not validated for clinical use."
   },
   "limitations": {
-    "note": "Specific limitations should be verified from official provider documentation."
+    "knownLimitations": [
+      "NOT an official Meta release",
+      "NOT validated for clinical use",
+      "Should NOT be used for medical diagnosis or treatment",
+      "Based on older LLaMA architecture",
+      "Limited context window (2048 tokens)",
+      "May generate medically inaccurate information"
+    ]
   },
   "ethicalConsiderations": {
-    "biasAndFairness": "See official provider documentation for bias and fairness evaluations.",
-    "safetyMeasures": "See official provider documentation for safety measures.",
-    "privacyConsiderations": "Review provider's privacy policy. Sensitive data should not be sent without safeguards."
+    "biasAndFairness": "May reflect biases in medical literature training data.",
+    "safetyMeasures": "FOR RESEARCH PURPOSES ONLY. Not validated for clinical applications.",
+    "privacyConsiderations": "Should not be used with real patient data without proper safeguards."
   },
   "access": {
-    "note": "See official provider documentation for access, rate limits, pricing, and licensing information."
+    "openWeights": true,
+    "pricing": "Free (open weights)",
+    "license": "Apache 2.0 (MedLLaMA_13B) / OpenRAIL (PMC_LLaMA)",
+    "note": "License terms vary by specific variant",
+    "availableOn": [
+      "Hugging Face"
+    ]
   },
   "requirements": {
-    "note": "See official provider documentation for hardware and software requirements."
+    "deployment": "Local deployment",
+    "hardware": {
+      "13B": "GPU required, ~26GB VRAM"
+    }
   },
   "references": {
-    "important": "All information must be verified against official provider documentation."
+    "MedLLaMA_13B": "https://huggingface.co/chaoyi-wu/MedLLaMA_13B",
+    "PMC_LLaMA": "https://huggingface.co/Axiong/PMC_LLaMA_13B"
   },
-  "citation": "See official Meta documentation for citation information.",
-  "additionalInfo": "This model card includes information verified from official provider documentation where available. All information should be verified against official provider documentation.",
-  "lastUpdated": "2025-11-14"
+  "capabilities": [
+    "Medical text understanding",
+    "Healthcare Q&A",
+    "Medical literature comprehension"
+  ],
+  "disclaimer": "This is NOT an official Meta product. It is a community fine-tune for research purposes only. Do not use for medical diagnosis or treatment.",
+  "lastUpdated": "2025-12-26"
 }

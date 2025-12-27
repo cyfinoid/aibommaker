@@ -1,42 +1,95 @@
 {
-  "modelName": "Mixtral 8X7B",
-  "provider": "Mistral",
+  "modelName": "Mixtral 8x7B",
+  "provider": "Mistral AI",
   "modelType": "text-generation",
   "modelId": "mixtral-8x7b",
-  "description": "This model was detected in code repositories. See official documentation.",
+  "description": "Mixtral 8x7B is Mistral AI's groundbreaking Sparse Mixture of Experts (SMoE) model with 45B total parameters but only 14B active per forward pass. It matches or exceeds GPT-3.5 performance while being 6x faster than Llama 2 70B.",
+  "releaseDate": "2024-01-08",
   "intendedUse": {
-    "note": "Intended use cases should be verified from official provider documentation."
+    "primaryUses": [
+      "Text generation",
+      "Code generation",
+      "Instruction following",
+      "Multi-turn conversations",
+      "Efficient inference"
+    ],
+    "outOfScope": [
+      "Medical diagnosis or treatment advice",
+      "Legal advice",
+      "High-stakes autonomous decision making"
+    ]
   },
-  "architecture": {},
-  "trainingData": {
-    "description": "Training data details are not publicly disclosed for SaaS models."
-  },
-  "trainingProcedure": "Training methodology details are proprietary and not publicly disclosed.",
-  "evaluation": {
-    "evaluationData": "See official provider documentation for evaluation data and benchmarks.",
-    "metrics": {
-      "note": "See official provider documentation for specific performance metrics."
+  "architecture": {
+    "type": "Sparse Mixture of Experts (SMoE) Transformer",
+    "totalParameters": "45-47B",
+    "activeParameters": "~14B per forward pass",
+    "numberOfExperts": 8,
+    "expertsPerToken": 2,
+    "contextLength": 8192,
+    "theoreticalAttentionSpan": 128000,
+    "slidingWindowSize": 4096,
+    "tensorType": "BF16",
+    "modalities": {
+      "input": ["text"],
+      "output": ["text"]
     },
-    "performanceSummary": "See official provider documentation for performance characteristics."
+    "features": [
+      "Top-2 expert routing per token",
+      "Sliding Window Attention",
+      "Grouped Query Attention (GQA)",
+      "RoPE embeddings"
+    ]
+  },
+  "trainingData": {
+    "description": "Trained on diverse multilingual text data. Specific composition is proprietary."
+  },
+  "trainingProcedure": "Mixture of Experts training with top-k routing. Instruct variant includes instruction tuning.",
+  "evaluation": {
+    "performanceSummary": "Matches or exceeds GPT-3.5 while being significantly faster than comparable dense models. Outperforms Llama 2 70B on most benchmarks.",
+    "benchmarks": {
+      "note": "Outperforms Llama 2 70B on most tested benchmarks while requiring only 14B active parameters per forward pass"
+    }
   },
   "limitations": {
-    "note": "Specific limitations should be verified from official provider documentation."
+    "knownLimitations": [
+      "Trained context is 8K (theoretical 128K with sliding window)",
+      "All 45B parameters must be loaded in memory",
+      "May generate incorrect information",
+      "MoE architecture requires careful deployment consideration"
+    ]
   },
   "ethicalConsiderations": {
-    "biasAndFairness": "See official provider documentation for bias and fairness evaluations.",
-    "safetyMeasures": "See official provider documentation for safety measures.",
-    "privacyConsiderations": "Review provider's privacy policy. Sensitive data should not be sent without safeguards."
+    "biasAndFairness": "Evaluated for bias with mitigation applied.",
+    "safetyMeasures": "Safety tuning applied to Instruct variant.",
+    "privacyConsiderations": "Open weights allow local deployment for privacy-sensitive applications."
   },
   "access": {
-    "note": "See official provider documentation for access, rate limits, pricing, and licensing information."
+    "openWeights": true,
+    "pricing": "Free (open weights)",
+    "license": "Apache 2.0",
+    "availableOn": [
+      "Hugging Face",
+      "Ollama",
+      "Various cloud providers"
+    ]
   },
   "requirements": {
-    "note": "See official provider documentation for hardware and software requirements."
+    "deployment": "Local deployment or cloud deployment",
+    "hardware": {
+      "fullPrecision": "~70GB RAM (all experts loaded)",
+      "4bitQuantized": "~27GB (fits on single A100 40GB)"
+    }
   },
   "references": {
-    "important": "All information must be verified against official provider documentation."
+    "huggingFace": "https://huggingface.co/mistralai/Mixtral-8x7B-v0.1",
+    "announcement": "https://mistral.ai/news/mixtral-of-experts/",
+    "paper": "https://arxiv.org/abs/2401.04088"
   },
-  "citation": "See official Mistral documentation for citation information.",
-  "additionalInfo": "This model card includes information verified from official provider documentation where available. All information should be verified against official provider documentation.",
-  "lastUpdated": "2025-11-14"
+  "capabilities": [
+    "Text generation",
+    "Code generation",
+    "Efficient inference (MoE)",
+    "Instruction following"
+  ],
+  "lastUpdated": "2025-12-26"
 }

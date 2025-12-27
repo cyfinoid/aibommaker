@@ -1,52 +1,86 @@
 {
-  "modelName": "Gpt 3.5 Turbo",
-  "provider": "Openai",
+  "modelName": "GPT-3.5 Turbo",
+  "provider": "OpenAI",
   "modelType": "text-generation",
   "modelId": "gpt-3.5-turbo",
-  "description": "GPT-3.5 Turbo is optimized for chat.",
+  "description": "GPT-3.5 Turbo is OpenAI's fast and cost-effective model for simpler tasks. It's optimized for chat and traditional completions tasks, offering good performance at low cost.",
+  "releaseDate": "2022-11-30",
   "intendedUse": {
-    "note": "Intended use cases should be verified from official provider documentation."
+    "primaryUses": [
+      "Conversational AI and chatbots",
+      "Text generation and completion",
+      "Simple code generation",
+      "Content summarization",
+      "Translation",
+      "High-volume, cost-sensitive applications"
+    ],
+    "outOfScope": [
+      "Complex reasoning requiring GPT-4 capabilities",
+      "Medical diagnosis or treatment advice",
+      "Legal advice",
+      "High-stakes decision making"
+    ]
   },
   "architecture": {
-    "contextLength": "16,385 tokens (verified from official documentation)"
+    "type": "Transformer-based language model",
+    "contextLength": 16385,
+    "maxOutputTokens": 4096,
+    "modalities": {
+      "input": ["text"],
+      "output": ["text"]
+    }
   },
   "trainingData": {
-    "description": "Training data details are not publicly disclosed for SaaS models."
+    "description": "Trained on a diverse mixture of licensed data, data created by human trainers, and publicly available data.",
+    "cutoffDate": "2021-09"
   },
-  "trainingProcedure": "Training methodology details are proprietary and not publicly disclosed.",
+  "trainingProcedure": "Trained using Reinforcement Learning from Human Feedback (RLHF). Optimized for chat-style interactions.",
   "evaluation": {
-    "evaluationData": "See official provider documentation for evaluation data and benchmarks.",
-    "metrics": {
-      "note": "See official provider documentation for specific performance metrics."
-    },
-    "performanceSummary": "See official provider documentation for performance characteristics."
+    "performanceSummary": "Provides good performance for everyday tasks at a fraction of the cost of GPT-4. Suitable for most applications that don't require advanced reasoning.",
+    "benchmarks": {
+      "MMLU": "70%",
+      "HellaSwag": "85.5%",
+      "HumanEval": "48.1%"
+    }
   },
   "limitations": {
-    "note": "Specific limitations should be verified from official provider documentation."
+    "knownLimitations": [
+      "Less capable than GPT-4 on complex reasoning tasks",
+      "May generate incorrect or misleading information",
+      "Knowledge limited to September 2021 cutoff",
+      "Can exhibit biases present in training data",
+      "Limited mathematical reasoning compared to GPT-4"
+    ]
   },
   "ethicalConsiderations": {
-    "biasAndFairness": "See official provider documentation for bias and fairness evaluations.",
-    "safetyMeasures": "See official provider documentation for safety measures.",
-    "privacyConsiderations": "Review provider's privacy policy. Sensitive data should not be sent without safeguards."
+    "biasAndFairness": "OpenAI has implemented safety mitigations but the model may still exhibit biases.",
+    "safetyMeasures": "Built-in content filtering and RLHF training to refuse harmful requests.",
+    "privacyConsiderations": "Data sent to the API may be used to improve the model unless opted out."
   },
   "access": {
-    "note": "See official provider documentation for access, rate limits, pricing, and licensing information."
+    "apiAccess": true,
+    "pricing": {
+      "input": "$0.50 per 1M tokens",
+      "output": "$1.50 per 1M tokens"
+    },
+    "rateLimits": "Varies by usage tier",
+    "license": "Proprietary - OpenAI Terms of Use"
   },
   "requirements": {
-    "note": "See official provider documentation for hardware and software requirements."
+    "deployment": "API-only (cloud-hosted by OpenAI)",
+    "hardware": "Not applicable - SaaS model"
   },
   "references": {
-    "important": "All information must be verified against official provider documentation.",
-    "modelSpecificDocs": "https://platform.openai.com/docs/models/gpt-3-5-turbo",
-    "officialDocs": "https://platform.openai.com/docs/models",
-    "gptOssCard": "https://openai.com/index/gpt-oss-model-card/",
-    "pricing": "https://openai.com/pricing"
+    "modelPage": "https://platform.openai.com/docs/models/gpt-3-5-turbo",
+    "pricing": "https://openai.com/api/pricing/"
   },
-  "citation": "See official Openai documentation for citation information.",
-  "additionalInfo": "This model card includes information verified from official provider documentation where available. All information should be verified against official provider documentation.",
-  "lastUpdated": "2025-11-14",
   "capabilities": [
-    "Text generation"
+    "Text generation",
+    "Code generation",
+    "Conversational AI",
+    "Function calling",
+    "JSON mode"
   ],
-  "knowledgeCutoff": "2024-09"
+  "knowledgeCutoff": "2021-09",
+  "lastUpdated": "2025-12-26"
 }

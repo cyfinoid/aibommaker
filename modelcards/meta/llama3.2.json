@@ -1,42 +1,131 @@
 {
-  "modelName": "Llama3.2",
+  "modelName": "Llama 3.2",
   "provider": "Meta",
   "modelType": "text-generation",
-  "modelId": "llama3.2",
-  "description": "This model was detected in code repositories. See official documentation.",
+  "modelId": "llama-3.2",
+  "description": "Llama 3.2 is Meta's multimodal model family featuring both lightweight text models (1B, 3B) and vision-language models (11B, 90B). The vision models can understand images alongside text, while the smaller text models are optimized for edge and mobile deployment.",
+  "releaseDate": "2024-09-25",
   "intendedUse": {
-    "note": "Intended use cases should be verified from official provider documentation."
+    "primaryUses": [
+      "Visual question answering",
+      "Image captioning and understanding",
+      "Document and chart analysis",
+      "On-device text generation",
+      "Edge deployment",
+      "Multi-turn conversations"
+    ],
+    "outOfScope": [
+      "Medical diagnosis or treatment advice",
+      "Legal advice",
+      "High-stakes autonomous decision making",
+      "Generation of harmful content"
+    ]
   },
-  "architecture": {},
+  "architecture": {
+    "type": "Auto-regressive Transformer with vision adapter for multimodal variants",
+    "contextLength": 128000,
+    "variants": [
+      {
+        "name": "Llama-3.2-1B-Instruct",
+        "parameters": "1.23B",
+        "type": "text-only"
+      },
+      {
+        "name": "Llama-3.2-3B-Instruct",
+        "parameters": "3.21B",
+        "type": "text-only"
+      },
+      {
+        "name": "Llama-3.2-11B-Vision-Instruct",
+        "parameters": "10.6B",
+        "type": "multimodal"
+      },
+      {
+        "name": "Llama-3.2-90B-Vision-Instruct",
+        "parameters": "88.8B",
+        "type": "multimodal"
+      }
+    ],
+    "modalities": {
+      "textModels": {
+        "input": ["text"],
+        "output": ["text"]
+      },
+      "visionModels": {
+        "input": ["text", "images"],
+        "output": ["text"]
+      }
+    }
+  },
   "trainingData": {
-    "description": "Training data details are not publicly disclosed for SaaS models."
+    "description": "Text models trained on up to 9 trillion tokens via knowledge distillation from Llama 3.1. Vision models trained on 6B image-text pairs.",
+    "cutoffDate": "2023-12"
   },
-  "trainingProcedure": "Training methodology details are proprietary and not publicly disclosed.",
+  "trainingProcedure": "Text models use knowledge distillation from Llama 3.1 8B and 70B. Vision models use vision adapter with cross-attention layers integrated with Llama 3.1.",
   "evaluation": {
-    "evaluationData": "See official provider documentation for evaluation data and benchmarks.",
-    "metrics": {
-      "note": "See official provider documentation for specific performance metrics."
-    },
-    "performanceSummary": "See official provider documentation for performance characteristics."
+    "performanceSummary": "Strong performance for model sizes. Vision models excel at document understanding and visual QA. Text models optimized for on-device efficiency.",
+    "benchmarks": {
+      "VQAv2_11B": "75.2%",
+      "DocVQA_11B": "88.4 ANLS",
+      "ChartQA_11B_CoT": "83.4%",
+      "AI2_Diagram_11B": "91.1%",
+      "MMLU_CoT_11B": "73.0%"
+    }
   },
   "limitations": {
-    "note": "Specific limitations should be verified from official provider documentation."
+    "knownLimitations": [
+      "Knowledge limited to December 2023 cutoff",
+      "Vision models: image+text in English only",
+      "EU restrictions on multimodal models (requires separate agreement)",
+      "May generate incorrect or misleading information",
+      "Smaller text models less capable than larger variants"
+    ]
   },
   "ethicalConsiderations": {
-    "biasAndFairness": "See official provider documentation for bias and fairness evaluations.",
-    "safetyMeasures": "See official provider documentation for safety measures.",
-    "privacyConsiderations": "Review provider's privacy policy. Sensitive data should not be sent without safeguards."
+    "biasAndFairness": "Evaluated for bias with mitigation applied during training.",
+    "safetyMeasures": "RLHF alignment and safety tuning applied.",
+    "privacyConsiderations": "Open weights allow local and edge deployment for privacy-sensitive applications."
   },
   "access": {
-    "note": "See official provider documentation for access, rate limits, pricing, and licensing information."
+    "openWeights": true,
+    "pricing": "Free (open weights)",
+    "license": "Llama 3.2 Community License",
+    "licenseTerms": [
+      "Commercial and research use permitted",
+      "Attribution required: 'Built with Llama'",
+      "Separate license required for >700M monthly active users",
+      "EU restriction: Separate agreement required for multimodal rights"
+    ],
+    "availableOn": [
+      "Hugging Face",
+      "Meta AI",
+      "Ollama",
+      "Various cloud providers"
+    ]
   },
   "requirements": {
-    "note": "See official provider documentation for hardware and software requirements."
+    "deployment": "Local deployment, edge deployment, or cloud deployment",
+    "hardware": {
+      "1B": "Can run on mobile devices and CPUs",
+      "3B": "Can run on edge devices, ~6GB RAM",
+      "11B": "GPU recommended, ~22GB VRAM",
+      "90B": "High-end GPU required, ~180GB VRAM for full precision"
+    }
   },
   "references": {
-    "important": "All information must be verified against official provider documentation."
+    "modelPage": "https://llama.meta.com/",
+    "huggingFace": "https://huggingface.co/meta-llama",
+    "github": "https://github.com/meta-llama/llama3"
   },
-  "citation": "See official Meta documentation for citation information.",
-  "additionalInfo": "This model card includes information verified from official provider documentation where available. All information should be verified against official provider documentation.",
-  "lastUpdated": "2025-11-14"
+  "capabilities": [
+    "Text generation",
+    "Vision (image understanding) - 11B/90B only",
+    "Document VQA",
+    "Chart understanding",
+    "On-device inference",
+    "Multilingual (8 languages)"
+  ],
+  "supportedLanguages": ["English", "German", "French", "Italian", "Portuguese", "Hindi", "Spanish", "Thai"],
+  "knowledgeCutoff": "2023-12",
+  "lastUpdated": "2025-12-26"
 }

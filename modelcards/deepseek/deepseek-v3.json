@@ -1,42 +1,104 @@
 {
-  "modelName": "Deepseek V3",
-  "provider": "Deepseek",
+  "modelName": "DeepSeek-V3",
+  "provider": "DeepSeek",
   "modelType": "text-generation",
   "modelId": "deepseek-v3",
-  "description": "This model was detected in code repositories. See official documentation.",
+  "description": "DeepSeek-V3 is a 671B parameter (37B active) MoE model trained on 14.8 trillion tokens. It introduces Multi-head Latent Attention (MLA) and auxiliary-loss-free load balancing, achieving GPT-4o level performance at a fraction of the training cost.",
+  "releaseDate": "2024-12-26",
   "intendedUse": {
-    "note": "Intended use cases should be verified from official provider documentation."
+    "primaryUses": [
+      "General text generation",
+      "Complex reasoning",
+      "Code generation",
+      "Mathematical reasoning",
+      "Long-context document processing"
+    ],
+    "outOfScope": [
+      "Medical diagnosis or treatment advice",
+      "Legal advice",
+      "High-stakes autonomous decision making"
+    ]
   },
-  "architecture": {},
-  "trainingData": {
-    "description": "Training data details are not publicly disclosed for SaaS models."
-  },
-  "trainingProcedure": "Training methodology details are proprietary and not publicly disclosed.",
-  "evaluation": {
-    "evaluationData": "See official provider documentation for evaluation data and benchmarks.",
-    "metrics": {
-      "note": "See official provider documentation for specific performance metrics."
+  "architecture": {
+    "type": "Mixture-of-Experts (MoE) Transformer",
+    "totalParameters": "671B (685B with MTP module)",
+    "activeParameters": "37B per token",
+    "mtpModule": "14B additional parameters",
+    "contextLength": 128000,
+    "tensorType": "FP8/BF16",
+    "modalities": {
+      "input": ["text"],
+      "output": ["text"]
     },
-    "performanceSummary": "See official provider documentation for performance characteristics."
+    "innovations": [
+      "Multi-head Latent Attention (MLA)",
+      "DeepSeekMoE Architecture",
+      "Auxiliary-loss-free Load Balancing",
+      "Multi-Token Prediction (MTP)"
+    ]
+  },
+  "trainingData": {
+    "description": "Trained on 14.8 trillion high-quality, diverse tokens.",
+    "trainingCost": "2.788M H800 GPU hours total (2.664M pre-training + 0.1M post-training)"
+  },
+  "trainingProcedure": "FP8 mixed precision training (first at extreme scale), SFT + RL with knowledge distillation from DeepSeek-R1.",
+  "evaluation": {
+    "performanceSummary": "Competitive with GPT-4o and Claude 3.5 Sonnet at significantly lower training cost.",
+    "benchmarks": {
+      "MMLU": "88.5%",
+      "MMLU_Redux": "89.1%",
+      "MATH_500": "90.2%",
+      "AIME_2024": "39.2%",
+      "HumanEval_Mul": "82.6%",
+      "Arena_Hard": "85.5",
+      "AlpacaEval_2": "70.0%"
+    }
   },
   "limitations": {
-    "note": "Specific limitations should be verified from official provider documentation."
+    "knownLimitations": [
+      "Requires massive compute for full model",
+      "May generate incorrect information",
+      "Knowledge limited to training data cutoff"
+    ]
   },
   "ethicalConsiderations": {
-    "biasAndFairness": "See official provider documentation for bias and fairness evaluations.",
-    "safetyMeasures": "See official provider documentation for safety measures.",
-    "privacyConsiderations": "Review provider's privacy policy. Sensitive data should not be sent without safeguards."
+    "biasAndFairness": "Evaluated for bias with mitigation applied.",
+    "safetyMeasures": "Safety tuning applied during post-training.",
+    "privacyConsiderations": "Open weights allow local deployment."
   },
   "access": {
-    "note": "See official provider documentation for access, rate limits, pricing, and licensing information."
+    "openWeights": true,
+    "apiAccess": true,
+    "license": {
+      "code": "MIT License",
+      "model": "DeepSeek Model License Agreement"
+    },
+    "commercialUse": true,
+    "availableOn": [
+      "Hugging Face",
+      "DeepSeek API"
+    ]
   },
   "requirements": {
-    "note": "See official provider documentation for hardware and software requirements."
+    "deployment": "Local deployment or API access",
+    "hardware": "Multi-GPU cluster for full model",
+    "inferenceFrameworks": [
+      "SGLang (recommended)",
+      "LMDeploy (recommended)",
+      "TensorRT-LLM (recommended)",
+      "vLLM (recommended)"
+    ]
   },
   "references": {
-    "important": "All information must be verified against official provider documentation."
+    "huggingFace": "https://huggingface.co/deepseek-ai/DeepSeek-V3",
+    "paper": "https://arxiv.org/abs/2412.19437"
   },
-  "citation": "See official Deepseek documentation for citation information.",
-  "additionalInfo": "This model card includes information verified from official provider documentation where available. All information should be verified against official provider documentation.",
-  "lastUpdated": "2025-11-14"
+  "capabilities": [
+    "Text generation",
+    "Code generation",
+    "Mathematical reasoning",
+    "Long-context processing",
+    "Multi-token prediction"
+  ],
+  "lastUpdated": "2025-12-26"
 }

@@ -1,42 +1,95 @@
 {
-  "modelName": "Mistral",
-  "provider": "Mistral",
+  "modelName": "Mistral 7B",
+  "provider": "Mistral AI",
   "modelType": "text-generation",
-  "modelId": "mistral",
-  "description": "This model was detected in code repositories. See official documentation.",
+  "modelId": "mistral-7b",
+  "description": "Mistral 7B is Mistral AI's foundational 7B parameter open-weights model featuring Grouped-Query Attention (GQA) and Sliding-Window Attention for efficient inference. It outperforms Llama 2 13B on all benchmarks and supports function calling in v0.3.",
+  "releaseDate": "2023-09-27",
   "intendedUse": {
-    "note": "Intended use cases should be verified from official provider documentation."
+    "primaryUses": [
+      "Text generation",
+      "Code generation",
+      "Instruction following",
+      "Function calling (v0.3+)",
+      "Efficient on-device deployment"
+    ],
+    "outOfScope": [
+      "Medical diagnosis or treatment advice",
+      "Legal advice",
+      "High-stakes autonomous decision making"
+    ]
   },
-  "architecture": {},
-  "trainingData": {
-    "description": "Training data details are not publicly disclosed for SaaS models."
-  },
-  "trainingProcedure": "Training methodology details are proprietary and not publicly disclosed.",
-  "evaluation": {
-    "evaluationData": "See official provider documentation for evaluation data and benchmarks.",
-    "metrics": {
-      "note": "See official provider documentation for specific performance metrics."
+  "architecture": {
+    "type": "Decoder-only Transformer with GQA and Sliding-Window Attention",
+    "parameters": "7B",
+    "contextLength": 8192,
+    "slidingWindow": 4096,
+    "vocabularySize": 32768,
+    "tensorType": "BF16",
+    "modalities": {
+      "input": ["text"],
+      "output": ["text"]
     },
-    "performanceSummary": "See official provider documentation for performance characteristics."
+    "features": [
+      "Grouped-Query Attention (GQA)",
+      "Sliding-Window Attention",
+      "Byte-fallback BPE Tokenizer"
+    ]
+  },
+  "trainingData": {
+    "description": "Trained on diverse text data. Specific composition is proprietary."
+  },
+  "trainingProcedure": "Pre-training with architectural optimizations. Instruct variants include instruction tuning.",
+  "evaluation": {
+    "performanceSummary": "Outperforms Llama 2 13B on all tested benchmarks while being smaller. Strong efficiency through GQA and sliding-window attention.",
+    "benchmarks": {
+      "note": "Outperforms Llama 2 13B on all tested benchmarks"
+    }
   },
   "limitations": {
-    "note": "Specific limitations should be verified from official provider documentation."
+    "knownLimitations": [
+      "8K context window",
+      "May generate incorrect information",
+      "Smaller than larger models in the family",
+      "Knowledge limited to training data cutoff"
+    ]
   },
   "ethicalConsiderations": {
-    "biasAndFairness": "See official provider documentation for bias and fairness evaluations.",
-    "safetyMeasures": "See official provider documentation for safety measures.",
-    "privacyConsiderations": "Review provider's privacy policy. Sensitive data should not be sent without safeguards."
+    "biasAndFairness": "Evaluated for bias with mitigation applied.",
+    "safetyMeasures": "Safety tuning applied to Instruct variants.",
+    "privacyConsiderations": "Open weights allow local deployment for privacy-sensitive applications."
   },
   "access": {
-    "note": "See official provider documentation for access, rate limits, pricing, and licensing information."
+    "openWeights": true,
+    "pricing": "Free (open weights)",
+    "license": "Apache 2.0",
+    "availableOn": [
+      "Hugging Face",
+      "Ollama",
+      "Various cloud providers"
+    ]
   },
   "requirements": {
-    "note": "See official provider documentation for hardware and software requirements."
+    "deployment": "Local deployment, edge deployment, or cloud deployment",
+    "hardware": {
+      "7B": "GPU recommended, ~14GB VRAM for full precision"
+    }
   },
   "references": {
-    "important": "All information must be verified against official provider documentation."
+    "huggingFace": "https://huggingface.co/mistralai/Mistral-7B-v0.1",
+    "huggingFaceInstruct": "https://huggingface.co/mistralai/Mistral-7B-Instruct-v0.3",
+    "paper": "https://arxiv.org/abs/2310.06825"
   },
-  "citation": "See official Mistral documentation for citation information.",
-  "additionalInfo": "This model card includes information verified from official provider documentation where available. All information should be verified against official provider documentation.",
-  "lastUpdated": "2025-11-14"
+  "capabilities": [
+    "Text generation",
+    "Code generation",
+    "Function calling (v0.3+)",
+    "Instruction following"
+  ],
+  "variants": [
+    "Mistral-7B-v0.1 (base)",
+    "Mistral-7B-v0.3 (extended vocabulary, function calling)",
+    "Mistral-7B-Instruct-v0.3 (instruction-tuned)"
+  ],
+  "lastUpdated": "2025-12-26"
 }

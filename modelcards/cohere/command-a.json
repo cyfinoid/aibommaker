@@ -3,40 +3,56 @@
   "provider": "Cohere",
   "modelType": "text-generation",
   "modelId": "command-a",
-  "description": "This model was detected in code repositories. See official documentation.",
+  "description": "Command A is a recent addition to Cohere's Command model family. Specifications and capabilities should be verified from Cohere's official documentation.",
   "intendedUse": {
-    "note": "Intended use cases should be verified from official provider documentation."
+    "primaryUses": [
+      "Text generation",
+      "Enterprise applications"
+    ],
+    "outOfScope": [
+      "Medical diagnosis or treatment advice",
+      "Legal advice"
+    ]
   },
-  "architecture": {},
+  "architecture": {
+    "type": "Decoder-only Transformer",
+    "modalities": {
+      "input": ["text"],
+      "output": ["text"]
+    }
+  },
   "trainingData": {
-    "description": "Training data details are not publicly disclosed for SaaS models."
+    "description": "Training data details are proprietary."
   },
-  "trainingProcedure": "Training methodology details are proprietary and not publicly disclosed.",
+  "trainingProcedure": "Training methodology is proprietary.",
   "evaluation": {
-    "evaluationData": "See official provider documentation for evaluation data and benchmarks.",
-    "metrics": {
-      "note": "See official provider documentation for specific performance metrics."
-    },
-    "performanceSummary": "See official provider documentation for performance characteristics."
+    "performanceSummary": "See official Cohere documentation for performance benchmarks."
   },
   "limitations": {
-    "note": "Specific limitations should be verified from official provider documentation."
+    "knownLimitations": [
+      "Specifications should be verified from official documentation"
+    ]
   },
   "ethicalConsiderations": {
-    "biasAndFairness": "See official provider documentation for bias and fairness evaluations.",
-    "safetyMeasures": "See official provider documentation for safety measures.",
-    "privacyConsiderations": "Review provider's privacy policy. Sensitive data should not be sent without safeguards."
+    "biasAndFairness": "Cohere applies safety measures to reduce harmful outputs.",
+    "safetyMeasures": "Safety tuning applied.",
+    "privacyConsiderations": "Enterprise options available."
   },
   "access": {
-    "note": "See official provider documentation for access, rate limits, pricing, and licensing information."
+    "apiAccess": true,
+    "license": "Proprietary - Cohere Terms of Service"
   },
   "requirements": {
-    "note": "See official provider documentation for hardware and software requirements."
+    "deployment": "API access",
+    "hardware": "Not applicable - SaaS model"
   },
   "references": {
-    "important": "All information must be verified against official provider documentation."
+    "modelPage": "https://cohere.com/command",
+    "documentation": "https://docs.cohere.com/",
+    "pricing": "https://cohere.com/pricing"
   },
-  "citation": "See official Cohere documentation for citation information.",
-  "additionalInfo": "This model card includes information verified from official provider documentation where available. All information should be verified against official provider documentation.",
-  "lastUpdated": "2025-11-14"
+  "capabilities": [
+    "Text generation"
+  ],
+  "lastUpdated": "2025-12-26"
 }

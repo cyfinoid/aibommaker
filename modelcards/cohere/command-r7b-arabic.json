@@ -3,40 +3,63 @@
   "provider": "Cohere",
   "modelType": "text-generation",
   "modelId": "command-r7b-arabic",
-  "description": "This model was detected in code repositories. See official documentation.",
+  "description": "Command R7B Arabic is Cohere's Arabic-specialized 7B parameter model, optimized for Arabic language understanding and generation. Part of Cohere's multilingual model offerings.",
   "intendedUse": {
-    "note": "Intended use cases should be verified from official provider documentation."
+    "primaryUses": [
+      "Arabic text generation",
+      "Arabic conversational AI",
+      "Arabic document processing",
+      "Multilingual applications with Arabic focus"
+    ],
+    "outOfScope": [
+      "Medical diagnosis or treatment advice",
+      "Legal advice",
+      "High-stakes autonomous decision making"
+    ]
   },
-  "architecture": {},
+  "architecture": {
+    "type": "Decoder-only Transformer",
+    "parameters": "7B",
+    "modalities": {
+      "input": ["text"],
+      "output": ["text"]
+    }
+  },
   "trainingData": {
-    "description": "Training data details are not publicly disclosed for SaaS models."
+    "description": "Specialized training on Arabic language data."
   },
-  "trainingProcedure": "Training methodology details are proprietary and not publicly disclosed.",
+  "trainingProcedure": "Fine-tuned for Arabic language capabilities.",
   "evaluation": {
-    "evaluationData": "See official provider documentation for evaluation data and benchmarks.",
-    "metrics": {
-      "note": "See official provider documentation for specific performance metrics."
-    },
-    "performanceSummary": "See official provider documentation for performance characteristics."
+    "performanceSummary": "Optimized for Arabic language tasks. See official Cohere documentation for benchmarks."
   },
   "limitations": {
-    "note": "Specific limitations should be verified from official provider documentation."
+    "knownLimitations": [
+      "Specialized for Arabic - may be less capable in other languages",
+      "Smaller model (7B) compared to Command R series",
+      "May generate incorrect information"
+    ]
   },
   "ethicalConsiderations": {
-    "biasAndFairness": "See official provider documentation for bias and fairness evaluations.",
-    "safetyMeasures": "See official provider documentation for safety measures.",
-    "privacyConsiderations": "Review provider's privacy policy. Sensitive data should not be sent without safeguards."
+    "biasAndFairness": "Evaluated for bias in Arabic language contexts.",
+    "safetyMeasures": "Safety tuning applied.",
+    "privacyConsiderations": "API access with standard privacy measures."
   },
   "access": {
-    "note": "See official provider documentation for access, rate limits, pricing, and licensing information."
+    "apiAccess": true,
+    "license": "Proprietary - Cohere Terms of Service"
   },
   "requirements": {
-    "note": "See official provider documentation for hardware and software requirements."
+    "deployment": "API access",
+    "hardware": "Not applicable - SaaS model"
   },
   "references": {
-    "important": "All information must be verified against official provider documentation."
+    "documentation": "https://docs.cohere.com/",
+    "pricing": "https://cohere.com/pricing"
   },
-  "citation": "See official Cohere documentation for citation information.",
-  "additionalInfo": "This model card includes information verified from official provider documentation where available. All information should be verified against official provider documentation.",
-  "lastUpdated": "2025-11-14"
+  "capabilities": [
+    "Arabic text generation",
+    "Multilingual support"
+  ],
+  "supportedLanguages": ["Arabic", "English"],
+  "lastUpdated": "2025-12-26"
 }

@@ -1,42 +1,107 @@
 {
   "modelName": "Meditron",
-  "provider": "Epfl",
+  "provider": "EPFL (Swiss Federal Institute of Technology)",
   "modelType": "text-generation",
   "modelId": "meditron",
-  "description": "This model was detected in code repositories. See official documentation.",
+  "description": "Meditron is EPFL's medical domain LLM built on Llama 2. Available in 7B and 70B sizes, it's trained on 48.1B tokens of medical data including clinical guidelines, PubMed abstracts, and medical papers. FOR RESEARCH PURPOSES ONLY.",
+  "releaseDate": "2023-11-14",
   "intendedUse": {
-    "note": "Intended use cases should be verified from official provider documentation."
+    "primaryUses": [
+      "Medical literature understanding",
+      "Medical question answering",
+      "Healthcare research assistance",
+      "Medical education support"
+    ],
+    "outOfScope": [
+      "Clinical diagnosis",
+      "Treatment recommendations",
+      "Patient care decisions",
+      "Any real medical advice - FOR RESEARCH ONLY"
+    ]
   },
-  "architecture": {},
+  "architecture": {
+    "type": "Decoder-only Transformer (Llama 2 base)",
+    "variants": [
+      {
+        "name": "Meditron-7B",
+        "parameters": "7B",
+        "contextLength": 2048,
+        "hiddenDim": 4096,
+        "layers": 32,
+        "attentionHeads": 32
+      },
+      {
+        "name": "Meditron-70B",
+        "parameters": "70B",
+        "contextLength": 4096,
+        "hiddenDim": 8192,
+        "layers": 80,
+        "attentionHeads": 64
+      }
+    ],
+    "modalities": {
+      "input": ["text"],
+      "output": ["text"]
+    }
+  },
   "trainingData": {
-    "description": "Training data details are not publicly disclosed for SaaS models."
+    "description": "GAP-Replay Corpus (48.1B tokens): 46K clinical guidelines, 16.1M PubMed abstracts, 5M full-text papers, 400M replay tokens from RedPajama-v1.",
+    "cutoffDate": "2023-08"
   },
-  "trainingProcedure": "Training methodology details are proprietary and not publicly disclosed.",
+  "trainingProcedure": "Continued pre-training from Llama 2 on medical corpus. 70B used 128 x A100 80GB GPUs (42,496 GPU hours).",
   "evaluation": {
-    "evaluationData": "See official provider documentation for evaluation data and benchmarks.",
-    "metrics": {
-      "note": "See official provider documentation for specific performance metrics."
-    },
-    "performanceSummary": "See official provider documentation for performance characteristics."
+    "performanceSummary": "Improved medical benchmark performance over Llama 2. Average 72.0% on medical benchmarks vs 69.2% for Llama 2 70B.",
+    "benchmarks": {
+      "MMLU_Medical_70B": "77.6%",
+      "PubMedQA_70B": "81.6%",
+      "MedMCQA_70B": "66.0%",
+      "MedQA_70B": "64.4%",
+      "MedQA_4opt_70B": "70.2%"
+    }
   },
   "limitations": {
-    "note": "Specific limitations should be verified from official provider documentation."
+    "knownLimitations": [
+      "FOR RESEARCH PURPOSES ONLY",
+      "NOT validated for clinical use",
+      "Should NOT be used for medical diagnosis or treatment",
+      "Limited context window (2K-4K tokens)",
+      "May generate medically inaccurate information",
+      "English-only"
+    ]
   },
   "ethicalConsiderations": {
-    "biasAndFairness": "See official provider documentation for bias and fairness evaluations.",
-    "safetyMeasures": "See official provider documentation for safety measures.",
-    "privacyConsiderations": "Review provider's privacy policy. Sensitive data should not be sent without safeguards."
+    "biasAndFairness": "May reflect biases in medical literature.",
+    "safetyMeasures": "FOR RESEARCH PURPOSES ONLY. Not validated for clinical applications.",
+    "privacyConsiderations": "Should not be used with real patient data without proper safeguards."
   },
   "access": {
-    "note": "See official provider documentation for access, rate limits, pricing, and licensing information."
+    "openWeights": true,
+    "pricing": "Free (open weights)",
+    "license": {
+      "model": "Llama 2 Community License",
+      "code": "Apache 2.0"
+    },
+    "availableOn": [
+      "Hugging Face"
+    ]
   },
   "requirements": {
-    "note": "See official provider documentation for hardware and software requirements."
+    "deployment": "Local deployment",
+    "hardware": {
+      "7B": "~14GB VRAM",
+      "70B": "~140GB VRAM"
+    }
   },
   "references": {
-    "important": "All information must be verified against official provider documentation."
+    "huggingFace_7B": "https://huggingface.co/epfl-llm/meditron-7b",
+    "huggingFace_70B": "https://huggingface.co/epfl-llm/meditron-70b",
+    "paper": "https://arxiv.org/abs/2311.16079"
   },
-  "citation": "See official Epfl documentation for citation information.",
-  "additionalInfo": "This model card includes information verified from official provider documentation where available. All information should be verified against official provider documentation.",
-  "lastUpdated": "2025-11-14"
+  "capabilities": [
+    "Medical text understanding",
+    "Medical Q&A",
+    "Healthcare research"
+  ],
+  "disclaimer": "This model is intended FOR RESEARCH PURPOSES ONLY. It is NOT validated for clinical use. Do NOT use for medical diagnosis, treatment decisions, or patient care.",
+  "lastUpdated": "2025-12-26"
 }

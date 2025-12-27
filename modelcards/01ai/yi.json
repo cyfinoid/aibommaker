@@ -1,42 +1,89 @@
 {
   "modelName": "Yi",
-  "provider": "01Ai",
+  "provider": "01.AI",
   "modelType": "text-generation",
   "modelId": "yi",
-  "description": "This model was detected in code repositories. See official documentation.",
+  "description": "Yi is 01.AI's open-weights LLM family founded by Dr. Kai-Fu Lee. Available in 6B, 9B, and 34B sizes with context lengths up to 200K tokens. Bilingual (English/Chinese) with strong reasoning capabilities.",
+  "releaseDate": "2023-11-02",
   "intendedUse": {
-    "note": "Intended use cases should be verified from official provider documentation."
+    "primaryUses": [
+      "Bilingual text generation (English/Chinese)",
+      "Long-context document processing",
+      "Code generation",
+      "Reasoning and analysis",
+      "Research and commercial applications"
+    ],
+    "outOfScope": [
+      "Medical diagnosis or treatment advice",
+      "Legal advice",
+      "High-stakes autonomous decision making"
+    ]
   },
-  "architecture": {},
-  "trainingData": {
-    "description": "Training data details are not publicly disclosed for SaaS models."
-  },
-  "trainingProcedure": "Training methodology details are proprietary and not publicly disclosed.",
-  "evaluation": {
-    "evaluationData": "See official provider documentation for evaluation data and benchmarks.",
-    "metrics": {
-      "note": "See official provider documentation for specific performance metrics."
+  "architecture": {
+    "type": "Decoder-only Transformer",
+    "variants": [
+      {"name": "Yi-6B", "parameters": "6B"},
+      {"name": "Yi-9B", "parameters": "9B"},
+      {"name": "Yi-34B", "parameters": "34B"}
+    ],
+    "contextLength": {
+      "standard": "4K",
+      "extended": "200K"
     },
-    "performanceSummary": "See official provider documentation for performance characteristics."
+    "modalities": {
+      "input": ["text"],
+      "output": ["text"]
+    }
+  },
+  "trainingData": {
+    "description": "Trained on 3 trillion multilingual tokens with focus on English and Chinese.",
+    "cutoffDate": "2023-06"
+  },
+  "trainingProcedure": "Pre-training on diverse corpus. Yi-1.5 includes 500B additional high-quality tokens and 3M fine-tuning samples.",
+  "evaluation": {
+    "performanceSummary": "Strong bilingual performance. Yi-34B-200K achieves 99.8% on Needle-in-a-Haystack benchmark for long-context retrieval."
   },
   "limitations": {
-    "note": "Specific limitations should be verified from official provider documentation."
+    "knownLimitations": [
+      "Bilingual focus (English/Chinese) - less capable in other languages",
+      "Knowledge cutoff of June 2023",
+      "May generate incorrect information"
+    ]
   },
   "ethicalConsiderations": {
-    "biasAndFairness": "See official provider documentation for bias and fairness evaluations.",
-    "safetyMeasures": "See official provider documentation for safety measures.",
-    "privacyConsiderations": "Review provider's privacy policy. Sensitive data should not be sent without safeguards."
+    "biasAndFairness": "Evaluated for bias with mitigation applied.",
+    "safetyMeasures": "Safety tuning applied to chat variants.",
+    "privacyConsiderations": "Open weights allow local deployment."
   },
   "access": {
-    "note": "See official provider documentation for access, rate limits, pricing, and licensing information."
+    "openWeights": true,
+    "pricing": "Free (open weights)",
+    "license": "Apache 2.0",
+    "availableOn": [
+      "Hugging Face",
+      "01.AI",
+      "Ollama"
+    ]
   },
   "requirements": {
-    "note": "See official provider documentation for hardware and software requirements."
+    "deployment": "Local deployment or cloud deployment",
+    "hardware": {
+      "6B": "~12GB VRAM",
+      "9B": "~18GB VRAM",
+      "34B": "~68GB VRAM"
+    }
   },
   "references": {
-    "important": "All information must be verified against official provider documentation."
+    "huggingFace": "https://huggingface.co/01-ai",
+    "website": "https://01.ai/"
   },
-  "citation": "See official 01Ai documentation for citation information.",
-  "additionalInfo": "This model card includes information verified from official provider documentation where available. All information should be verified against official provider documentation.",
-  "lastUpdated": "2025-11-14"
+  "capabilities": [
+    "Text generation",
+    "Bilingual (English/Chinese)",
+    "Long-context processing",
+    "Code generation",
+    "Reasoning"
+  ],
+  "supportedLanguages": ["English", "Chinese"],
+  "lastUpdated": "2025-12-26"
 }

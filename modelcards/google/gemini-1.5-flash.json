@@ -3,50 +3,86 @@
   "provider": "Google",
   "modelType": "text-generation",
   "modelId": "gemini-1.5-flash",
-  "description": "Gemini 1.5 Flash is Google's fast and efficient model.",
+  "description": "Gemini 1.5 Flash is Google's fast and cost-efficient multimodal model, distilled from Gemini 1.5 Pro. It offers a 1 million token context window with significantly lower latency and cost, making it ideal for high-volume applications.",
+  "releaseDate": "2024-05-14",
   "intendedUse": {
-    "note": "Intended use cases should be verified from official provider documentation."
+    "primaryUses": [
+      "High-volume chat and conversation",
+      "Content summarization",
+      "Data extraction and processing",
+      "Real-time applications requiring low latency",
+      "Cost-sensitive multimodal applications",
+      "Image and video captioning"
+    ],
+    "outOfScope": [
+      "Medical diagnosis or treatment advice",
+      "Legal advice",
+      "Tasks requiring maximum accuracy over speed",
+      "Safety-critical autonomous systems"
+    ]
   },
   "architecture": {
-    "contextLength": "1,000,000 tokens (verified from official documentation)"
+    "type": "Transformer (distilled from Gemini 1.5 Pro)",
+    "contextLength": 1000000,
+    "maxOutputTokens": 8192,
+    "modalities": {
+      "input": ["text", "images", "audio", "video", "PDF"],
+      "output": ["text"]
+    }
   },
   "trainingData": {
-    "description": "Training data details are not publicly disclosed for SaaS models."
+    "description": "Distilled from Gemini 1.5 Pro using knowledge distillation techniques. Trained on diverse multimodal data."
   },
-  "trainingProcedure": "Training methodology details are proprietary and not publicly disclosed.",
+  "trainingProcedure": "Knowledge distillation from Gemini 1.5 Pro, optimized for speed and efficiency.",
   "evaluation": {
-    "evaluationData": "See official provider documentation for evaluation data and benchmarks.",
-    "metrics": {
-      "note": "See official provider documentation for specific performance metrics."
-    },
-    "performanceSummary": "See official provider documentation for performance characteristics."
+    "performanceSummary": "Optimized for speed with strong performance. Lower latency than Pro while maintaining good accuracy for most tasks.",
+    "benchmarks": {
+      "MMLU": "78.9%",
+      "HumanEval": "74.3%"
+    }
   },
   "limitations": {
-    "note": "Specific limitations should be verified from official provider documentation."
+    "knownLimitations": [
+      "Less capable than Gemini 1.5 Pro on complex reasoning tasks",
+      "May generate incorrect or misleading information",
+      "Cannot access real-time information or browse the internet",
+      "Trade-off between speed and accuracy compared to Pro"
+    ]
   },
   "ethicalConsiderations": {
-    "biasAndFairness": "See official provider documentation for bias and fairness evaluations.",
-    "safetyMeasures": "See official provider documentation for safety measures.",
-    "privacyConsiderations": "Review provider's privacy policy. Sensitive data should not be sent without safeguards."
+    "biasAndFairness": "Google applies safety training and evaluation to reduce harmful outputs and biases.",
+    "safetyMeasures": "Built-in safety filters and content moderation.",
+    "privacyConsiderations": "API data handling governed by Google Cloud terms."
   },
   "access": {
-    "note": "See official provider documentation for access, rate limits, pricing, and licensing information."
+    "apiAccess": true,
+    "pricing": {
+      "inputUpTo128K": "$0.075 per 1M tokens",
+      "inputOver128K": "$0.15 per 1M tokens",
+      "outputUpTo128K": "$0.30 per 1M tokens",
+      "outputOver128K": "$0.60 per 1M tokens"
+    },
+    "freeTier": "1,500 requests per day",
+    "rateLimits": "Varies by usage tier",
+    "license": "Proprietary - Google Cloud Terms of Service"
   },
   "requirements": {
-    "note": "See official provider documentation for hardware and software requirements."
+    "deployment": "API-only (cloud-hosted by Google), also available via Vertex AI",
+    "hardware": "Not applicable - SaaS model"
   },
   "references": {
-    "important": "All information must be verified against official provider documentation.",
-    "modelSpecificDocs": "https://ai.google.dev/docs",
-    "officialDocs": "https://ai.google.dev/docs",
+    "modelPage": "https://ai.google.dev/gemini-api/docs/models/gemini",
+    "announcement": "https://blog.google/technology/ai/google-gemini-update-flash-ai-assistant-io-2024/",
     "pricing": "https://ai.google.dev/pricing"
   },
-  "citation": "See official Google documentation for citation information.",
-  "additionalInfo": "This model card includes information verified from official provider documentation where available. All information should be verified against official provider documentation.",
-  "lastUpdated": "2025-11-14",
   "capabilities": [
     "Text generation",
-    "Vision",
-    "Audio"
-  ]
+    "Vision (image understanding)",
+    "Audio understanding",
+    "Video understanding",
+    "Code generation",
+    "Long-context processing",
+    "Tool use"
+  ],
+  "lastUpdated": "2025-12-26"
 }

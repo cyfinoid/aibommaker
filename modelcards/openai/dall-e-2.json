@@ -1,49 +1,83 @@
 {
-  "modelName": "Dall E 2",
-  "provider": "Openai",
+  "modelName": "DALL-E 2",
+  "provider": "OpenAI",
   "modelType": "text-to-image",
   "modelId": "dall-e-2",
-  "description": "DALL\u00b7E 2 is an image generation model.",
+  "description": "DALL-E 2 is OpenAI's previous generation image generation model. It can create and edit images from text descriptions, with support for inpainting and outpainting. Superseded by DALL-E 3 for most use cases.",
+  "releaseDate": "2022-04-06",
   "intendedUse": {
-    "note": "Intended use cases should be verified from official provider documentation."
+    "primaryUses": [
+      "Image generation from text",
+      "Image editing and inpainting",
+      "Outpainting (extending images)",
+      "Image variations",
+      "Legacy applications"
+    ],
+    "outOfScope": [
+      "Generating images of real people",
+      "Creating misleading or deceptive content",
+      "Generating violent, adult, or hateful content"
+    ]
   },
-  "architecture": {},
+  "architecture": {
+    "type": "Diffusion-based image generation model",
+    "outputResolutions": [
+      "256x256",
+      "512x512",
+      "1024x1024"
+    ],
+    "modalities": {
+      "input": ["text", "images (for editing)"],
+      "output": ["images"]
+    }
+  },
   "trainingData": {
-    "description": "Training data details are not publicly disclosed for SaaS models."
+    "description": "Trained on a large dataset of images and text. Specific training data composition is proprietary."
   },
-  "trainingProcedure": "Training methodology details are proprietary and not publicly disclosed.",
+  "trainingProcedure": "Uses diffusion model architecture. Specific methodology is proprietary.",
   "evaluation": {
-    "evaluationData": "See official provider documentation for evaluation data and benchmarks.",
-    "metrics": {
-      "note": "See official provider documentation for specific performance metrics."
-    },
-    "performanceSummary": "See official provider documentation for performance characteristics."
+    "performanceSummary": "Was state-of-the-art at release. Now superseded by DALL-E 3 which offers better prompt following, image quality, and safety features."
   },
   "limitations": {
-    "note": "Specific limitations should be verified from official provider documentation."
+    "knownLimitations": [
+      "Lower image quality than DALL-E 3",
+      "Weaker prompt adherence compared to DALL-E 3",
+      "Cannot generate images of real public figures",
+      "Limited resolution options",
+      "May produce artifacts or inconsistencies",
+      "Consider using DALL-E 3 for new applications"
+    ]
   },
   "ethicalConsiderations": {
-    "biasAndFairness": "See official provider documentation for bias and fairness evaluations.",
-    "safetyMeasures": "See official provider documentation for safety measures.",
-    "privacyConsiderations": "Review provider's privacy policy. Sensitive data should not be sent without safeguards."
+    "biasAndFairness": "May reflect biases in training data. OpenAI has implemented some mitigations.",
+    "safetyMeasures": "Content policy enforcement, restrictions on harmful content generation.",
+    "privacyConsiderations": "Generated images may be stored by OpenAI. Check terms for usage rights."
   },
   "access": {
-    "note": "See official provider documentation for access, rate limits, pricing, and licensing information."
+    "apiAccess": true,
+    "pricing": {
+      "256x256": "$0.016 per image",
+      "512x512": "$0.018 per image",
+      "1024x1024": "$0.020 per image"
+    },
+    "rateLimits": "Varies by usage tier",
+    "license": "Proprietary - OpenAI Terms of Use",
+    "status": "Available but superseded by DALL-E 3"
   },
   "requirements": {
-    "note": "See official provider documentation for hardware and software requirements."
+    "deployment": "API-only (cloud-hosted by OpenAI)",
+    "hardware": "Not applicable - SaaS model"
   },
   "references": {
-    "important": "All information must be verified against official provider documentation.",
-    "modelSpecificDocs": "https://platform.openai.com/docs/models/dall-e",
-    "officialDocs": "https://platform.openai.com/docs/models",
-    "gptOssCard": "https://openai.com/index/gpt-oss-model-card/",
-    "pricing": "https://openai.com/pricing"
+    "modelPage": "https://platform.openai.com/docs/models/dall-e",
+    "announcement": "https://openai.com/dall-e-2",
+    "pricing": "https://openai.com/api/pricing/"
   },
-  "citation": "See official Openai documentation for citation information.",
-  "additionalInfo": "This model card includes information verified from official provider documentation where available. All information should be verified against official provider documentation.",
-  "lastUpdated": "2025-11-14",
   "capabilities": [
-    "Image generation"
-  ]
+    "Text-to-image generation",
+    "Image editing (inpainting)",
+    "Outpainting",
+    "Image variations"
+  ],
+  "lastUpdated": "2025-12-26"
 }
