@@ -588,9 +588,16 @@ async function codeDetector({
         if (!sdkFindings.has(key)) {
           sdkFindings.set(key, { provider, weight, files: [] });
         }
-        const lines = content.split("\n").filter((line) => pattern.test(line));
-        const snippet = lines.slice(0, 2).join("\n");
-        sdkFindings.get(key).files.push({ file: file.path, snippet });
+        const allLines = content.split("\n");
+        allLines.forEach((line, idx) => {
+          if (pattern.test(line)) {
+            sdkFindings.get(key).files.push({
+              file: file.path,
+              line: idx + 1,
+              snippet: line.trim(),
+            });
+          }
+        });
       }
     }
 
@@ -600,9 +607,16 @@ async function codeDetector({
         if (!apiFindings.has(key)) {
           apiFindings.set(key, { provider, weight, files: [] });
         }
-        const lines = content.split("\n").filter((line) => pattern.test(line));
-        const snippet = lines.slice(0, 2).join("\n");
-        apiFindings.get(key).files.push({ file: file.path, snippet });
+        const allLines = content.split("\n");
+        allLines.forEach((line, idx) => {
+          if (pattern.test(line)) {
+            apiFindings.get(key).files.push({
+              file: file.path,
+              line: idx + 1,
+              snippet: line.trim(),
+            });
+          }
+        });
       }
     }
   }
@@ -1001,35 +1015,119 @@ async function searchCodeViaAPI(
       let lineNumber = item.line_number;
       let snippet = item.snippet;
 
-      // If we have a snippet but no line number, fetch the file to find the exact line
-      if (snippet && !lineNumber && item.path && getFileContent) {
+      // Always validate that the line contains the provider name to avoid false positives
+      let isValid = false;
+
+      // If we need to fetch the file to validate (no line number or we want to verify)
+      if (
+        (snippet && !lineNumber && item.path && getFileContent) ||
+        (lineNumber && item.path && getFileContent)
+      ) {
         try {
           const fileContent = await getFileContent(item.path);
           if (fileContent) {
             const lines = fileContent.split("\n");
-            // Search for the snippet in the file
-            for (let i = 0; i < lines.length; i++) {
-              // Check if this line contains the matched text from snippet
-              const line = lines[i];
+            const providerLower = provider.toLowerCase();
+
+            // If we have a line number from the API, verify it
+            if (lineNumber && lineNumber > 0 && lineNumber <= lines.length) {
+              const line = lines[lineNumber - 1].trim();
+              // Validate this line actually contains the provider name
               if (
-                snippet &&
-                line.includes(
-                  snippet.substring(0, Math.min(30, snippet.length)),
-                )
+                (providerLower === "langchain" &&
+                  line.toLowerCase().includes("langchain")) ||
+                (providerLower === "openai" &&
+                  line.toLowerCase().includes("openai")) ||
+                (providerLower === "anthropic" &&
+                  line.toLowerCase().includes("anthropic")) ||
+                (providerLower === "google" &&
+                  line.toLowerCase().includes("google")) ||
+                (providerLower === "cohere" &&
+                  line.toLowerCase().includes("cohere")) ||
+                (providerLower === "mistral" &&
+                  line.toLowerCase().includes("mistral")) ||
+                (providerLower === "huggingface" &&
+                  line.toLowerCase().includes("huggingface")) ||
+                providerLower === "openai-compatible" || // Compatible endpoints are always valid
+                (providerLower === "langchain-openai" &&
+                  line.toLowerCase().includes("langchain") &&
+                  line.toLowerCase().includes("openai")) ||
+                (providerLower === "langchain-google" &&
+                  line.toLowerCase().includes("langchain") &&
+                  line.toLowerCase().includes("google")) ||
+                (providerLower === "langchain-anthropic" &&
+                  line.toLowerCase().includes("langchain") &&
+                  line.toLowerCase().includes("anthropic"))
               ) {
-                lineNumber = i + 1; // Line numbers are 1-indexed
-                // Update snippet to be the actual line
-                snippet = line.trim();
-                break;
+                isValid = true;
+                snippet = line;
+              } else {
+                console.warn(
+                  `[Code Search] Line ${lineNumber} in ${item.path} does not contain "${provider}": "${line.substring(0, 100)}"`,
+                );
+              }
+            }
+            // If we don't have a line number, search for the snippet
+            else if (snippet) {
+              // Extract first few words from snippet for exact matching
+              const searchWords = snippet.split(/\s+/).slice(0, 3).join(" ");
+              // Search for exact match in the file
+              for (let i = 0; i < lines.length; i++) {
+                const line = lines[i];
+                const trimmedLine = line.trim();
+                // Use exact matching on start of line instead of fuzzy substring
+                if (trimmedLine.startsWith(searchWords)) {
+                  // Validate this line actually contains the provider name
+                  if (
+                    (providerLower === "langchain" &&
+                      line.toLowerCase().includes("langchain")) ||
+                    (providerLower === "openai" &&
+                      line.toLowerCase().includes("openai")) ||
+                    (providerLower === "anthropic" &&
+                      line.toLowerCase().includes("anthropic")) ||
+                    (providerLower === "google" &&
+                      line.toLowerCase().includes("google")) ||
+                    (providerLower === "cohere" &&
+                      line.toLowerCase().includes("cohere")) ||
+                    (providerLower === "mistral" &&
+                      line.toLowerCase().includes("mistral")) ||
+                    (providerLower === "huggingface" &&
+                      line.toLowerCase().includes("huggingface")) ||
+                    providerLower === "openai-compatible" ||
+                    (providerLower === "langchain-openai" &&
+                      line.toLowerCase().includes("langchain") &&
+                      line.toLowerCase().includes("openai")) ||
+                    (providerLower === "langchain-google" &&
+                      line.toLowerCase().includes("langchain") &&
+                      line.toLowerCase().includes("google")) ||
+                    (providerLower === "langchain-anthropic" &&
+                      line.toLowerCase().includes("langchain") &&
+                      line.toLowerCase().includes("anthropic"))
+                  ) {
+                    lineNumber = i + 1; // Line numbers are 1-indexed
+                    // Update snippet to be the actual line
+                    snippet = trimmedLine;
+                    isValid = true;
+                    break;
+                  }
+                }
               }
             }
           }
         } catch (error) {
           console.warn(
-            `[Code Search] Could not fetch ${item.path} for line number:`,
+            `[Code Search] Could not fetch ${item.path} for validation:`,
             error.message,
           );
         }
+      }
+
+      // Skip this item if it failed validation
+      if (!isValid) {
+        console.log(
+          `[Code Search] Skipping invalid result for ${provider} in ${item.path}`,
+        );
+        continue;
       }
 
       // Build GitHub URL with line anchor

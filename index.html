@@ -1,274 +1,451 @@
-<!DOCTYPE html>
+<!doctype html>
 <html lang="en">
-<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AI BOM Generator - Cyfinoid</title>
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Sen:wght@400;700;800&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="styles.css?v=0.0.4">
-    <script defer data-domain="cyfinoid.github.io" src="https://plausible.io/js/script.outbound-links.js"></script>
-    <script>window.plausible = window.plausible || function() { (window.plausible.q = window.plausible.q || []).push(arguments) }</script>
-
-</head>
-<body>
-    <div class="container">
-        <!-- Header -->
-        <header class="header">
-            <button id="theme-toggle" class="theme-toggle" aria-label="Toggle theme">
-                🌙 Dark Mode
-            </button>
-            <h1 class="title">AI BOM Generator</h1>
-            <p class="subtitle">Detect AI/LLM usage and generate Software Bill of Materials</p>
-            <!-- Experimental Warning Banner -->
-            <div class="warning-banner">
-                <div class="warning-header">⚠️ EXPERIMENTAL CODE</div>
-            </div>
-
-        </header>
-
-
-        <!-- Input Section -->
-        <section id="input-section" class="card">
-            <h2 class="heading">Repository Analysis</h2>
-            <form id="analysis-form">
-                <div class="form-group">
-                    <label for="repo-input" class="form-label">GitHub Repository</label>
-                    <input 
-                        type="text" 
-                        id="repo-input" 
-                        class="form-input" 
-                        placeholder="owner/repo or https://github.com/owner/repo"
-                        required
-                    >
-                    <p class="caption">Enter a GitHub repository URL or owner/repo format</p>
-                </div>
-                <div class="form-group">
-                    <label for="token-input" class="form-label">GitHub Token <span style="color: var(--accent-red);">*</span></label>
-                    <input 
-                        type="password" 
-                        id="token-input" 
-                        class="form-input" 
-                        placeholder="ghp_xxxxxxxxxxxxxxxxxxxx"
-                        required
-                    >
-                    <p class="caption">Required for GitHub API access and to avoid rate limiting</p>
-                </div>
-                <button type="submit" id="analyze-btn" class="btn btn-primary">
-                    Analyze Repository
+    <head>
+        <meta charset="UTF-8" />
+        <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+        <title>AI BOM Generator - Cyfinoid</title>
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+        <link
+            href="https://fonts.googleapis.com/css2?family=Sen:wght@400;700;800&display=swap"
+            rel="stylesheet"
+        />
+        <link rel="stylesheet" href="styles.css?v=0.0.4-2" />
+        <script
+            defer
+            data-domain="cyfinoid.github.io"
+            src="https://plausible.io/js/script.outbound-links.js"
+        ></script>
+        <script>
+            window.plausible =
+                window.plausible ||
+                function () {
+                    (window.plausible.q = window.plausible.q || []).push(
+                        arguments,
+                    );
+                };
+        </script>
+    </head>
+    <body>
+        <div class="container">
+            <!-- Header -->
+            <header class="header">
+                <button
+                    id="theme-toggle"
+                    class="theme-toggle"
+                    aria-label="Toggle theme"
+                >
+                    🌙 Dark Mode
                 </button>
-            </form>
-            <div id="loading-state" class="loading-state hidden">
-                <div class="spinner"></div>
-                <p id="loading-message" class="body">Analyzing repository...</p>
-            </div>
-            <div id="error-state" class="error-state hidden">
-                <p id="error-message" class="body"></p>
-                <button id="retry-btn" class="btn btn-secondary">Retry</button>
-            </div>
-        </section>
+                <h1 class="title">AI BOM Generator</h1>
+                <p class="subtitle">
+                    Detect AI/LLM usage and generate Software Bill of Materials
+                </p>
+                <!-- Experimental Warning Banner -->
+                <div class="warning-banner">
+                    <div class="warning-header">⚠️ EXPERIMENTAL CODE</div>
+                </div>
+            </header>
 
-        <!-- Findings Section -->
-        <section id="findings-section" class="card hidden">
-            <div class="findings-header">
-                <div>
-                    <h2 class="heading">Analysis Results</h2>
-                </div>
-                <div style="display: flex; align-items: center; gap: 1rem;">
-                    <button id="collapse-all-findings" class="section-collapse-btn">Collapse All</button>
-                </div>
-            </div>
-            
-            <div class="collapsible-content" id="findings-content">
-                <div class="findings-controls">
-                    <div class="control-group">
-                        <button id="select-all-btn" class="btn btn-small">Select All</button>
-                        <button id="deselect-all-btn" class="btn btn-small">Deselect All</button>
-                    </div>
-                    <div class="control-group">
-                        <label for="category-filter" class="form-label">Filter by Category:</label>
-                        <select id="category-filter" class="form-select">
-                            <option value="all">All Categories</option>
-                            <option value="dependencies">Dependencies</option>
-                            <option value="code">Code</option>
-                            <option value="config">Configuration</option>
-                            <option value="ci">CI/CD</option>
-                            <option value="models">Models</option>
-                            <option value="prompts">Prompts</option>
-                            <option value="protocol">Protocols (MCP/A2A)</option>
-                            <option value="ai-dev-tools">AI Dev Tools</option>
-                            <option value="hardware">Hardware</option>
-                            <option value="infrastructure">Infrastructure</option>
-                            <option value="governance">Governance</option>
-                        </select>
-                    </div>
-                </div>
-
-                <div id="findings-list" class="findings-list"></div>
-            </div>
-        </section>
-
-        <!-- Analysis Notes Section -->
-        <section id="analysis-notes-section" class="card hidden">
-            <div class="findings-header">
-                <div>
-                    <h2 class="heading">Analysis Notes</h2>
-                    <p class="caption" style="margin-top: 0.5rem;">Components we scanned for but did not find in this repository</p>
-                </div>
-                <div style="display: flex; align-items: center; gap: 1rem;">
-                    <button id="collapse-analysis-notes" class="section-collapse-btn">Collapse</button>
-                </div>
-            </div>
-            
-            <div class="collapsible-content" id="analysis-notes-content">
-                <div id="analysis-notes-list"></div>
-            </div>
-        </section>
-
-        <!-- BOM Section -->
-        <section id="bom-section" class="card hidden">
-            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem;">
-                <h2 class="heading" style="margin-bottom: 0;">Generated AI BOM</h2>
-                <button id="collapse-bom" class="section-collapse-btn">Collapse</button>
-            </div>
-            
-            <div class="collapsible-content" id="bom-content-wrapper">
-                <div class="bom-tabs">
-                    <button class="tab-btn active" data-tab="cyclonedx-json">CycloneDX JSON</button>
-                    <button class="tab-btn" data-tab="cyclonedx-xml">CycloneDX XML</button>
-                    <button class="tab-btn" data-tab="spdx">SPDX</button>
-                    <button class="tab-btn" data-tab="extended-aibom">Extended AIBOM</button>
-                </div>
-
-                <div class="bom-content">
-                <div id="cyclonedx-json" class="tab-content active">
-                    <div class="bom-actions">
-                        <button class="btn btn-secondary" data-action="copy" data-format="cyclonedx-json">
-                            Copy to Clipboard
-                        </button>
-                        <button class="btn btn-primary" data-action="download" data-format="cyclonedx-json">
-                            Download JSON
-                        </button>
-                    </div>
-                    <pre><code id="cyclonedx-json-preview" class="code-preview"></code></pre>
-                </div>
-                
-                <div id="cyclonedx-xml" class="tab-content">
-                    <div class="bom-actions">
-                        <button class="btn btn-secondary" data-action="copy" data-format="cyclonedx-xml">
-                            Copy to Clipboard
-                        </button>
-                        <button class="btn btn-primary" data-action="download" data-format="cyclonedx-xml">
-                            Download XML
-                        </button>
-                    </div>
-                    <pre><code id="cyclonedx-xml-preview" class="code-preview"></code></pre>
-                </div>
-                
-                <div id="spdx" class="tab-content">
-                    <div class="bom-actions">
-                        <button class="btn btn-secondary" data-action="copy" data-format="spdx">
-                            Copy to Clipboard
-                        </button>
-                        <button class="btn btn-primary" data-action="download" data-format="spdx">
-                            Download SPDX
-                        </button>
-                    </div>
-                    <pre><code id="spdx-preview" class="code-preview"></code></pre>
-                </div>
-                
-                <div id="extended-aibom" class="tab-content">
-                    <div class="bom-actions">
-                        <button class="btn btn-secondary" data-action="copy" data-format="extended-aibom">
-                            Copy to Clipboard
-                        </button>
-                        <button class="btn btn-primary" data-action="download" data-format="extended-aibom">
-                            Download Extended AIBOM
-                        </button>
-                    </div>
-                    <div class="extended-info" style="margin-bottom: 1rem; padding: 1rem; background: var(--bg-secondary); border-radius: 8px;">
-                        <p style="margin: 0; color: var(--text-secondary); font-size: 0.9rem;">
-                            📋 <strong>Extended AIBOM Format:</strong> Comprehensive AI Bill of Materials including hardware, infrastructure, model governance, risk assessment, and data pipeline information based on industry best practices from Snyk and Trail of Bits.
+            <!-- Input Section -->
+            <section id="input-section" class="card">
+                <h2 class="heading">Repository Analysis</h2>
+                <form id="analysis-form">
+                    <div class="form-group">
+                        <label for="repo-input" class="form-label"
+                            >GitHub Repository</label
+                        >
+                        <input
+                            type="text"
+                            id="repo-input"
+                            class="form-input"
+                            placeholder="owner/repo or https://github.com/owner/repo"
+                            required
+                        />
+                        <p class="caption">
+                            Enter a GitHub repository URL or owner/repo format
                         </p>
                     </div>
-                    <pre><code id="extended-aibom-preview" class="code-preview"></code></pre>
-                </div>
-            </div>
-            </div>
-        </section>
-
-        <!-- Footer -->
-        <footer class="footer">
-            <div class="footer-content">
-                <div class="footer-section">
-                    <h3 class="footer-heading">AI BOM Generator</h3>
-                    <p class="footer-text">
-                        A client-side tool for analyzing GitHub repositories to detect AI/LLM usage and generate 
-                        comprehensive AI Bill of Materials. All processing happens in your browser for maximum 
-                        privacy and security.
+                    <div class="form-group">
+                        <label for="token-input" class="form-label"
+                            >GitHub Token
+                            <span style="color: var(--accent-red)"
+                                >*</span
+                            ></label
+                        >
+                        <input
+                            type="password"
+                            id="token-input"
+                            class="form-input"
+                            placeholder="ghp_xxxxxxxxxxxxxxxxxxxx"
+                            required
+                        />
+                        <p class="caption">
+                            Required for GitHub API access and to avoid rate
+                            limiting
+                        </p>
+                    </div>
+                    <button
+                        type="submit"
+                        id="analyze-btn"
+                        class="btn btn-primary"
+                    >
+                        Analyze Repository
+                    </button>
+                </form>
+                <div id="loading-state" class="loading-state hidden">
+                    <div class="spinner"></div>
+                    <p id="loading-message" class="body">
+                        Analyzing repository...
                     </p>
-                    <div class="footer-features">
-                        <div class="footer-feature">
-                            <strong>🔒 Privacy-First:</strong> All processing happens in your browser
-                        </div>
-                        <div class="footer-feature">
-                            <strong>⚡ No Server Required:</strong> Works entirely client-side
-                        </div>
-                        <div class="footer-feature">
-                            <strong>📋 Standards Compliant:</strong> CycloneDX 1.7 & SPDX 3.0.1
-                        </div>
-                        <div class="footer-feature">
-                            <strong>🔍 Smart Detection:</strong> SBOM API first, with intelligent fallback
-                        </div>
+                </div>
+                <div id="error-state" class="error-state hidden">
+                    <p id="error-message" class="body"></p>
+                    <button id="retry-btn" class="btn btn-secondary">
+                        Retry
+                    </button>
+                </div>
+            </section>
+
+            <!-- Findings Section -->
+            <section id="findings-section" class="card hidden">
+                <div class="findings-header">
+                    <div>
+                        <h2 class="heading">Analysis Results</h2>
+                    </div>
+                    <div style="display: flex; align-items: center; gap: 1rem">
+                        <button
+                            id="collapse-all-findings"
+                            class="section-collapse-btn"
+                        >
+                            Collapse All
+                        </button>
                     </div>
                 </div>
 
-                <div class="footer-section">
-                    <h3 class="footer-heading">Resources</h3>
-                    <div class="footer-buttons">
-                        <a href="https://cyfinoid.com" target="_blank" rel="noopener" class="footer-btn">Website</a>
-                        <a href="https://cyfinoid.com/blog/" target="_blank" rel="noopener" class="footer-btn">Blog</a>
-                        <a href="https://cyfinoid.com/trainings/#upcoming-trainings" target="_blank" rel="noopener" class="footer-btn">Upcoming Trainings</a>
-                        <a href="https://cyfinoid.com/opensource-by-cyfinoid/" target="_blank" rel="noopener" class="footer-btn">Open Source by Cyfinoid</a>
-                        <a href="https://discord.gg/7trkcUFrgR" target="_blank" rel="noopener" class="footer-btn">Join Discord</a>
+                <div class="collapsible-content" id="findings-content">
+                    <div class="findings-controls">
+                        <div class="control-group">
+                            <button id="select-all-btn" class="btn btn-small">
+                                Select All
+                            </button>
+                            <button id="deselect-all-btn" class="btn btn-small">
+                                Deselect All
+                            </button>
+                        </div>
+                        <div class="control-group">
+                            <label for="category-filter" class="form-label"
+                                >Filter by Category:</label
+                            >
+                            <select id="category-filter" class="form-select">
+                                <option value="all">All Categories</option>
+                                <option value="dependencies">
+                                    Dependencies
+                                </option>
+                                <option value="code">Code</option>
+                                <option value="config">Configuration</option>
+                                <option value="ci">CI/CD</option>
+                                <option value="models">Models</option>
+                                <option value="prompts">Prompts</option>
+                                <option value="protocol">
+                                    Protocols (MCP/A2A)
+                                </option>
+                                <option value="ai-dev-tools">
+                                    AI Dev Tools
+                                </option>
+                                <option value="hardware">Hardware</option>
+                                <option value="infrastructure">
+                                    Infrastructure
+                                </option>
+                                <option value="governance">Governance</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div id="findings-list" class="findings-list"></div>
+                </div>
+            </section>
+
+            <!-- Analysis Notes Section -->
+            <section id="analysis-notes-section" class="card hidden">
+                <div class="findings-header">
+                    <div>
+                        <h2 class="heading">Analysis Notes</h2>
+                        <p class="caption" style="margin-top: 0.5rem">
+                            Components we scanned for but did not find in this
+                            repository
+                        </p>
+                    </div>
+                    <div style="display: flex; align-items: center; gap: 1rem">
+                        <button
+                            id="collapse-analysis-notes"
+                            class="section-collapse-btn"
+                        >
+                            Collapse
+                        </button>
                     </div>
                 </div>
 
-                <div class="footer-section">
-                    <h3 class="footer-heading">About Cyfinoid Research</h3>
-                    <p class="footer-text">
-                        Leading cybersecurity research company specializing in software supply chain security, 
-                        Android security, and cloud security. Our expertise spans across comprehensive software 
-                        supply chain protection.
-                    </p>
-                    <p class="footer-text">
-                        <strong>Focus Areas:</strong> Software supply chain attacks, CI/CD pipeline security, 
-                        offensive security research, and AI/ML security.
+                <div class="collapsible-content" id="analysis-notes-content">
+                    <div id="analysis-notes-list"></div>
+                </div>
+            </section>
+
+            <!-- BOM Section -->
+            <section id="bom-section" class="card hidden">
+                <div
+                    style="
+                        display: flex;
+                        justify-content: space-between;
+                        align-items: center;
+                        margin-bottom: 1.5rem;
+                    "
+                >
+                    <h2 class="heading" style="margin-bottom: 0">
+                        Generated AI BOM
+                    </h2>
+                    <button id="collapse-bom" class="section-collapse-btn">
+                        Collapse
+                    </button>
+                </div>
+
+                <div class="collapsible-content" id="bom-content-wrapper">
+                    <div class="bom-tabs">
+                        <button
+                            class="tab-btn active"
+                            data-tab="cyclonedx-json"
+                        >
+                            CycloneDX JSON
+                        </button>
+                        <button class="tab-btn" data-tab="cyclonedx-xml">
+                            CycloneDX XML
+                        </button>
+                        <button class="tab-btn" data-tab="spdx">SPDX</button>
+                        <button class="tab-btn" data-tab="extended-aibom">
+                            Extended AIBOM
+                        </button>
+                    </div>
+
+                    <div class="bom-content">
+                        <div id="cyclonedx-json" class="tab-content active">
+                            <div class="bom-actions">
+                                <button
+                                    class="btn btn-secondary"
+                                    data-action="copy"
+                                    data-format="cyclonedx-json"
+                                >
+                                    Copy to Clipboard
+                                </button>
+                                <button
+                                    class="btn btn-primary"
+                                    data-action="download"
+                                    data-format="cyclonedx-json"
+                                >
+                                    Download JSON
+                                </button>
+                            </div>
+                            <pre><code id="cyclonedx-json-preview" class="code-preview"></code></pre>
+                        </div>
+
+                        <div id="cyclonedx-xml" class="tab-content">
+                            <div class="bom-actions">
+                                <button
+                                    class="btn btn-secondary"
+                                    data-action="copy"
+                                    data-format="cyclonedx-xml"
+                                >
+                                    Copy to Clipboard
+                                </button>
+                                <button
+                                    class="btn btn-primary"
+                                    data-action="download"
+                                    data-format="cyclonedx-xml"
+                                >
+                                    Download XML
+                                </button>
+                            </div>
+                            <pre><code id="cyclonedx-xml-preview" class="code-preview"></code></pre>
+                        </div>
+
+                        <div id="spdx" class="tab-content">
+                            <div class="bom-actions">
+                                <button
+                                    class="btn btn-secondary"
+                                    data-action="copy"
+                                    data-format="spdx"
+                                >
+                                    Copy to Clipboard
+                                </button>
+                                <button
+                                    class="btn btn-primary"
+                                    data-action="download"
+                                    data-format="spdx"
+                                >
+                                    Download SPDX
+                                </button>
+                            </div>
+                            <pre><code id="spdx-preview" class="code-preview"></code></pre>
+                        </div>
+
+                        <div id="extended-aibom" class="tab-content">
+                            <div class="bom-actions">
+                                <button
+                                    class="btn btn-secondary"
+                                    data-action="copy"
+                                    data-format="extended-aibom"
+                                >
+                                    Copy to Clipboard
+                                </button>
+                                <button
+                                    class="btn btn-primary"
+                                    data-action="download"
+                                    data-format="extended-aibom"
+                                >
+                                    Download Extended AIBOM
+                                </button>
+                            </div>
+                            <div
+                                class="extended-info"
+                                style="
+                                    margin-bottom: 1rem;
+                                    padding: 1rem;
+                                    background: var(--bg-secondary);
+                                    border-radius: 8px;
+                                "
+                            >
+                                <p
+                                    style="
+                                        margin: 0;
+                                        color: var(--text-secondary);
+                                        font-size: 0.9rem;
+                                    "
+                                >
+                                    📋
+                                    <strong>Extended AIBOM Format:</strong>
+                                    Comprehensive AI Bill of Materials including
+                                    hardware, infrastructure, model governance,
+                                    risk assessment, and data pipeline
+                                    information based on industry best practices
+                                    from Snyk and Trail of Bits.
+                                </p>
+                            </div>
+                            <pre><code id="extended-aibom-preview" class="code-preview"></code></pre>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Footer -->
+            <footer class="footer">
+                <div class="footer-content">
+                    <div class="footer-section">
+                        <h3 class="footer-heading">AI BOM Generator</h3>
+                        <p class="footer-text">
+                            A client-side tool for analyzing GitHub repositories
+                            to detect AI/LLM usage and generate comprehensive AI
+                            Bill of Materials. All processing happens in your
+                            browser for maximum privacy and security.
+                        </p>
+                        <div class="footer-features">
+                            <div class="footer-feature">
+                                <strong>🔒 Privacy-First:</strong> All
+                                processing happens in your browser
+                            </div>
+                            <div class="footer-feature">
+                                <strong>⚡ No Server Required:</strong> Works
+                                entirely client-side
+                            </div>
+                            <div class="footer-feature">
+                                <strong>📋 Standards Compliant:</strong>
+                                CycloneDX 1.7 & SPDX 3.0.1
+                            </div>
+                            <div class="footer-feature">
+                                <strong>🔍 Smart Detection:</strong> SBOM API
+                                first, with intelligent fallback
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="footer-section">
+                        <h3 class="footer-heading">Resources</h3>
+                        <div class="footer-buttons">
+                            <a
+                                href="https://cyfinoid.com"
+                                target="_blank"
+                                rel="noopener"
+                                class="footer-btn"
+                                >Website</a
+                            >
+                            <a
+                                href="https://cyfinoid.com/blog/"
+                                target="_blank"
+                                rel="noopener"
+                                class="footer-btn"
+                                >Blog</a
+                            >
+                            <a
+                                href="https://cyfinoid.com/trainings/#upcoming-trainings"
+                                target="_blank"
+                                rel="noopener"
+                                class="footer-btn"
+                                >Upcoming Trainings</a
+                            >
+                            <a
+                                href="https://cyfinoid.com/opensource-by-cyfinoid/"
+                                target="_blank"
+                                rel="noopener"
+                                class="footer-btn"
+                                >Open Source by Cyfinoid</a
+                            >
+                            <a
+                                href="https://discord.gg/7trkcUFrgR"
+                                target="_blank"
+                                rel="noopener"
+                                class="footer-btn"
+                                >Join Discord</a
+                            >
+                        </div>
+                    </div>
+
+                    <div class="footer-section">
+                        <h3 class="footer-heading">About Cyfinoid Research</h3>
+                        <p class="footer-text">
+                            Leading cybersecurity research company specializing
+                            in software supply chain security, Android security,
+                            and cloud security. Our expertise spans across
+                            comprehensive software supply chain protection.
+                        </p>
+                        <p class="footer-text">
+                            <strong>Focus Areas:</strong> Software supply chain
+                            attacks, CI/CD pipeline security, offensive security
+                            research, and AI/ML security.
+                        </p>
+                    </div>
+                </div>
+
+                <div class="footer-bottom">
+                    <p>© 2025 Cyfinoid Research. All rights reserved.</p>
+                    <p>
+                        <a
+                            href="https://github.com/cyfinoid/aibommaker"
+                            target="_blank"
+                            rel="noopener"
+                        >
+                            View on GitHub
+                        </a>
                     </p>
                 </div>
-            </div>
+            </footer>
+        </div>
 
-            <div class="footer-bottom">
-                <p>© 2025 Cyfinoid Research. All rights reserved.</p>
-                <p>
-                    <a href="https://github.com/cyfinoid/aibommaker" target="_blank" rel="noopener">
-                        View on GitHub
-                    </a>
-                </p>
-            </div>
-        </footer>
-    </div>
-
-    <!-- JavaScript Application - Load in correct order -->
-    <script src="js/constants.js?v=0.0.4"></script>
-    <script src="js/utils.js?v=0.0.4"></script>
-    <script src="js/github-api.js?v=0.0.4"></script>
-    <script src="js/detectors.js?v=0.0.4"></script>
-    <script src="js/analyzer.js?v=0.0.4"></script>
-    <script src="js/bom-generators.js?v=0.0.4"></script>
-    <script src="js/extended-aibom-generator.js?v=0.0.4"></script>
-    <script src="js/ui.js?v=0.0.4"></script>
-</body>
+        <!-- JavaScript Application - Load in correct order -->
+        <script src="js/constants.js?v=0.0.4-2"></script>
+        <script src="js/utils.js?v=0.0.4-2"></script>
+        <script src="js/github-api.js?v=0.0.4-2"></script>
+        <script src="js/detectors.js?v=0.0.4-2"></script>
+        <script src="js/analyzer.js?v=0.0.4-2"></script>
+        <script src="js/bom-generators.js?v=0.0.4-2"></script>
+        <script src="js/extended-aibom-generator.js?v=0.0.4-2"></script>
+        <script src="js/ui.js?v=0.0.4-2"></script>
+    </body>
 </html>
-
