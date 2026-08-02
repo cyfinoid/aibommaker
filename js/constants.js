@@ -382,7 +382,10 @@ const AI_SIGNATURES = {
       category: 'mcp_protocol',
       packages: {
         python: ['mcp', 'anthropic-mcp', 'mcp-server', 'mcp-client'],
-        node: ['@modelcontextprotocol/sdk', '@anthropic-ai/mcp', 'mcp-framework']
+        node: ['@modelcontextprotocol/sdk', '@anthropic-ai/mcp', 'mcp-framework'],
+        go: ['github.com/mark3labs/mcp-go', 'github.com/modelcontextprotocol/go-sdk', 'github.com/metoro-io/mcp-golang'],
+        java: ['io.modelcontextprotocol.sdk:mcp', 'io.modelcontextprotocol:java-sdk'],
+        rust: ['rmcp', 'mcp-sdk', 'mcp-server']
       },
       codePatterns: {
         python: [
@@ -396,6 +399,10 @@ const AI_SIGNATURES = {
           { pattern: /require\s*\(['"]@modelcontextprotocol/i, weight: 5, category: 'protocol' },
           { pattern: /McpServer|McpClient/i, weight: 4, category: 'protocol' },
           { pattern: /StdioServerTransport|SSEServerTransport/i, weight: 4, category: 'protocol' }
+        ],
+        go: [
+          { pattern: /mcp\.NewServer|mcp\.NewClient/i, weight: 5, category: 'protocol' },
+          { pattern: /mark3labs\/mcp-go|modelcontextprotocol\/go-sdk/i, weight: 4, category: 'protocol' }
         ]
       },
       configFiles: [
@@ -725,8 +732,17 @@ function generateExtendedDependencies() {
       ...AI_PACKAGE_REGISTRY.rag_document?.node || [],
       ...AI_PACKAGE_REGISTRY.prompt_eval?.node || []
     ],
-    go: [...AI_PACKAGE_REGISTRY.llm_providers.go || [], ...AI_PACKAGE_REGISTRY.llm_frameworks.go || []],
-    java: [...AI_PACKAGE_REGISTRY.llm_providers.java || [], ...AI_PACKAGE_REGISTRY.llm_frameworks.java || []],
+    go: [
+      ...AI_PACKAGE_REGISTRY.llm_providers.go || [],
+      ...AI_PACKAGE_REGISTRY.llm_frameworks.go || [],
+      ...AI_PACKAGE_REGISTRY.mcp_protocol?.go || [],
+      ...AI_PACKAGE_REGISTRY.a2a_protocols?.go || []
+    ],
+    java: [
+      ...AI_PACKAGE_REGISTRY.llm_providers.java || [],
+      ...AI_PACKAGE_REGISTRY.llm_frameworks.java || [],
+      ...AI_PACKAGE_REGISTRY.mcp_protocol?.java || []
+    ],
     rust: [
       ...AI_PACKAGE_REGISTRY.llm_providers.rust || [],
       ...AI_PACKAGE_REGISTRY.llm_frameworks.rust || [],
@@ -769,7 +785,9 @@ function generateProtocolPatterns() {
         { pattern: /from\s+mcp\s+import|import\s+mcp/i, type: 'MCP Python' },
         { pattern: /tool\s*\(\s*["'].*["']\s*,\s*["'].*["']\s*\)/i, type: 'MCP Tool Definition' },
         { pattern: /\.register_tool\s*\(|\.add_tool\s*\(/i, type: 'MCP Tool Registration' },
-        { pattern: /ToolResult|CallToolResult/i, type: 'MCP Tool Result' }
+        { pattern: /ToolResult|CallToolResult/i, type: 'MCP Tool Result' },
+        { pattern: /mcp\.NewServer|mcp\.NewClient/i, type: 'MCP Go Server' },
+        { pattern: /mark3labs\/mcp-go|modelcontextprotocol\/go-sdk/i, type: 'MCP Go SDK' }
       ],
       json_patterns: [
         // Look for MCP server configuration in JSON
