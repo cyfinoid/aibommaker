@@ -50,18 +50,27 @@ The tool requires a GitHub token to operate efficiently. Analysis typically need
 ### Dependencies
 Individual components for each AI/LLM library with version and exact location:
 - **Primary Detection**: Uses GitHub's Dependency Graph SBOM API (SPDX format) for comprehensive, accurate dependency detection
-- **Fallback Detection**: Manual parsing of manifest files when SBOM API is unavailable
+- **Fallback Detection**: Manual parsing of manifest files when SBOM API is unavailable (Python, Node.js, `go.mod`, `Cargo.toml`, `pom.xml`, `build.gradle`)
 - **Supported Ecosystems**: Python, Node.js, Go, Java, Rust
 - **Example Libraries**: `openai`, `anthropic`, `langchain`, `transformers`, `chromadb`, `@anthropic-ai/sdk`, `ai`
+- **Agent Frameworks**: `langgraph`, `google-adk`, `openai-agents`, `crewai`, `autogen`/`ag2`, `pydantic-ai`, `smolagents`, `strands-agents`, `deepagents`, `haystack-ai`, `dspy`, `instructor`, `semantic-kernel`
+- **Safety & Observability**: guardrails/moderation (`nemoguardrails`, `llm-guard`, `presidio`, `rebuff`) and LLM tracing (`langfuse`, `langsmith`, `arize-phoenix`, `traceloop`)
 
 ### AI Models
 Identifies specific models with type classification:
-- **Text Generation**: GPT-4o, Claude-3, Gemini-Pro
+- **Text Generation**: GPT-4o, GPT-4.1/4.5/5, o1/o3/o4-mini, Claude 3.x/4.x (incl. bare aliases like `claude-sonnet-4-5`), Gemini 1.5/2.0/2.5, Llama 3/4, Qwen, Grok
 - **Embeddings**: text-embedding-3-large, models/embedding-001
 - **Image Generation**: DALL-E-3, Stable Diffusion
+- **Bedrock-style ids**: `anthropic.claude-...`/`meta.llama...` ARN forms normalized to public model names
+- **Contextual extraction**: model ids passed as `model=`/`model_name=` kwargs, module constants (`MODEL_NAME = "..."`), and env defaults (`os.environ.get("MODEL", "gpt-4o")`, `process.env.X ?? "..."`) are captured even when the exact model is not in the built-in list
+- **Notebooks**: `.ipynb` files are scanned for model and SDK usage
+- **Local runtimes**: Ollama-style model tags (`qwen3:4b`) detected in Ollama-related files
 
 ### Code Usage
 SDK imports and API calls with precise line numbers
+- **Providers**: OpenAI, Anthropic, Google, Cohere, Mistral, Groq, xAI, Together, Perplexity, Fireworks, Replicate, AI21, Stability, Aleph Alpha, Azure OpenAI, AWS Bedrock, Vertex AI, LiteLLM, OpenRouter
+- **Raw HTTP**: provider API endpoints (`api.openai.com`, `bedrock-runtime`, `localhost:11434`, ...) detected even without an SDK import
+- **Notebooks**: `.ipynb` cells are converted to source and scanned
 
 ### Configuration
 Model names and API keys in config files
@@ -74,8 +83,8 @@ Detects specialized compute requirements:
 
 ### Infrastructure & Deployment
 Identifies deployment platforms and tools:
-- **Containerization**: Docker, Docker Compose, GPU-enabled containers
-- **Orchestration**: Kubernetes deployments and services
+- **Containerization**: Docker, Docker Compose, GPU-enabled containers, digest-pinned base images (`FROM ...@sha256:...`)
+- **Orchestration**: Kubernetes deployments and services, digest-pinned images, model configuration injected via pod environment (`MODEL_DEPLOYMENT=gpt-4o-mini`)
 - **Cloud Platforms**: AWS SageMaker, GCP Vertex AI, Azure ML, AWS Bedrock
 - **MLOps**: MLflow, Weights & Biases, TensorBoard, ClearML
 

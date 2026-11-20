@@ -681,7 +681,8 @@ function extractRiskAssessment(findings, analysisResult) {
         identified_risks: [],
         positive_indicators: [],
         recommendations: [],
-        eu_ai_act: assessEUAIActCompliance(findings, models)
+        eu_ai_act: assessEUAIActCompliance(findings, models),
+        owasp_llm_top10: assessOWASPLLMTop10(findings)
     };
     
     let riskScore = 0;
@@ -747,8 +748,123 @@ function extractRiskAssessment(findings, analysisResult) {
             details: `${risks.identified_risks.length} risks identified without corresponding governance documentation`
         });
     }
-    
+
     return risks;
+}
+
+/**
+ * Assess exposure against the OWASP Top 10 for LLM Applications (2025).
+ * Each rule reports whether a *surface* for the risk was detected in the
+ * scan - this is exposure mapping, not proof of a vulnerability
+ * (inspired by akumar0205 AIBOM's deterministic risk rule pack).
+ * @param {Array} findings - All analysis findings
+ * @returns {Array} OWASP LLM risk entries with status and rationale
+ */
+function assessOWASPLLMTop10(findings) {
+    const has = (predicate) => findings.some(predicate);
+
+    const keywordMatch = (f, words) => {
+        const text = `${f.title || ''} ${f.description || ''}`.toLowerCase();
+        return words.some(w => text.includes(w));
+    };
+
+    const hasProtocols = has(f => f.category === 'protocol');
+    const hasToolCalling = has(f =>
+        f.protocolInfo?.type === 'function-calling' ||
+        keywordMatch(f, ['function calling', 'tool calls', 'tool calling', 'tool registration'])
+    );
+    const hasCloudModels = has(f =>
+        f.modelInfo && !['Ollama', 'Unknown', 'Meta'].includes(f.modelInfo.provider)
+    );
+    const hasAIDeps = has(f => f.category === 'dependencies');
+    const hasAgents = has(f =>
+        keywordMatch(f, ['crewai', 'autogen', 'langgraph', 'agent framework', 'agents sdk', 'semantic kernel', 'pydanticai', 'smolagents', 'strands', 'adk'])
+    );
+    const hasFineTuning = has(f => f.category === 'fine-tuning');
+    const hasVectorStores = has(f =>
+        f.dependencyInfo && keywordMatch(f, ['chroma', 'pinecone', 'weaviate', 'qdrant', 'vector', 'faiss', 'milvus'])
+    );
+    const hasGuardrails = has(f =>
+        keywordMatch(f, ['guardrail', 'nemoguardrails', 'llm-guard', 'rebuff', 'lakera', 'presidio', 'moderation'])
+    );
+
+    // Rule definitions mapped to the OWASP LLM Top 10 (2025)
+    // status: 'detected' = exposure surface found, 'not-detected' = no surface in scan
+    const rules = [
+        {
+            id: 'LLM01', name: 'Prompt Injection',
+            surface: hasProtocols || hasToolCalling,
+            rationale: hasProtocols || hasToolCalling
+                ? 'Tool/protocol surfaces detected (MCP, A2A, function calling) - external content can reach the model'
+                : null,
+            remediation: 'Validate and sanitize untrusted content before it reaches model context'
+        },
+        {
+            id: 'LLM02', name: 'Sensitive Information Disclosure',
+            surface: hasCloudModels,
+            rationale: hasCloudModels
+                ? 'Cloud-hosted models in use - application data is sent to external APIs'
+                : null,
+            remediation: 'Review what data flows to external model providers; consider redaction or local models'
+        },
+        {
+            id: 'LLM03', name: 'Supply Chain Vulnerabilities',
+            surface: hasAIDeps,
+            rationale: hasAIDeps
+                ? 'Third-party AI dependencies detected - vulnerable or malicious packages are a supply-chain risk'
+                : null,
+            remediation: 'Pin AI package versions, verify checksums, and monitor advisories for AI packages'
+        },
+        {
+            id: 'LLM04', name: 'Data and Model Poisoning',
+            surface: hasFineTuning,
+            rationale: hasFineTuning
+                ? 'Fine-tuning activity detected - training data provenance affects model integrity'
+                : null,
+            remediation: 'Verify training data sources and integrity when fine-tuning models'
+        },
+        {
+            id: 'LLM06', name: 'Excessive Agency',
+            surface: hasAgents,
+            rationale: hasAgents
+                ? 'Agent frameworks detected - autonomous action surfaces require permission scoping'
+                : null,
+            remediation: 'Scope agent tool permissions to the minimum required; require human approval for sensitive actions'
+        },
+        {
+            id: 'LLM08', name: 'Vector and Embedding Weaknesses',
+            surface: hasVectorStores,
+            rationale: hasVectorStores
+                ? 'Vector stores detected - embedding/knowledge base access controls affect retrieval integrity'
+                : null,
+            remediation: 'Enforce per-tenant access controls and knowledge-base permission boundaries'
+        }
+    ];
+
+    const results = rules
+        .filter(r => r.surface)
+        .map(r => ({
+            id: r.id,
+            name: r.name,
+            status: 'exposure-surface-detected',
+            severity: 'medium',
+            rationale: r.rationale,
+            remediation: r.remediation
+        }));
+
+    // Positive indicator when guardrail tooling is present (mitigates LLM01/LLM02)
+    if (hasGuardrails) {
+        results.push({
+            id: 'MITIGATION',
+            name: 'Guardrails / Safety Middleware Detected',
+            status: 'mitigation-present',
+            severity: 'info',
+            rationale: 'Guardrail, moderation or PII-protection frameworks detected - mitigates prompt injection and disclosure exposure',
+            remediation: null
+        });
+    }
+
+    return results;
 }
 
 /**

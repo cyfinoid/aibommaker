@@ -55,12 +55,19 @@ const AI_SIGNATURES = {
       models: [
         { pattern: /gpt-4o-mini/i, name: 'GPT-4o Mini' },
         { pattern: /gpt-4o/i, name: 'GPT-4o' },
+        { pattern: /gpt-4\.1-mini|gpt-4\.1-nano/i, name: 'GPT-4.1 Mini/Nano' },
+        { pattern: /gpt-4\.1/i, name: 'GPT-4.1' },
+        { pattern: /gpt-4\.5/i, name: 'GPT-4.5' },
         { pattern: /gpt-4-turbo|gpt-4-1106/i, name: 'GPT-4 Turbo' },
-        { pattern: /gpt-4(?![o\.])/i, name: 'GPT-4' },
+        { pattern: /gpt-4(?![o\.\d])/i, name: 'GPT-4' },
         { pattern: /gpt-3\.5-turbo/i, name: 'GPT-3.5 Turbo' },
+        { pattern: /gpt-5/i, name: 'GPT-5' },
         { pattern: /o1-preview/i, name: 'o1-preview' },
         { pattern: /o1-mini/i, name: 'o1-mini' },
-        { pattern: /o3-mini/i, name: 'o3-mini' }
+        { pattern: /o1-pro/i, name: 'o1-pro' },
+        { pattern: /o3-mini/i, name: 'o3-mini' },
+        { pattern: /o3(?![-\w])/i, name: 'o3' },
+        { pattern: /o4-mini/i, name: 'o4-mini' }
       ]
     },
     {
@@ -97,8 +104,12 @@ const AI_SIGNATURES = {
         { pattern: /claude-3-opus/i, name: 'Claude 3 Opus' },
         { pattern: /claude-3\.5-sonnet|claude-3-5-sonnet/i, name: 'Claude 3.5 Sonnet' },
         { pattern: /claude-3\.5-haiku|claude-3-5-haiku/i, name: 'Claude 3.5 Haiku' },
+        { pattern: /claude-3-7-sonnet/i, name: 'Claude 3.7 Sonnet' },
         { pattern: /claude-3-sonnet/i, name: 'Claude 3 Sonnet' },
         { pattern: /claude-3-haiku/i, name: 'Claude 3 Haiku' },
+        { pattern: /claude-opus-4-5|claude-4-5-opus/i, name: 'Claude Opus 4.5' },
+        { pattern: /claude-sonnet-4-5|claude-4-5-sonnet/i, name: 'Claude Sonnet 4.5' },
+        { pattern: /claude-haiku-4-5|claude-4-5-haiku/i, name: 'Claude Haiku 4.5' },
         { pattern: /claude-opus-4|claude-4-opus/i, name: 'Claude Opus 4' },
         { pattern: /claude-sonnet-4|claude-4-sonnet/i, name: 'Claude Sonnet 4' }
       ]
@@ -132,11 +143,394 @@ const AI_SIGNATURES = {
       models: [
         { pattern: /gemini-2\.0-flash/i, name: 'Gemini 2.0 Flash' },
         { pattern: /gemini-2\.0-pro/i, name: 'Gemini 2.0 Pro' },
+        { pattern: /gemini-2\.5-pro/i, name: 'Gemini 2.5 Pro' },
+        { pattern: /gemini-2\.5-flash/i, name: 'Gemini 2.5 Flash' },
         { pattern: /gemini-1\.5-pro/i, name: 'Gemini 1.5 Pro' },
         { pattern: /gemini-1\.5-flash/i, name: 'Gemini 1.5 Flash' },
         { pattern: /gemini-pro/i, name: 'Gemini Pro' },
+        { pattern: /gemma-3|gemma3/i, name: 'Gemma 3' },
         { pattern: /gemma-2|gemma2/i, name: 'Gemma 2' }
       ]
+    },
+    {
+      id: 'cohere.client',
+      vendor: 'Cohere',
+      product: 'Cohere',
+      service: 'AI Client',
+      description: 'Cohere SDK for Command and Embed models',
+      tags: ['ai', 'text', 'llm', 'embeddings', 'api'],
+      category: 'llm_providers',
+      packages: {
+        python: ['cohere'],
+        node: ['cohere-ai']
+      },
+      codePatterns: {
+        python: [
+          { pattern: /from\s+cohere\s+import/i, weight: 5 },
+          { pattern: /import\s+cohere/i, weight: 5 },
+          { pattern: /Cohere\(|ChatCohere\(/i, weight: 4 }
+        ],
+        javascript: [
+          { pattern: /from\s+['"]cohere-ai['"]/i, weight: 5 },
+          { pattern: /require\s*\(\s*['"]cohere-ai['"]/i, weight: 5 }
+        ]
+      },
+      apiEndpoints: [
+        { pattern: /api\.cohere\.(ai|com)/i, weight: 4 }
+      ],
+      models: [
+        { pattern: /command-a/i, name: 'Command A' },
+        { pattern: /command-r-plus/i, name: 'Command R+' },
+        { pattern: /command-r7b-arabic/i, name: 'Command R7B Arabic' },
+        { pattern: /command-r(?!7b|[-_]?plus)/i, name: 'Command R' },
+        { pattern: /embed-english|embed-multilingual/i, name: 'Cohere Embed' }
+      ]
+    },
+    {
+      id: 'mistral.client',
+      vendor: 'Mistral AI',
+      product: 'Mistral AI',
+      service: 'AI Client',
+      description: 'Mistral AI SDK for Mistral, Mixtral, Codestral and Pixtral models',
+      tags: ['ai', 'text', 'llm', 'api'],
+      category: 'llm_providers',
+      packages: {
+        python: ['mistralai'],
+        node: ['@mistralai/mistralai']
+      },
+      codePatterns: {
+        python: [
+          { pattern: /from\s+mistralai\s+import/i, weight: 5 },
+          { pattern: /import\s+mistralai/i, weight: 5 },
+          { pattern: /Mistral\(|ChatMistralAI\(/i, weight: 4 }
+        ]
+      },
+      apiEndpoints: [
+        { pattern: /api\.mistral\.ai/i, weight: 4 }
+      ],
+      models: [
+        { pattern: /mistral-large/i, name: 'Mistral Large' },
+        { pattern: /mixtral/i, name: 'Mixtral' },
+        { pattern: /codestral/i, name: 'Codestral' },
+        { pattern: /pixtral/i, name: 'Pixtral' },
+        { pattern: /mistral-small/i, name: 'Mistral Small' }
+      ]
+    },
+    {
+      id: 'groq.client',
+      vendor: 'Groq',
+      product: 'Groq',
+      service: 'Inference API Client',
+      description: 'Groq SDK for high-speed LLM inference',
+      tags: ['ai', 'text', 'llm', 'api', 'inference'],
+      category: 'llm_providers',
+      packages: {
+        python: ['groq'],
+        node: ['groq-sdk']
+      },
+      codePatterns: {
+        python: [
+          { pattern: /from\s+groq\s+import/i, weight: 5 },
+          { pattern: /import\s+groq/i, weight: 5 },
+          { pattern: /Groq\(|ChatGroq\(/i, weight: 4 }
+        ],
+        javascript: [
+          { pattern: /from\s+['"]groq-sdk['"]/i, weight: 5 },
+          { pattern: /new\s+Groq\s*\(/i, weight: 4 }
+        ]
+      },
+      apiEndpoints: [
+        { pattern: /api\.groq\.com/i, weight: 4 }
+      ]
+    },
+    {
+      id: 'xai.grok',
+      vendor: 'xAI',
+      product: 'Grok',
+      service: 'AI Client',
+      description: 'xAI SDK for Grok models',
+      tags: ['ai', 'text', 'llm', 'api'],
+      category: 'llm_providers',
+      packages: {
+        python: ['xai']
+      },
+      codePatterns: {
+        python: [
+          { pattern: /from\s+xai\s+import/i, weight: 5 },
+          { pattern: /api\.x\.ai/i, weight: 4 }
+        ]
+      },
+      apiEndpoints: [
+        { pattern: /api\.x\.ai/i, weight: 4 }
+      ],
+      models: [
+        { pattern: /grok-[\w.-]+|grok-beta/i, name: 'Grok' }
+      ]
+    },
+    {
+      id: 'together.client',
+      vendor: 'Together AI',
+      product: 'Together',
+      service: 'Inference API Client',
+      description: 'Together AI SDK for open-model inference',
+      tags: ['ai', 'text', 'llm', 'api', 'inference'],
+      category: 'llm_providers',
+      packages: {
+        python: ['together']
+      },
+      codePatterns: {
+        python: [
+          { pattern: /from\s+together\s+import/i, weight: 5 },
+          { pattern: /import\s+together/i, weight: 5 }
+        ]
+      },
+      apiEndpoints: [
+        { pattern: /api\.together\.(xyz|ai)/i, weight: 4 }
+      ]
+    },
+    {
+      id: 'perplexity.client',
+      vendor: 'Perplexity',
+      product: 'Perplexity',
+      service: 'Inference API Client',
+      description: 'Perplexity API for online LLM inference',
+      tags: ['ai', 'text', 'llm', 'api'],
+      category: 'llm_providers',
+      codePatterns: {
+        python: [
+          { pattern: /api\.perplexity\.ai/i, weight: 5 }
+        ]
+      },
+      apiEndpoints: [
+        { pattern: /api\.perplexity\.ai/i, weight: 4 }
+      ]
+    },
+    {
+      id: 'fireworks.client',
+      vendor: 'Fireworks AI',
+      product: 'Fireworks',
+      service: 'Inference API Client',
+      description: 'Fireworks AI SDK for fast model inference',
+      tags: ['ai', 'text', 'llm', 'api', 'inference'],
+      category: 'llm_providers',
+      packages: {
+        python: ['fireworks']
+      },
+      codePatterns: {
+        python: [
+          { pattern: /from\s+fireworks\s+import/i, weight: 5 }
+        ]
+      },
+      apiEndpoints: [
+        { pattern: /api\.fireworks\.ai/i, weight: 4 }
+      ]
+    },
+    {
+      id: 'replicate.client',
+      vendor: 'Replicate',
+      product: 'Replicate',
+      service: 'Model Hosting Client',
+      description: 'Replicate SDK for running hosted models',
+      tags: ['ai', 'text', 'llm', 'api', 'hosting'],
+      category: 'llm_providers',
+      packages: {
+        python: ['replicate'],
+        node: ['replicate']
+      },
+      codePatterns: {
+        python: [
+          { pattern: /import\s+replicate/i, weight: 5 },
+          { pattern: /replicate\.run\(/i, weight: 5 }
+        ],
+        javascript: [
+          { pattern: /from\s+['"]replicate['"]/i, weight: 5 },
+          { pattern: /require\s*\(\s*['"]replicate['"]/i, weight: 5 }
+        ]
+      },
+      apiEndpoints: [
+        { pattern: /api\.replicate\.com/i, weight: 4 }
+      ]
+    },
+    {
+      id: 'ai21.client',
+      vendor: 'AI21 Labs',
+      product: 'AI21',
+      service: 'AI Client',
+      description: 'AI21 Labs SDK for Jurassic/Jamba models',
+      tags: ['ai', 'text', 'llm', 'api'],
+      category: 'llm_providers',
+      packages: {
+        python: ['ai21']
+      },
+      codePatterns: {
+        python: [
+          { pattern: /from\s+ai21\s+import/i, weight: 5 },
+          { pattern: /import\s+ai21/i, weight: 5 }
+        ]
+      },
+      apiEndpoints: [
+        { pattern: /api\.ai21\.com/i, weight: 4 }
+      ]
+    },
+    {
+      id: 'stability.client',
+      vendor: 'Stability AI',
+      product: 'Stability AI',
+      service: 'Image Generation Client',
+      description: 'Stability AI SDK for image generation models',
+      tags: ['ai', 'image', 'diffusion', 'api'],
+      category: 'llm_providers',
+      packages: {
+        python: ['stability-sdk']
+      },
+      codePatterns: {
+        python: [
+          { pattern: /import\s+stability_sdk/i, weight: 5 },
+          { pattern: /StabilityInference\(/i, weight: 5 }
+        ]
+      },
+      apiEndpoints: [
+        { pattern: /api\.stability\.ai/i, weight: 4 }
+      ],
+      models: [
+        { pattern: /stable-diffusion/i, name: 'Stable Diffusion' }
+      ]
+    },
+    {
+      id: 'alephalpha.client',
+      vendor: 'Aleph Alpha',
+      product: 'Aleph Alpha',
+      service: 'AI Client',
+      description: 'Aleph Alpha SDK for Luminous models',
+      tags: ['ai', 'text', 'llm', 'api'],
+      category: 'llm_providers',
+      packages: {
+        python: ['aleph-alpha-client']
+      },
+      codePatterns: {
+        python: [
+          { pattern: /from\s+aleph_alpha_client/i, weight: 5 }
+        ]
+      },
+      apiEndpoints: [
+        { pattern: /api\.aleph-alpha\.com/i, weight: 4 }
+      ],
+      models: [
+        { pattern: /luminous/i, name: 'Luminous' }
+      ]
+    },
+    {
+      id: 'azure.openai',
+      vendor: 'Microsoft',
+      product: 'Azure OpenAI',
+      service: 'Managed AI Client',
+      description: 'Azure OpenAI Service client for GPT model deployments',
+      tags: ['ai', 'text', 'llm', 'api', 'azure', 'microsoft'],
+      category: 'llm_providers',
+      packages: {
+        python: ['azure-openai'],
+        node: ['@azure/openai']
+      },
+      codePatterns: {
+        python: [
+          { pattern: /AzureOpenAI\(|AzureChatOpenAI\(/i, weight: 5 }
+        ],
+        javascript: [
+          { pattern: /from\s+['"]@azure\/openai['"]/i, weight: 5 },
+          { pattern: /new\s+OpenAIClient\s*\(/i, weight: 4 }
+        ]
+      },
+      apiEndpoints: [
+        { pattern: /openai\.azure\.com/i, weight: 4 }
+      ]
+    },
+    {
+      id: 'bedrock.client',
+      vendor: 'AWS Bedrock',
+      product: 'Bedrock',
+      service: 'Managed AI Client',
+      description: 'AWS Bedrock runtime client for hosted foundation models',
+      tags: ['ai', 'text', 'llm', 'api', 'aws', 'bedrock'],
+      category: 'llm_providers',
+      codePatterns: {
+        python: [
+          { pattern: /BedrockRuntime\(|BedrockEmbeddings\(|ChatBedrock\(/i, weight: 5 },
+          { pattern: /bedrock-runtime/i, weight: 5 },
+          { pattern: /invoke_bedrock_agent|invoke_agent_runtime/i, weight: 4 },
+          // Bedrock-style model ids: anthropic.claude-..., amazon.titan-..., meta.llama...
+          { pattern: /["'](?:us\.)?(?:anthropic|amazon|meta|ai21|cohere)\.[\w.-]+["']/i, weight: 5 }
+        ]
+      },
+      apiEndpoints: [
+        { pattern: /bedrock-runtime(\.fips)?\.[\w-]+\.amazonaws\.com/i, weight: 4 }
+      ],
+      models: [
+        { pattern: /anthropic\.claude-[\w.-]+/i, name: 'Claude (Bedrock)' },
+        { pattern: /amazon\.(titan|nova)[\w.-]*/i, name: 'Titan/Nova (Bedrock)' },
+        { pattern: /meta\.llama[\w.-]*/i, name: 'Llama (Bedrock)' },
+        { pattern: /ai21\.j2[\w.-]*/i, name: 'Jurassic (Bedrock)' }
+      ]
+    },
+    {
+      id: 'vertexai.client',
+      vendor: 'Google',
+      product: 'Vertex AI',
+      service: 'Managed AI Client',
+      description: 'Google Vertex AI client for Gemini and model garden deployments',
+      tags: ['ai', 'text', 'llm', 'api', 'gcp', 'vertex'],
+      category: 'llm_providers',
+      packages: {
+        python: ['vertexai', 'google-cloud-aiplatform']
+      },
+      codePatterns: {
+        python: [
+          { pattern: /from\s+vertexai\s+import|import\s+vertexai/i, weight: 5 },
+          { pattern: /vertexai\.init\(/i, weight: 5 },
+          { pattern: /from\s+google\.cloud\s+import\s+aiplatform/i, weight: 5 }
+        ]
+      },
+      apiEndpoints: [
+        { pattern: /aiplatform\.googleapis\.com/i, weight: 4 }
+      ]
+    },
+    {
+      id: 'openrouter.gateway',
+      vendor: 'OpenRouter',
+      product: 'OpenRouter',
+      service: 'LLM Gateway',
+      description: 'OpenRouter gateway for routing requests to multiple LLM providers',
+      tags: ['ai', 'text', 'llm', 'gateway', 'router'],
+      category: 'llm_providers',
+      codePatterns: {
+        python: [
+          { pattern: /openrouter\.ai\/api/i, weight: 5 }
+        ],
+        javascript: [
+          { pattern: /openrouter\.ai\/api/i, weight: 5 }
+        ]
+      },
+      apiEndpoints: [
+        { pattern: /openrouter\.ai/i, weight: 4 }
+      ]
+    },
+    {
+      id: 'litellm.router',
+      vendor: 'BerriAI',
+      product: 'LiteLLM',
+      service: 'LLM Gateway',
+      description: 'LiteLLM proxy/SDK for unified LLM provider routing',
+      tags: ['ai', 'text', 'llm', 'gateway', 'router'],
+      category: 'llm_providers',
+      packages: {
+        python: ['litellm']
+      },
+      codePatterns: {
+        python: [
+          { pattern: /from\s+litellm\s+import/i, weight: 5 },
+          { pattern: /import\s+litellm/i, weight: 5 },
+          { pattern: /litellm\.completion|litellm\.Router/i, weight: 5 }
+        ]
+      }
     }
   ],
 
@@ -356,13 +750,225 @@ const AI_SIGNATURES = {
       tags: ['ai', 'agents', 'multi-agent', 'orchestration', 'microsoft'],
       category: 'ai_agents',
       packages: {
-        python: ['autogen']
+        python: ['autogen', 'pyautogen', 'ag2', 'autogen-agentchat', 'autogen-ext']
       },
       codePatterns: {
         python: [
-          { pattern: /from\s+autogen\s+import/i, weight: 4 },
-          { pattern: /import\s+autogen/i, weight: 4 },
+          { pattern: /from\s+autogen(_\w+)?\s+import/i, weight: 4 },
+          { pattern: /import\s+autogen(_\w+)?/i, weight: 4 },
           { pattern: /AutoGen\(|AssistantAgent\(|UserProxyAgent\(/i, weight: 3 }
+        ]
+      }
+    },
+    {
+      id: 'langgraph.framework',
+      vendor: 'LangChain',
+      product: 'LangGraph',
+      service: 'Agent Orchestration',
+      description: 'LangGraph framework for building stateful, multi-step AI agents',
+      tags: ['ai', 'agents', 'graphs', 'orchestration'],
+      category: 'ai_agents',
+      packages: {
+        python: ['langgraph', 'langgraph-prebuilt', 'langgraph-checkpoint', 'langgraph-sdk'],
+        node: ['@langchain/langgraph']
+      },
+      codePatterns: {
+        python: [
+          { pattern: /from\s+langgraph/i, weight: 5 },
+          { pattern: /import\s+langgraph/i, weight: 5 },
+          { pattern: /create_react_agent\(/i, weight: 5 },
+          { pattern: /StateGraph\(|MessageGraph\(/i, weight: 4 }
+        ],
+        javascript: [
+          { pattern: /from\s+['"]@langchain\/langgraph/i, weight: 5 },
+          { pattern: /StateGraph\(/i, weight: 4 }
+        ]
+      }
+    },
+    {
+      id: 'google.adk',
+      vendor: 'Google',
+      product: 'Agent Development Kit',
+      service: 'Agent Framework',
+      description: 'Google Agent Development Kit (ADK) for building AI agents',
+      tags: ['ai', 'agents', 'google', 'adk', 'orchestration'],
+      category: 'ai_agents',
+      packages: {
+        python: ['google-adk']
+      },
+      codePatterns: {
+        python: [
+          { pattern: /from\s+google\.adk\s+import/i, weight: 5 },
+          { pattern: /google\.adk\.agents/i, weight: 5 },
+          { pattern: /McpToolset\(/i, weight: 4 }
+        ]
+      }
+    },
+    {
+      id: 'openai.agents',
+      vendor: 'OpenAI',
+      product: 'Agents SDK',
+      service: 'Agent Framework',
+      description: 'OpenAI Agents SDK for building agentic applications',
+      tags: ['ai', 'agents', 'openai', 'orchestration'],
+      category: 'ai_agents',
+      packages: {
+        python: ['openai-agents'],
+        node: ['@openai/agents']
+      },
+      codePatterns: {
+        python: [
+          { pattern: /from\s+agents\s+import\s+(Agent|Runner|function_tool)/i, weight: 5 },
+          { pattern: /@function_tool|@output_guardrail|@input_guardrail/i, weight: 4 }
+        ],
+        javascript: [
+          { pattern: /from\s+['"]@openai\/agents['"]/i, weight: 5 }
+        ]
+      }
+    },
+    {
+      id: 'pydanticai.framework',
+      vendor: 'Pydantic',
+      product: 'PydanticAI',
+      service: 'Agent Framework',
+      description: 'PydanticAI agent framework with type-safe structured outputs',
+      tags: ['ai', 'agents', 'pydantic', 'orchestration'],
+      category: 'ai_agents',
+      packages: {
+        python: ['pydantic-ai', 'pydantic-ai-slim']
+      },
+      codePatterns: {
+        python: [
+          { pattern: /from\s+pydantic_ai\s+import/i, weight: 5 },
+          { pattern: /pydantic_ai\.Agent/i, weight: 5 }
+        ]
+      }
+    },
+    {
+      id: 'smolagents.framework',
+      vendor: 'HuggingFace',
+      product: 'SmolAgents',
+      service: 'Agent Framework',
+      description: 'HuggingFace SmolAgents lightweight agent framework',
+      tags: ['ai', 'agents', 'huggingface', 'orchestration'],
+      category: 'ai_agents',
+      packages: {
+        python: ['smolagents']
+      },
+      codePatterns: {
+        python: [
+          { pattern: /from\s+smolagents\s+import/i, weight: 5 },
+          { pattern: /CodeAgent\(|ToolCallingAgent\(/i, weight: 4 }
+        ]
+      }
+    },
+    {
+      id: 'strands.framework',
+      vendor: 'AWS',
+      product: 'Strands Agents',
+      service: 'Agent Framework',
+      description: 'AWS Strands Agents SDK for building AI agents',
+      tags: ['ai', 'agents', 'aws', 'orchestration'],
+      category: 'ai_agents',
+      packages: {
+        python: ['strands-agents', 'strands-agents-tools']
+      },
+      codePatterns: {
+        python: [
+          { pattern: /from\s+strands(\.tools)?\s+import/i, weight: 5 },
+          { pattern: /strands\.Agent\(|strands_tools/i, weight: 4 }
+        ]
+      }
+    },
+    {
+      id: 'deepagents.framework',
+      vendor: 'LangChain',
+      product: 'DeepAgents',
+      service: 'Agent Framework',
+      description: 'DeepAgents framework for long-running agentic applications',
+      tags: ['ai', 'agents', 'orchestration'],
+      category: 'ai_agents',
+      packages: {
+        python: ['deepagents']
+      },
+      codePatterns: {
+        python: [
+          { pattern: /from\s+deepagents\s+import/i, weight: 5 },
+          { pattern: /create_deep_agent\(/i, weight: 5 }
+        ]
+      }
+    },
+    {
+      id: 'haystack.framework',
+      vendor: 'deepset',
+      product: 'Haystack',
+      service: 'LLM Application Framework',
+      description: 'Haystack framework for building LLM pipelines and RAG applications',
+      tags: ['ai', 'framework', 'rag', 'pipelines'],
+      category: 'ai_agents',
+      packages: {
+        python: ['haystack-ai', 'farm-haystack']
+      },
+      codePatterns: {
+        python: [
+          { pattern: /from\s+haystack\s+import/i, weight: 5 },
+          { pattern: /import\s+haystack/i, weight: 4 }
+        ]
+      }
+    },
+    {
+      id: 'dspy.framework',
+      vendor: 'Stanford NLP',
+      product: 'DSPy',
+      service: 'Prompt Programming Framework',
+      description: 'DSPy framework for programming (not prompting) language models',
+      tags: ['ai', 'framework', 'prompts', 'optimization'],
+      category: 'ai_agents',
+      packages: {
+        python: ['dspy', 'dspy-ai']
+      },
+      codePatterns: {
+        python: [
+          { pattern: /import\s+dspy/i, weight: 5 },
+          { pattern: /dspy\.(Module|ChainOfThought|Predict|ProgramOfThought)\b/i, weight: 4 }
+        ]
+      }
+    },
+    {
+      id: 'instructor.client',
+      vendor: 'Instructor',
+      product: 'Instructor',
+      service: 'Structured Output Library',
+      description: 'Instructor library for structured LLM outputs with Pydantic',
+      tags: ['ai', 'structured-output', 'validation'],
+      category: 'ai_agents',
+      packages: {
+        python: ['instructor']
+      },
+      codePatterns: {
+        python: [
+          { pattern: /import\s+instructor/i, weight: 5 },
+          { pattern: /instructor\.from_(openai|anthropic|litellm)/i, weight: 5 }
+        ]
+      }
+    },
+    {
+      id: 'semantic-kernel.microsoft',
+      vendor: 'Microsoft',
+      product: 'Semantic Kernel',
+      service: 'Agent Framework',
+      description: 'Microsoft Semantic Kernel SDK for LLM orchestration and plugins',
+      tags: ['ai', 'agents', 'microsoft', 'plugins', 'orchestration'],
+      category: 'ai_agents',
+      packages: {
+        python: ['semantic-kernel'],
+        node: ['semantic-kernel'],
+        dotnet: ['Microsoft.SemanticKernel']
+      },
+      codePatterns: {
+        python: [
+          { pattern: /from\s+semantic_kernel\s+import/i, weight: 5 },
+          { pattern: /semantic_kernel\.Kernel/i, weight: 5 }
         ]
       }
     }
@@ -545,6 +1151,64 @@ const AI_SIGNATURES = {
   ],
 
   // ==========================================================================
+  // GUARDRAILS - Safety, moderation and privacy middleware
+  // ==========================================================================
+  guardrails: [
+    {
+      id: 'safety.guardrails',
+      vendor: 'Guardrails',
+      product: 'Guardrails & Safety Middleware',
+      service: 'AI Safety',
+      description: 'Guardrail, moderation and PII-protection frameworks for LLM applications',
+      tags: ['ai', 'safety', 'guardrails', 'moderation', 'privacy'],
+      category: 'guardrails',
+      packages: {
+        python: ['nemoguardrails', 'guardrails', 'guardrails-ai', 'llm-guard', 'lakera-guard', 'rebuff', 'presidio-analyzer', 'presidio-anonymizer', 'cisco-aidefense-sdk']
+      },
+      codePatterns: {
+        python: [
+          { pattern: /from\s+nemoguardrails/i, weight: 5 },
+          { pattern: /RailsConfig\(/i, weight: 5 },
+          { pattern: /from\s+guardrails(\.html)?\s+import|import\s+guardrails_ai/i, weight: 5 },
+          { pattern: /from\s+llm_guard\s+import|llm_guard\./i, weight: 5 },
+          { pattern: /from\s+presidio_analyzer\s+import|AnonymizerEngine\(/i, weight: 5 },
+          { pattern: /lakera_guard|LakeraGuard/i, weight: 5 },
+          { pattern: /Rebuff\(|from\s+rebuff\s+import/i, weight: 5 }
+        ]
+      }
+    }
+  ],
+
+  // ==========================================================================
+  // LLM OBSERVABILITY - Tracing, monitoring and evaluation of LLM apps
+  // ==========================================================================
+  llm_observability: [
+    {
+      id: 'observability.llm',
+      vendor: 'LLM Observability',
+      product: 'LLM Observability',
+      service: 'Tracing & Monitoring',
+      description: 'Observability and tracing tools for LLM applications (traces, spans, prompt monitoring)',
+      tags: ['ai', 'observability', 'tracing', 'monitoring', 'telemetry'],
+      category: 'llm_observability',
+      packages: {
+        python: ['langfuse', 'langsmith', 'arize-phoenix', 'opik', 'helicone', 'traceloop-sdk', 'openllmetry', 'galileo', 'galileo-core'],
+        node: ['langfuse', 'langsmith']
+      },
+      codePatterns: {
+        python: [
+          { pattern: /from\s+langfuse/i, weight: 5 },
+          { pattern: /LangfuseCallbackHandler|langfuse\.langchain/i, weight: 5 },
+          { pattern: /from\s+langsmith|langsmith\.wrap/i, weight: 5 },
+          { pattern: /import\s+traceloop|TraceloopInit/i, weight: 5 },
+          { pattern: /arize_phoenix|PhoenixClient/i, weight: 5 },
+          { pattern: /GalileoLogger|from\s+galileo/i, weight: 5 }
+        ]
+      }
+    }
+  ],
+
+  // ==========================================================================
   // AI DEV TOOLS - IDE plugins and AI-assisted coding (low confidence)
   // ==========================================================================
   ai_dev_tools: [
@@ -615,7 +1279,9 @@ function generatePackageRegistry() {
     a2a_protocols: {},
     plugin_systems: {},
     rag_document: {},
-    prompt_eval: {}
+    prompt_eval: {},
+    guardrails: {},
+    llm_observability: {}
   };
 
   // Flatten all signatures and group by category
@@ -711,7 +1377,9 @@ function generateExtendedDependencies() {
       ...AI_PACKAGE_REGISTRY.a2a_protocols?.python || [],
       ...AI_PACKAGE_REGISTRY.plugin_systems?.python || [],
       ...AI_PACKAGE_REGISTRY.rag_document?.python || [],
-      ...AI_PACKAGE_REGISTRY.prompt_eval?.python || []
+      ...AI_PACKAGE_REGISTRY.prompt_eval?.python || [],
+      ...AI_PACKAGE_REGISTRY.guardrails?.python || [],
+      ...AI_PACKAGE_REGISTRY.llm_observability?.python || []
     ],
     node: [
       ...AI_PACKAGE_REGISTRY.llm_providers.node || [],
@@ -723,7 +1391,9 @@ function generateExtendedDependencies() {
       ...AI_PACKAGE_REGISTRY.a2a_protocols?.node || [],
       ...AI_PACKAGE_REGISTRY.plugin_systems?.node || [],
       ...AI_PACKAGE_REGISTRY.rag_document?.node || [],
-      ...AI_PACKAGE_REGISTRY.prompt_eval?.node || []
+      ...AI_PACKAGE_REGISTRY.prompt_eval?.node || [],
+      ...AI_PACKAGE_REGISTRY.guardrails?.node || [],
+      ...AI_PACKAGE_REGISTRY.llm_observability?.node || []
     ],
     go: [...AI_PACKAGE_REGISTRY.llm_providers.go || [], ...AI_PACKAGE_REGISTRY.llm_frameworks.go || []],
     java: [...AI_PACKAGE_REGISTRY.llm_providers.java || [], ...AI_PACKAGE_REGISTRY.llm_frameworks.java || []],
@@ -784,7 +1454,10 @@ function generateProtocolPatterns() {
       config_files: [
         'a2a.json',
         'agent-protocol.json',
-        '.agent-protocol/config.json'
+        '.agent-protocol/config.json',
+        // A2A Agent Card (spec convention served at /.well-known/agent.json)
+        '.well-known/agent.json',
+        'agent-card.json'
       ],
       code_patterns: [
         { pattern: /agent-protocol|AgentProtocol/i, type: 'Agent Protocol' },
@@ -847,6 +1520,7 @@ function generateDevTools() {
         'CLAUDE.md',                  // Claude Code conventions file
         'claude.md',                  // Claude Code conventions file (lowercase)
         '.claude',                    // Claude config directory
+        'SKILL.md',                   // Agent skill definition file (e.g. .claude/skills/*/SKILL.md)
       ],
       // Node.js dependencies that indicate AI tooling
       node: [
@@ -961,8 +1635,15 @@ const CI_PATTERNS = [
 
 const MODEL_FILE_PATTERNS = [
     { extension: '.gguf', description: 'GGUF model file (llama.cpp format)' },
+    { extension: '.ggml', description: 'GGML model file (llama.cpp legacy format)' },
     { extension: '.safetensors', description: 'SafeTensors model file' },
+    { extension: '.onnx', description: 'ONNX model file' },
     { extension: '.bin', description: 'Binary model file', pathMatch: /models?|checkpoints?/i },
+    { extension: '.ckpt', description: 'Training checkpoint file', pathMatch: /models?|checkpoints?/i },
+    { extension: '.h5', description: 'Keras/HDF5 model file', pathMatch: /models?|checkpoints?/i },
+    { extension: '.pb', description: 'TensorFlow protobuf model file', pathMatch: /models?|checkpoints?/i },
+    { extension: '.tflite', description: 'TensorFlow Lite model file' },
+    { extension: '.msgpack', description: 'Msgpack model file (Flax/JAX)', pathMatch: /models?|checkpoints?/i },
     { filename: 'tokenizer.json', description: 'Tokenizer configuration' },
     { filename: 'tokenizer.model', description: 'Tokenizer model' },
     { filename: 'tokenizer_config.json', description: 'Tokenizer configuration' },
@@ -1075,7 +1756,9 @@ const INFRASTRUCTURE_PATTERNS = {
             { pattern: /FROM\s+tensorflow\/tensorflow/i, platform: 'Docker + TensorFlow', weight: 5 },
             { pattern: /FROM\s+huggingface/i, platform: 'Docker + HuggingFace', weight: 5 },
             { pattern: /--gpus/i, platform: 'Docker GPU', weight: 4 },
-            { pattern: /runtime:\s*nvidia/i, platform: 'Docker NVIDIA Runtime', weight: 5 }
+            { pattern: /runtime:\s*nvidia/i, platform: 'Docker NVIDIA Runtime', weight: 5 },
+            // Digest-pinned base images - supply-chain provenance signal (akumar0205 lineage evidence)
+            { pattern: /FROM\s+\S+@sha256:[0-9a-f]{64}/i, platform: 'Digest-Pinned Base Image', weight: 4 }
         ]
     },
     orchestration: {
@@ -1085,7 +1768,11 @@ const INFRASTRUCTURE_PATTERNS = {
             { pattern: /kind:\s*Deployment/i, platform: 'Kubernetes', weight: 5 },
             { pattern: /kind:\s*Service/i, platform: 'Kubernetes', weight: 4 },
             { pattern: /kind:\s*Pod/i, platform: 'Kubernetes', weight: 4 },
-            { pattern: /nvidia\.com\/gpu/i, platform: 'Kubernetes GPU', weight: 5 }
+            { pattern: /nvidia\.com\/gpu/i, platform: 'Kubernetes GPU', weight: 5 },
+            // Digest-pinned images in k8s manifests - deployment lineage evidence
+            { pattern: /image:\s*\S+@sha256:[0-9a-f]{64}/i, platform: 'Digest-Pinned Container Image', weight: 4 },
+            // AI model configuration injected via pod environment (e.g. MODEL_DEPLOYMENT=gpt-4o-mini)
+            { pattern: /(?:name|key):\s*["']?(MODEL|MODEL_NAME|MODEL_ID|MODEL_DEPLOYMENT|LLM_MODEL|OPENAI_MODEL)["']?\s*$/m, platform: 'AI Model Environment Config', weight: 3 }
         ]
     },
     cloud: {

@@ -184,6 +184,14 @@ async function dependenciesDetector({
       foundDeps = findInRequirements(content, llmDeps);
     } else if (manifest.path.match(/pyproject\.toml|Pipfile/)) {
       foundDeps = findInPyproject(content, llmDeps);
+    } else if (manifest.path.endsWith("go.mod")) {
+      foundDeps = findInGoMod(content, llmDeps);
+    } else if (manifest.path.endsWith("Cargo.toml")) {
+      foundDeps = findInCargoToml(content, llmDeps);
+    } else if (manifest.path.endsWith("pom.xml")) {
+      foundDeps = findInPomXml(content, llmDeps);
+    } else if (manifest.path.match(/build\.gradle/)) {
+      foundDeps = findInGradle(content, llmDeps);
     }
 
     if (foundDeps.length > 0) {
@@ -340,6 +348,9 @@ function detectEcosystemFromSPDX(pkg) {
 function detectEcosystem(path) {
   if (path.match(/package\.json|yarn\.lock|pnpm-lock/)) return "node";
   if (path.match(/requirements\.txt|pyproject\.toml|Pipfile/)) return "python";
+  if (path.endsWith("go.mod")) return "go";
+  if (path.endsWith("Cargo.toml")) return "rust";
+  if (path.match(/pom\.xml|build\.gradle/)) return "java";
   return null;
 }
 
@@ -350,15 +361,9 @@ function findInPackageJson(content, llmDeps) {
     const results = [];
 
     const allDeps = { ...pkg.dependencies, ...pkg.devDependencies };
-    const matchingDeps = Object.keys(allDeps).filter((dep) => {
-      const depLower = dep.toLowerCase();
-      return llmDeps.some((llmDep) => {
-        const llmDepLower = llmDep.toLowerCase();
-        if (depLower === llmDepLower) return true;
-        const pattern = new RegExp(`(^|[^a-z])${llmDepLower}([^a-z]|$)`, "i");
-        return pattern.test(dep);
-      });
-    });
+    const matchingDeps = Object.keys(allDeps).filter((dep) =>
+      llmDeps.some((llmDep) => depMatchesPattern(dep, llmDep.toLowerCase())),
+    );
 
     // Find line numbers for each dependency
     matchingDeps.forEach((dep) => {
@@ -386,6 +391,31 @@ function findInPackageJson(content, llmDeps) {
   }
 }
 
+/**
+ * Word-boundary dependency-name matcher.
+ * Equivalent to the previous `new RegExp("(^|[^a-z])" + dep + "([^a-z]|$)", "i")`
+ * but without dynamic RegExp construction (static-analysis ReDoS finding:
+ * javascript.lang.security.audit.detect-non-literal-regexp). The registry names
+ * are our own constants, not user input, but avoiding dynamic RegExp is free.
+ * @param {string} depName - Dependency name from a manifest
+ * @param {string} llmDepLower - Known AI dependency name, lowercased
+ * @returns {boolean} True if depName matches exactly or at a word boundary
+ */
+function depMatchesPattern(depName, llmDepLower) {
+  const depLower = depName.toLowerCase();
+  if (depLower === llmDepLower) return true;
+
+  let idx = depLower.indexOf(llmDepLower);
+  while (idx !== -1) {
+    const before = idx === 0 ? "" : depLower[idx - 1];
+    const end = idx + llmDepLower.length;
+    const after = end >= depLower.length ? "" : depLower[end];
+    if (!/[a-z]/.test(before) && !/[a-z]/.test(after)) return true;
+    idx = depLower.indexOf(llmDepLower, idx + 1);
+  }
+  return false;
+}
+
 function findInRequirements(content, llmDeps) {
   const lines = content.split("\n");
   const deps = [];
@@ -400,16 +430,11 @@ function findInRequirements(content, llmDeps) {
     if (match) {
       const depName = match[1];
       const versionSpec = match[2] || "";
-      const depLower = depName.toLowerCase();
 
       // Use exact match or word boundary match
-      const isLLMDep = llmDeps.some((llmDep) => {
-        const llmDepLower = llmDep.toLowerCase();
-        if (depLower === llmDepLower) return true;
-        // Match at word boundaries (e.g., "langchain-openai" matches "langchain")
-        const pattern = new RegExp(`(^|[^a-z])${llmDepLower}([^a-z]|$)`, "i");
-        return pattern.test(depName);
-      });
+      const isLLMDep = llmDeps.some((llmDep) =>
+        depMatchesPattern(depName, llmDep.toLowerCase()),
+      );
 
       if (isLLMDep) {
         deps.push({
@@ -444,13 +469,9 @@ function findInPyproject(content, llmDeps) {
       if (seen.has(depLower)) continue;
 
       // Use exact match or word boundary match
-      const isLLMDep = llmDeps.some((llmDep) => {
-        const llmDepLower = llmDep.toLowerCase();
-        if (depLower === llmDepLower) return true;
-        // Match at word boundaries
-        const pattern = new RegExp(`(^|[^a-z])${llmDepLower}([^a-z]|$)`, "i");
-        return pattern.test(depName);
-      });
+      const isLLMDep = llmDeps.some((llmDep) =>
+        depMatchesPattern(depName, llmDep.toLowerCase()),
+      );
 
       if (isLLMDep) {
         seen.add(depLower);
@@ -461,6 +482,181 @@ function findInPyproject(content, llmDeps) {
           snippet: line.trim(),
         });
       }
+    }
+  }
+  return deps;
+}
+
+/**
+ * Parse go.mod for AI dependencies.
+ * Handles both `require github.com/x/y v1.2.3` and the `require (...)` block.
+ * Without this, Go repos (e.g. reference project xbom) yield no dependencies
+ * in fallback mode (no SBOM API).
+ */
+function findInGoMod(content, llmDeps) {
+  const lines = content.split("\n");
+  const deps = [];
+  let inRequireBlock = false;
+
+  for (let i = 0; i < lines.length; i++) {
+    const trimmed = lines[i].trim();
+    if (!trimmed || trimmed.startsWith("//")) continue;
+
+    if (trimmed.startsWith("require (")) {
+      inRequireBlock = true;
+      continue;
+    }
+    if (inRequireBlock && trimmed === ")") {
+      inRequireBlock = false;
+      continue;
+    }
+
+    // `require github.com/sashabaranov/go-openai v1.32.0` or block line
+    const match = trimmed.match(/^(?:require\s+)?([a-zA-Z0-9._\-/~]+)\s+(v[^\s]+)/);
+    if (!match || (inRequireBlock === false && !trimmed.startsWith("require"))) continue;
+
+    const depName = match[1];
+    const depLower = depName.toLowerCase();
+
+    const isLLMDep = llmDeps.some((llmDep) => {
+      const llmDepLower = llmDep.toLowerCase();
+      return depLower === llmDepLower || depLower.includes(llmDepLower);
+    });
+
+    if (isLLMDep) {
+      deps.push({
+        name: depName,
+        version: match[2],
+        line: i + 1,
+        snippet: trimmed,
+      });
+    }
+  }
+  return deps;
+}
+
+/**
+ * Parse Cargo.toml [dependencies] section for AI crates.
+ */
+function findInCargoToml(content, llmDeps) {
+  const lines = content.split("\n");
+  const deps = [];
+  let inDependencies = false;
+
+  for (let i = 0; i < lines.length; i++) {
+    const trimmed = lines[i].trim();
+    if (!trimmed || trimmed.startsWith("#")) continue;
+
+    if (trimmed.startsWith("[")) {
+      inDependencies = trimmed === "[dependencies]";
+      continue;
+    }
+    if (!inDependencies) continue;
+
+    // `async-openai = "0.27"` or `async-openai = { version = "0.27", features = [...] }`
+    const match = trimmed.match(/^([a-zA-Z0-9_-]+)\s*=/);
+    if (!match) continue;
+
+    const depName = match[1];
+    const depLower = depName.toLowerCase();
+
+    const isLLMDep = llmDeps.some((llmDep) => {
+      const llmDepLower = llmDep.toLowerCase();
+      return depLower === llmDepLower || depLower.includes(llmDepLower);
+    });
+
+    if (isLLMDep) {
+      // version from inline table ({ version = "1.0" }) or simple string ("1.0")
+      const versionMatch =
+        trimmed.match(/version\s*=\s*"([^"]+)"/) ||
+        trimmed.match(/=\s*"([^"]+)"/);
+      deps.push({
+        name: depName,
+        version: versionMatch ? versionMatch[1] : "unspecified",
+        line: i + 1,
+        snippet: trimmed,
+      });
+    }
+  }
+  return deps;
+}
+
+/**
+ * Parse pom.xml for AI dependencies (groupId:artifactId coordinates).
+ */
+function findInPomXml(content, llmDeps) {
+  const deps = [];
+  const lines = content.split("\n");
+
+  for (let i = 0; i < lines.length - 1; i++) {
+    const groupId = lines[i].match(/<groupId>([^<]+)<\/groupId>/)?.[1]?.trim();
+    const artifactId = lines[i + 1]?.match(/<artifactId>([^<]+)<\/artifactId>/)?.[1]?.trim();
+    if (!groupId || !artifactId) continue;
+
+    const coordinate = `${groupId}:${artifactId}`;
+    const coordinateLower = coordinate.toLowerCase();
+    const artifactLower = artifactId.toLowerCase();
+
+    const isLLMDep = llmDeps.some((llmDep) => {
+      const llmDepLower = llmDep.toLowerCase();
+      return (
+        coordinateLower.includes(llmDepLower) ||
+        artifactLower.includes(llmDepLower.split(":").pop())
+      );
+    });
+
+    if (isLLMDep) {
+      // Version may appear in one of the following lines
+      let version = "unspecified";
+      for (let j = i + 2; j < Math.min(i + 6, lines.length); j++) {
+        const v = lines[j].match(/<version>([^<]+)<\/version>/)?.[1]?.trim();
+        if (v) {
+          version = v;
+          break;
+        }
+      }
+      deps.push({
+        name: coordinate,
+        version,
+        line: i + 1,
+        snippet: lines[i].trim(),
+      });
+    }
+  }
+  return deps;
+}
+
+/**
+ * Parse build.gradle(.kts) for AI dependencies.
+ */
+function findInGradle(content, llmDeps) {
+  const lines = content.split("\n");
+  const deps = [];
+
+  for (let i = 0; i < lines.length; i++) {
+    const trimmed = lines[i].trim();
+    if (!trimmed) continue;
+
+    // implementation 'com.openai:openai-java:0.1.0' / implementation "..." / api "..."
+    const match = trimmed.match(/(?:implementation|api|compile|runtimeOnly)\s+["']([^"']+)["']/);
+    if (!match) continue;
+
+    const notation = match[1]; // group:artifact:version
+    const notationLower = notation.toLowerCase();
+
+    const isLLMDep = llmDeps.some((llmDep) => {
+      const llmDepLower = llmDep.toLowerCase();
+      return notationLower.includes(llmDepLower);
+    });
+
+    if (isLLMDep) {
+      const parts = notation.split(":");
+      deps.push({
+        name: parts.length >= 2 ? `${parts[0]}:${parts[1]}` : notation,
+        version: parts.length >= 3 ? parts[2] : "unspecified",
+        line: i + 1,
+        snippet: trimmed,
+      });
     }
   }
   return deps;
@@ -549,7 +745,7 @@ async function codeDetector({
   // - Some detectors need to scan specific file types (e.g., modelsIdentifierDetector scans config files)
   // - Documentation detection needs to check entire tree for README.md, SECURITY.md, etc.
   // - The tree is fetched once (recursive=1) and reused, so it's efficient
-  const CODE_EXTENSIONS = [".py", ".js", ".ts", ".jsx", ".tsx"];
+  const CODE_EXTENSIONS = [".py", ".js", ".ts", ".jsx", ".tsx", ".ipynb"];
   const codeFiles = tree
     .filter((entry) => {
       const ext = entry.path.match(/\.[^.]+$/)?.[0] || "";
@@ -575,11 +771,18 @@ async function codeDetector({
       );
     }
 
-    const content = await getFileContent(file.path);
+    let content = await getFileContent(file.path);
     if (!content) continue;
 
     const ext = file.path.match(/\.[^.]+$/)?.[0] || "";
-    const language = ext === ".py" ? "python" : "javascript";
+
+    // Notebooks are JSON; convert to plain source before pattern matching
+    if (ext === ".ipynb") {
+      content = stripNotebookCells(content);
+      if (!content) continue;
+    }
+
+    const language = ext === ".py" || ext === ".ipynb" ? "python" : "javascript";
     const patterns = SDK_PATTERNS[language] || [];
 
     for (const { pattern, provider, weight } of patterns) {
@@ -843,6 +1046,40 @@ async function searchCodeViaAPI(
         query: `from mistralai import ${codeExtensions}`,
         provider: "Mistral",
       });
+    }
+
+    // New provider/framework searches (2026-11 gap analysis)
+    if (depNames.some((n) => n.includes("ollama"))) {
+      providerSearches["Ollama"] = [
+        { query: `from ollama ${codeExtensions}`, provider: "Ollama" },
+        { query: `ollama.chat ${codeExtensions}`, provider: "Ollama" },
+      ];
+    }
+
+    if (depNames.some((n) => n.includes("boto3") || n.includes("bedrock"))) {
+      providerSearches["Bedrock"] = [
+        { query: `bedrock-runtime ${codeExtensions}`, provider: "AWS Bedrock" },
+        { query: `invoke_model ${codeExtensions}`, provider: "AWS Bedrock" },
+      ];
+    }
+
+    if (
+      depNames.some(
+        (n) =>
+          n.includes("langgraph") ||
+          n.includes("crewai") ||
+          n.includes("autogen") ||
+          n.includes("google-adk") ||
+          n.includes("openai-agents") ||
+          n.includes("pydantic-ai") ||
+          n.includes("strands"),
+      )
+    ) {
+      providerSearches["Agents"] = [
+        { query: `create_react_agent ${codeExtensions}`, provider: "LangGraph" },
+        { query: `StateGraph ${codeExtensions}`, provider: "LangGraph" },
+        { query: `from crewai import ${codeExtensions}`, provider: "CrewAI" },
+      ];
     }
 
     if (
@@ -1227,6 +1464,13 @@ async function configDetector({ tree, getFileContent, owner, repo }) {
     "settings.json",
     "settings.yaml",
     "app.config",
+    // AI framework config conventions (cisco aibom scans these too)
+    "langgraph.json",
+    "crewai.yaml",
+    "crewai.yml",
+    "dspy.toml",
+    ".aibom.yaml",
+    "aibom.yaml",
   ];
 
   const configFiles = tree.filter((entry) => {
@@ -1588,6 +1832,20 @@ function detectProvidersInUse(findings) {
     if (text.includes("mistral")) {
       providers.add("Mistral");
     }
+    // Extended providers (2026-11 gap analysis)
+    if (text.includes("ollama")) {
+      providers.add("Ollama");
+    }
+    if (text.includes("groq")) {
+      providers.add("Groq");
+    }
+    // Word-bounded: "supernova"/"titanium" must not attribute AWS Bedrock
+    if (/\bnova\b|\btitan\b|\bbedrock\b/.test(text)) {
+      providers.add("AWS Bedrock");
+    }
+    if (text.includes("vertex") || text.includes("aiplatform")) {
+      providers.add("Google");
+    }
 
     // Check dependency names
     if (finding.dependencyInfo) {
@@ -1605,6 +1863,12 @@ function detectProvidersInUse(findings) {
       }
       if (depName.includes("cohere")) providers.add("Cohere");
       if (depName.includes("mistral")) providers.add("Mistral");
+      if (depName.includes("ollama")) providers.add("Ollama");
+      if (depName.includes("groq")) providers.add("Groq");
+      if (depName.includes("bedrock") || depName.includes("boto3"))
+        providers.add("AWS Bedrock");
+      if (depName.includes("vertexai") || depName.includes("aiplatform"))
+        providers.add("Google");
     }
   }
 
@@ -1621,6 +1885,7 @@ function getCodeExtensionsForLanguages(languages) {
     JavaScript: [".js", ".jsx", ".mjs", ".cjs"],
     TypeScript: [".ts", ".tsx"],
     Python: [".py", ".pyw"],
+    "Jupyter Notebook": [".ipynb"],
     Java: [".java"],
     Go: [".go"],
     Rust: [".rs"],
@@ -1722,7 +1987,7 @@ async function modelsIdentifierDetector({
       type: "text-generation",
     },
     {
-      pattern: /["']?(gpt-4)["']?/gi,
+      pattern: /["']?(gpt-4)(?![-\w.])["']?/gi,
       provider: "OpenAI",
       model: "gpt-4",
       type: "text-generation",
@@ -1743,6 +2008,56 @@ async function modelsIdentifierDetector({
       pattern: /["']?(o1-mini)["']?/gi,
       provider: "OpenAI",
       model: "o1-mini",
+      type: "text-generation",
+    },
+    {
+      pattern: /["']?(o1-pro)["']?/gi,
+      provider: "OpenAI",
+      model: "o1-pro",
+      type: "text-generation",
+    },
+    {
+      pattern: /["']?(o3-mini)["']?/gi,
+      provider: "OpenAI",
+      model: "o3-mini",
+      type: "text-generation",
+    },
+    {
+      // Quoted-only to avoid matching identifiers named "o3" in code
+      pattern: /["'](o3)["']/gi,
+      provider: "OpenAI",
+      model: "o3",
+      type: "text-generation",
+    },
+    {
+      pattern: /["']?(o4-mini)["']?/gi,
+      provider: "OpenAI",
+      model: "o4-mini",
+      type: "text-generation",
+    },
+    {
+      pattern: /["']?(gpt-4\.1-mini|gpt-4\.1-nano)["']?/gi,
+      provider: "OpenAI",
+      model: "gpt-4.1-mini",
+      type: "text-generation",
+    },
+    {
+      // Bare form guarded so it does not double-match inside "gpt-4.1-mini"
+      pattern: /["']?(gpt-4\.1)(?![-\w.])["']?/gi,
+      provider: "OpenAI",
+      model: "gpt-4.1",
+      type: "text-generation",
+    },
+    {
+      pattern: /["']?(gpt-4\.5)(?![-\w.])["']?/gi,
+      provider: "OpenAI",
+      model: "gpt-4.5",
+      type: "text-generation",
+    },
+    {
+      pattern: /["']?(gpt-5)(?![-\w.])["']?/gi,
+      provider: "OpenAI",
+      model: "gpt-5",
       type: "text-generation",
     },
 
@@ -1788,6 +2103,13 @@ async function modelsIdentifierDetector({
       type: "text-generation",
     },
     {
+      // Bare alias (no date suffix): "claude-3-5-sonnet", "claude-3.5-sonnet"
+      pattern: /["']?(claude-3\.5-sonnet|claude-3-5-sonnet)(?![-\w])["']?/gi,
+      provider: "Anthropic",
+      model: "claude-3.5-sonnet",
+      type: "text-generation",
+    },
+    {
       pattern: /["']?(claude-3-opus-\d+)["']?/gi,
       provider: "Anthropic",
       model: "claude-3-opus",
@@ -1803,6 +2125,60 @@ async function modelsIdentifierDetector({
       pattern: /["']?(claude-3-haiku-\d+)["']?/gi,
       provider: "Anthropic",
       model: "claude-3-haiku",
+      type: "text-generation",
+    },
+    {
+      pattern: /["']?(claude-3-7-sonnet)(?![-\w])["']?/gi,
+      provider: "Anthropic",
+      model: "claude-3.7-sonnet",
+      type: "text-generation",
+    },
+    {
+      pattern: /["']?(claude-3-sonnet)(?![-\w])["']?/gi,
+      provider: "Anthropic",
+      model: "claude-3-sonnet",
+      type: "text-generation",
+    },
+    {
+      pattern: /["']?(claude-3-haiku)(?![-\w])["']?/gi,
+      provider: "Anthropic",
+      model: "claude-3-haiku",
+      type: "text-generation",
+    },
+    {
+      pattern: /["']?(claude-opus-4-5|claude-4-5-opus)(?![-\w])["']?/gi,
+      provider: "Anthropic",
+      model: "claude-opus-4.5",
+      type: "text-generation",
+    },
+    {
+      pattern: /["']?(claude-sonnet-4-5|claude-4-5-sonnet)(?![-\w])["']?/gi,
+      provider: "Anthropic",
+      model: "claude-sonnet-4.5",
+      type: "text-generation",
+    },
+    {
+      pattern: /["']?(claude-haiku-4-5|claude-4-5-haiku)(?![-\w])["']?/gi,
+      provider: "Anthropic",
+      model: "claude-haiku-4.5",
+      type: "text-generation",
+    },
+    {
+      pattern: /["']?(claude-opus-4|claude-4-opus)(?![-\w])["']?/gi,
+      provider: "Anthropic",
+      model: "claude-opus-4",
+      type: "text-generation",
+    },
+    {
+      pattern: /["']?(claude-sonnet-4|claude-4-sonnet)(?![-\w])["']?/gi,
+      provider: "Anthropic",
+      model: "claude-sonnet-4",
+      type: "text-generation",
+    },
+    {
+      pattern: /["']?(claude-haiku-4|claude-4-haiku)(?![-\w])["']?/gi,
+      provider: "Anthropic",
+      model: "claude-haiku-4",
       type: "text-generation",
     },
 
@@ -1841,6 +2217,18 @@ async function modelsIdentifierDetector({
       pattern: /["']?(gemini-2\.0-flash-exp)["']?/gi,
       provider: "Google",
       model: "gemini-2.0-flash-exp",
+      type: "text-generation",
+    },
+    {
+      pattern: /["']?(gemini-2\.5-pro)["']?/gi,
+      provider: "Google",
+      model: "gemini-2.5-pro",
+      type: "text-generation",
+    },
+    {
+      pattern: /["']?(gemini-2\.5-flash)["']?/gi,
+      provider: "Google",
+      model: "gemini-2.5-flash",
       type: "text-generation",
     },
 
@@ -1944,7 +2332,7 @@ async function modelsIdentifierDetector({
       type: "text-generation",
     },
     {
-      pattern: /["']?(llama3)["']?/gi,
+      pattern: /["']?(llama3)(?![-\w.])["']?/gi,
       provider: "Meta",
       model: "llama3",
       type: "text-generation",
@@ -1974,7 +2362,7 @@ async function modelsIdentifierDetector({
       type: "text-generation",
     },
     {
-      pattern: /["']?(qwen2\.5)["']?/gi,
+      pattern: /["']?(qwen2\.5)(?![-\w.])["']?/gi,
       provider: "Alibaba",
       model: "qwen2.5",
       type: "text-generation",
@@ -2016,7 +2404,7 @@ async function modelsIdentifierDetector({
       type: "text-generation",
     },
     {
-      pattern: /["']?(mistral)["']?/gi,
+      pattern: /["']?(mistral)(?![-\w.])["']?/gi,
       provider: "Mistral",
       model: "mistral",
       type: "text-generation",
@@ -2051,6 +2439,39 @@ async function modelsIdentifierDetector({
       pattern: /["']?(athene-v2)["']?/gi,
       provider: "Nexusflow",
       model: "athene-v2",
+      type: "text-generation",
+    },
+    {
+      pattern: /["']?(llama4)["']?/gi,
+      provider: "Meta",
+      model: "llama4",
+      type: "text-generation",
+    },
+    {
+      pattern: /["']?(qwen3)["']?/gi,
+      provider: "Alibaba",
+      model: "qwen3",
+      type: "text-generation",
+    },
+    {
+      // Capture the specific variant (grok-2, grok-4, ...) instead of collapsing to "grok"
+      pattern: /["']?(grok-[\w.]+)["']?/gi,
+      provider: "xAI",
+      model: "extract",
+      type: "text-generation",
+    },
+    {
+      // Amazon Nova / Titan families (quoted ids or bare family names)
+      pattern: /["']?(amazon\.(?:nova|titan)[\w.-]*|(?:nova|titan)-(?:pro|lite|micro|premier|text|embed)[\w.-]*)["']?/gi,
+      provider: "AWS Bedrock",
+      model: "extract",
+      type: "text-generation",
+    },
+    {
+      // Bedrock-style qualified model ids: anthropic.claude-..., meta.llama..., us.anthropic.claude-...
+      pattern: /["']((?:us\.|eu\.|apac\.)?(?:anthropic|amazon|meta|ai21|cohere|deepseek|mistral)\.[a-zA-Z0-9.-]+)["']/gi,
+      provider: "AWS Bedrock",
+      model: "extract-bedrock",
       type: "text-generation",
     },
   ];
@@ -2148,7 +2569,7 @@ async function modelsIdentifierDetector({
       );
     }
 
-    const content = await getFileContent(path);
+    let content = await getFileContent(path);
     if (!content) {
       if (priority) {
         console.log(
@@ -2156,6 +2577,12 @@ async function modelsIdentifierDetector({
         );
       }
       continue;
+    }
+
+    // Notebooks are JSON; convert to plain source before pattern matching
+    if (path.toLowerCase().endsWith(".ipynb")) {
+      content = stripNotebookCells(content);
+      if (!content) continue;
     }
 
     // Split content into lines for line number tracking
@@ -2167,11 +2594,23 @@ async function modelsIdentifierDetector({
       let match;
 
       while ((match = regex.exec(content)) !== null) {
-        let modelName = model === "extract" ? match[1] : model;
+        let modelName =
+          model === "extract" || model === "extract-bedrock" ? match[1] : model;
 
         // Special case: Exclude Google's models/* format from HuggingFace detector
         if (provider === "HuggingFace" && modelName.startsWith("models/")) {
           continue; // This is a Google model, not HuggingFace
+        }
+
+        // Normalize Bedrock qualified ids
+        // (e.g. "us.anthropic.claude-3-5-sonnet-20241022-v2:0" -> "claude-3-5-sonnet")
+        if (
+          provider === "AWS Bedrock" &&
+          (model === "extract" || model === "extract-bedrock")
+        ) {
+          const normalizedBedrockId = normalizeBedrockModelId(modelName);
+          if (!normalizedBedrockId) continue;
+          modelName = normalizedBedrockId;
         }
 
         // Validate model name to filter out false positives
@@ -2222,6 +2661,109 @@ async function modelsIdentifierDetector({
             file: path,
             line: lineNum,
             snippet: lineContent.trim().substring(0, 100),
+          });
+        }
+      }
+    }
+
+    // ------------------------------------------------------------------
+    // Contextual extraction: model kwargs, module constants, env-defaults.
+    // Catches unknown/new model ids that literal patterns miss
+    // (inspired by cisco aibom's kwarg extraction + akumar0205 dataflow).
+    // ------------------------------------------------------------------
+    const contextualRefs = extractContextualModelRefs(content, providersUsed);
+    for (const ref of contextualRefs) {
+      const provider = ref.provider || "Unknown";
+      let ctxKey = `${provider}-${ref.model}`;
+
+      // Unattributed refs: merge into an existing entry for the same model
+      // name instead of emitting a duplicate "Unknown" component (the literal
+      // pass may already have keyed it under a concrete provider).
+      if (ref.provider === null) {
+        const existingEntry = Array.from(modelsFound.entries()).find(
+          ([, d]) => d.modelName.toLowerCase() === ref.model.toLowerCase(),
+        );
+        if (existingEntry) {
+          ctxKey = existingEntry[0];
+        }
+      }
+
+      if (!modelsFound.has(ctxKey)) {
+        const modelType = /embed/i.test(ref.model)
+          ? "embeddings"
+          : /dall-e|image|diffusion|flux/i.test(ref.model)
+            ? "text-to-image"
+            : "text-generation";
+
+        modelsFound.set(ctxKey, {
+          provider,
+          modelName: ref.model,
+          modelType,
+          locations: [],
+          isHuggingFace: false,
+          detectionSource: `Contextual Reference (${ref.method})`,
+          contextual: true,
+        });
+      }
+
+      const ctxLineContent = lines[ref.line - 1] || "";
+      const ctxLoc = modelsFound
+        .get(ctxKey)
+        .locations.find((loc) => loc.file === path && loc.line === ref.line);
+      if (!ctxLoc) {
+        modelsFound.get(ctxKey).locations.push({
+          file: path,
+          line: ref.line,
+          snippet: ctxLineContent.trim().substring(0, 100),
+        });
+      }
+    }
+
+    // Ollama-style local model tags: "llama3.2:latest", "qwen3:4b"
+    // Gated on Ollama context (content or filename) to avoid
+    // false positives from ports, versions, and time strings.
+    if (/ollama|modelfile/i.test(content) || /ollama|modelfile/i.test(path)) {
+      const ollamaTagRegex =
+        /["']([a-z0-9][a-z0-9._-]{2,48}:[a-z0-9][a-z0-9._-]{0,24})["']/gi;
+      let ollamaMatch;
+      while ((ollamaMatch = ollamaTagRegex.exec(content)) !== null) {
+        const tag = ollamaMatch[1];
+        const base = tag.split(":")[0];
+        // Skip hosts, ports, versions, and API path segments
+        if (
+          /^(localhost|127|0\.0\.0\.0|http|https|ws|wss|api|v\d)/i.test(base) ||
+          /^[0-9]/.test(base)
+        ) {
+          continue;
+        }
+        if (!isPlausibleModelId(tag)) continue;
+
+        const ollamaKey = `Ollama-${tag}`;
+        const tagLineNum = content
+          .substring(0, ollamaMatch.index)
+          .split("\n").length;
+        if (!modelsFound.has(ollamaKey)) {
+          modelsFound.set(ollamaKey, {
+            provider: "Ollama",
+            modelName: tag,
+            modelType: "text-generation",
+            locations: [],
+            isHuggingFace: false,
+            detectionSource: "Ollama Model Tag",
+            contextual: true,
+          });
+        }
+        const tagLineContent = lines[tagLineNum - 1] || "";
+        const tagLoc = modelsFound
+          .get(ollamaKey)
+          .locations.find(
+            (loc) => loc.file === path && loc.line === tagLineNum,
+          );
+        if (!tagLoc) {
+          modelsFound.get(ollamaKey).locations.push({
+            file: path,
+            line: tagLineNum,
+            snippet: tagLineContent.trim().substring(0, 100),
           });
         }
       }
@@ -3183,13 +3725,17 @@ async function infrastructureDetector({
     const content = await getFileContent(file.path);
     if (!content) continue;
 
-    // Only detect ML-specific orchestration patterns (GPU scheduling)
-    // Generic Kubernetes (Deployment, Service, Pod) is deployment infrastructure, not an AIBOM component
+    // Only detect ML-specific orchestration patterns (GPU scheduling, digest
+    // pinning, model env config) - generic Kubernetes isn't an AIBOM component
     for (const pattern of INFRASTRUCTURE_PATTERNS.orchestration.patterns) {
       if (pattern.pattern.test(content)) {
-        // Only report GPU-specific Kubernetes (hardware requirement)
+        // Only report ML-specific Kubernetes patterns
         // Generic Kubernetes patterns are logged but not reported as findings
-        if (pattern.platform.includes("GPU")) {
+        if (
+          pattern.platform.includes("GPU") ||
+          pattern.platform.includes("Digest-Pinned") ||
+          pattern.platform.includes("AI Model Environment")
+        ) {
           infraInfo.orchestration.add(pattern.platform);
           const match = content.match(pattern.pattern);
           infraInfo.evidence.push({
@@ -4336,6 +4882,7 @@ async function protocolDetector({ tree, getFileContent }) {
   // Check for MCP configuration files
   const mcpConfigFiles = AI_PROTOCOL_PATTERNS.mcp.config_files;
   const a2aConfigFiles = AI_PROTOCOL_PATTERNS.a2a.config_files;
+  const skConfigFiles = AI_PROTOCOL_PATTERNS.semantic_kernel.config_files;
 
   for (const entry of tree) {
     const fileName = entry.path.split("/").pop();
@@ -4471,29 +5018,91 @@ async function protocolDetector({ tree, getFileContent }) {
     }
 
     // Check for A2A / Agent Protocol config files
+    // Includes the A2A Agent Card convention: /.well-known/agent.json
     if (
       a2aConfigFiles.includes(fileName) ||
-      filePath.includes(".agent-protocol/")
+      filePath.includes(".agent-protocol/") ||
+      filePath.endsWith(".well-known/agent.json") ||
+      fileName === "agent-card.json"
     ) {
       console.log(
         `[Detector: Protocols] ✓ Found A2A/Agent Protocol config: ${filePath}`,
       );
+      const a2aContent = await getFileContent(filePath);
+
+      // Parse Agent Card fields when it is valid JSON
+      let a2aDescription =
+        "A2A/Agent Protocol configuration detected - enables agent communication";
+      let agentCardInfo = null;
+      if (a2aContent) {
+        try {
+          const card = JSON.parse(a2aContent);
+          if (card && (card.name || card.url || card.skills)) {
+            agentCardInfo = {
+              name: card.name || null,
+              url: card.url || null,
+              version: card.version || null,
+              skills: Array.isArray(card.skills)
+                ? card.skills.map((s) => s?.name || s?.id).filter(Boolean)
+                : [],
+              capabilities: card.capabilities
+                ? Object.keys(card.capabilities)
+                : [],
+            };
+            a2aDescription = `A2A Agent Card detected: ${agentCardInfo.name || filePath}`;
+            if (agentCardInfo.skills.length > 0) {
+              a2aDescription += ` with ${agentCardInfo.skills.length} skill(s)`;
+            }
+          }
+        } catch (e) {
+          // Not JSON - keep generic description
+        }
+      }
+
       findings.push({
         id: `protocol-a2a-config-${filePath.replace(/[^a-zA-Z0-9]/g, "-")}`,
         title: "Agent-to-Agent Protocol Configuration",
         category: "protocol",
         severity: "high",
         weight: 4,
-        description:
-          "A2A/Agent Protocol configuration detected - enables agent communication",
+        description: a2aDescription,
         evidence: [
           {
             file: filePath,
-            snippet: "Agent Protocol config file",
+            snippet: a2aContent
+              ? a2aContent.split("\n").slice(0, 5).join("\n").substring(0, 200)
+              : "Agent Protocol config file",
           },
         ],
         protocolInfo: {
           type: "a2a",
+          configFile: filePath,
+          agentCard: agentCardInfo,
+        },
+      });
+    }
+
+    // Check for Semantic Kernel config files
+    if (skConfigFiles.includes(fileName)) {
+      console.log(
+        `[Detector: Protocols] ✓ Found Semantic Kernel config: ${filePath}`,
+      );
+      findings.push({
+        id: `protocol-sk-config-${filePath.replace(/[^a-zA-Z0-9]/g, "-")}`,
+        title: "Semantic Kernel Configuration",
+        category: "protocol",
+        severity: "medium",
+        weight: 3,
+        description:
+          "Semantic Kernel configuration detected - LLM orchestration with plugins",
+        evidence: [
+          {
+            file: filePath,
+            snippet: "Semantic Kernel config file",
+          },
+        ],
+        protocolInfo: {
+          type: "semantic-kernel",
           configFile: filePath,
         },
       });
@@ -4514,6 +5123,8 @@ async function protocolDetector({ tree, getFileContent }) {
   const mcpPatterns = AI_PROTOCOL_PATTERNS.mcp.code_patterns;
   const a2aPatterns = AI_PROTOCOL_PATTERNS.a2a.code_patterns;
   const functionPatterns = AI_PROTOCOL_PATTERNS.function_calling.code_patterns;
+  const semanticKernelPatterns =
+    AI_PROTOCOL_PATTERNS.semantic_kernel.code_patterns;
 
   // Group MCP findings by type to avoid duplicate components
   const mcpFindings = new Map();
@@ -4611,6 +5222,37 @@ async function protocolDetector({ tree, getFileContent }) {
           ],
           protocolInfo: {
             type: "function-calling",
+            subType: patternDef.type,
+          },
+        });
+        break;
+      }
+    }
+
+    // Check Semantic Kernel patterns (previously defined but never scanned)
+    for (const patternDef of semanticKernelPatterns) {
+      if (patternDef.pattern.test(content)) {
+        const match = content.match(patternDef.pattern);
+        const lineNum = content
+          .substring(0, content.indexOf(match[0]))
+          .split("\n").length;
+
+        findings.push({
+          id: `protocol-sk-code-${file.path.replace(/[^a-zA-Z0-9]/g, "-")}-${patternDef.type.replace(/\s+/g, "-")}`,
+          title: `Semantic Kernel ${patternDef.type} Usage`,
+          category: "protocol",
+          severity: "medium",
+          weight: 3,
+          description: `Microsoft Semantic Kernel ${patternDef.type.toLowerCase()} detected - LLM orchestration with plugins`,
+          evidence: [
+            {
+              file: file.path,
+              line: lineNum,
+              snippet: match[0].substring(0, 100),
+            },
+          ],
+          protocolInfo: {
+            type: "semantic-kernel",
             subType: patternDef.type,
           },
         });

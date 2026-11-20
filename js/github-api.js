@@ -77,6 +77,14 @@ async function fetchRepoMeta(owner, repo, token = null) {
   return result;
 }
 
+// Set by fetchRepoTree; true when GitHub truncated the last tree response.
+// Checked by the analyzer to surface an "incomplete scan" warning.
+let lastTreeFetchTruncated = false;
+
+function wasLastTreeTruncated() {
+  return lastTreeFetchTruncated;
+}
+
 async function fetchRepoTree(owner, repo, ref, token = null) {
   console.log(`[GitHub API] Fetching file tree for ${owner}/${repo}@${ref}`);
   const headers = { Accept: "application/vnd.github.v3+json" };
@@ -110,6 +118,15 @@ async function fetchRepoTree(owner, repo, ref, token = null) {
   console.log(
     `[GitHub API] Total entries: ${data.tree.length}, Files: ${files.length}`,
   );
+
+  // GitHub truncates very large trees silently - surface this so users know
+  // that results may be incomplete (gap: previously this flag was ignored)
+  if (data.truncated) {
+    console.warn(
+      "[GitHub API] ⚠️  Tree response was TRUNCATED by GitHub - some files are missing from the scan",
+    );
+  }
+  lastTreeFetchTruncated = Boolean(data.truncated);
 
   const totalSize = files.reduce((sum, f) => sum + (f.size || 0), 0);
   console.log(

@@ -7,6 +7,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Detection coverage from 2026-11 reference-project sync** (details in `mdfiles/GAP_ANALYSIS.md`, test suite in `tests.html`):
+  - 16 new LLM provider/gateway signatures (Cohere, Mistral, Groq, xAI Grok, Together, Perplexity, Fireworks, Replicate, AI21, Stability, Aleph Alpha, Azure OpenAI, AWS Bedrock, Vertex AI, OpenRouter, LiteLLM) with SDK packages, code patterns, and API endpoints
+  - 11 new agent-framework signatures (LangGraph, Google ADK, OpenAI Agents SDK, PydanticAI, SmolAgents, Strands, DeepAgents, Haystack, DSPy, Instructor, Semantic Kernel) plus AutoGen ecosystem variants
+  - New guardrails and LLM-observability categories (NVIDIA Guardrails, Guardrails AI, LLM Guard, Presidio, Langfuse, LangSmith, Arize Phoenix, Traceloop, Galileo)
+  - Contextual model extraction: `model=`/`model_name=`/`model_id=`/`deployment_name=` kwargs, module constants, and env-with-default dataflow now capture unknown/new model ids without literal-pattern updates
+  - Bedrock ARN normalization (`us.anthropic.claude-...-v2:0` → `claude-3-5-sonnet`), Ollama model-tag detection (`qwen3:4b`), and newer model literals (GPT-4.1/4.5/5, o1-pro/o3/o4-mini, Gemini 2.5, Claude 3.7/4.x bare aliases, Llama 4, Qwen3, Grok, Amazon Nova/Titan)
+  - Fallback manifest parsing for `go.mod`, `Cargo.toml`, `pom.xml`, and `build.gradle` (previously only Python/Node manifests were parsed without the SBOM API)
+  - Jupyter notebook support: `.ipynb` cells are extracted and scanned by code/model detectors
+  - A2A Agent Card detection (`.well-known/agent.json`), Semantic Kernel protocol activation (patterns existed but were never scanned), framework config files (`langgraph.json`, `crewai.yaml`, `dspy.toml`), and `SKILL.md` agent-skill artifacts
+  - Digest-pinned image detection (Dockerfile/k8s `@sha256:`) and k8s model-env configuration as infrastructure provenance evidence
+  - OWASP Top 10 for LLM Applications (2025) exposure assessment in the Extended AIBOM risk section — 6 of the 10 categories with detectable surfaces (LLM01/02/03/04/06/08) plus a guardrail mitigation indicator; categories requiring runtime evidence (LLM05/07/09/10) are intentionally not fabricated
+  - Dynamic RegExp elimination in the dependency matchers (`depMatchesPattern` word-boundary helper; fixes `detect-non-literal-regexp` finding) and subresource integrity (SRI) pinning for the Plausible analytics script
+- **Scan-completeness warning**: GitHub tree truncation (`truncated` flag) is now detected and surfaced in the UI instead of being silently ignored
+
+### Changed
+
+- README "What It Detects" updated to reflect the new detection surface
+- Duplicate model components eliminated: unattributed contextual model refs now merge into existing provider-keyed entries; bare model-name literals (`gpt-4`, `gpt-4.1`, `gpt-4.5`, `gpt-5`, `llama3`, `mistral`, `qwen2.5`) no longer substring-match inside their longer variants
+- Grok pattern now captures the specific variant (`grok-2`, `grok-4`, …) instead of collapsing to "grok"; Bedrock signature vendor unified to "AWS Bedrock"; `nova`/`titan` provider attribution word-bounded
+
+### Documentation (2026-11-20)
+
+- **Reference-project status tracker** (`projects/STATUS.md`): records upstream, HEAD, sync date, and mined-into-codebase status for every `projects/` entry after the 2026-11-20 sync — new projects `aibom` (cisco-ai-defense v1.10.1) and `aibom-akumar0205`, updated `aibom-generator`; `owasp-aibom-generator` byte-identical duplicate removed by the user; `xbom` re-synced to `2b092b7`.
+- **Gap analysis** (`mdfiles/GAP_ANALYSIS.md`): 19 detection scenarios the analyzer does not yet cater for, distilled from the newly synced reference projects, each with a concrete HTML/JS/CSS-only implementation approach and priority order (implementation status tracked in the doc header).
+- **Detection test suite** (`tests.html`): self-contained browser-runnable assertions for the new pure helpers, manifest parsers, signature registry, infrastructure patterns, and OWASP derivation (no test framework needed — plain HTML/JS like the app itself).
+- **Guidance inventory** (`guidance/guidance_details.md`): documents all 8 guidance documents in `guidance/` (OWASP AIBOM Foundations, G7 SBOM-for-AI minimum elements, CERT-In technical guidelines, NIST AI RMF, OWASP GenAI IR guide, SPDX AIBOM experience report, AIBoMGen, CISA AIBOM Tiger Team deck) with per-document AIBOM requirements, a cross-document minimum-bar synthesis, an element-by-element coverage matrix against this generator, prioritized recommendations (R1–R10; R1/R3/R4 deferred by user decision 2026-11-20), and a **compliance scorecard** (§6): weighted vs strict conformance per document — CERT-In Table 10 **65.8%** (12.5/19), G7 minimum elements **45.0%** (22.5/50), OWASP Foundations **50.0%** (12/24) — with per-element status tables, uplift analysis per recommendation, and the structural (⛔) limits of a post-hoc scanner.
+
 ## [0.0.4] - 2025-12-26
 
 ### Added

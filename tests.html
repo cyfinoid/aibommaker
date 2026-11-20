@@ -1,0 +1,292 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AI BOM Generator - Detection Test Suite</title>
+<!--
+  Self-contained test harness for the detection logic added in the 2026-11 gap
+  analysis (no backend, no frameworks - plain HTML/JS like the rest of the app).
+
+  Run: open this file in a browser (or serve the repo root and visit /tests.html).
+  It loads the real app scripts (constants/utils/github-api/detectors/
+  extended-aibom-generator) and asserts against their pure functions with
+  fixtures taken from the reference projects in projects/.
+-->
+<style>
+  body { font-family: ui-monospace, monospace; background: #0d1117; color: #e6edf3; padding: 2rem; }
+  h1 { font-size: 1.2rem; } h2 { font-size: 1rem; margin-top: 1.5rem; color: #7ee787; }
+  .pass { color: #7ee787; } .fail { color: #ff7b72; font-weight: bold; }
+  .case { padding: 1px 0; } #summary { margin-top: 1.5rem; font-size: 1.1rem; border-top: 1px solid #30363d; padding-top: 1rem; }
+</style>
+</head>
+<body>
+<h1>AI BOM Generator — Detection Test Suite</h1>
+<div id="results"></div>
+<div id="summary"></div>
+
+<!-- Load the real app scripts (order matches index.html) -->
+<script src="js/constants.js"></script>
+<script src="js/utils.js"></script>
+<script src="js/github-api.js"></script>
+<script src="js/detectors.js"></script>
+<script src="js/extended-aibom-generator.js"></script>
+
+<script>
+"use strict";
+const out = [];
+let passed = 0, failed = 0;
+function assert(cond, msg) {
+  if (cond) { passed++; out.push(`<div class="case pass">✓ ${msg}</div>`); }
+  else { failed++; out.push(`<div class="case fail">✗ FAIL: ${msg}</div>`); }
+}
+function section(name) { out.push(`<h2>${name}</h2>`); }
+
+// ---------------------------------------------------------------------------
+section("isPlausibleModelId — extracted-value validation");
+assert(isPlausibleModelId("gpt-4o-mini") === true, "accepts gpt-4o-mini");
+assert(isPlausibleModelId("claude-sonnet-4-5") === true, "accepts claude-sonnet-4-5");
+assert(isPlausibleModelId("meta-llama/Llama-2-7b-chat-hf") === true, "accepts HF slug");
+assert(isPlausibleModelId("qwen3:4b") === true, "accepts Ollama tag");
+assert(isPlausibleModelId("gemini-2.5-pro") === true, "accepts gemini-2.5-pro");
+assert(isPlausibleModelId("192.168.1.1") === false, "rejects IP address");
+assert(isPlausibleModelId("1.2.3") === false, "rejects bare version");
+assert(isPlausibleModelId("latest") === false, "rejects 'latest'");
+assert(isPlausibleModelId("https://api.openai.com") === false, "rejects URL");
+assert(isPlausibleModelId("pytest") === false, "rejects non-model value (misleading_config bait)");
+assert(isPlausibleModelId("12345") === false, "rejects pure number");
+assert(isPlausibleModelId("logo.png") === false, "rejects file extension");
+assert(isPlausibleModelId("{{model_name}}") === false, "rejects template placeholder");
+assert(isPlausibleModelId("ab") === false, "rejects too-short string");
+
+// ---------------------------------------------------------------------------
+section("normalizeBedrockModelId — Bedrock ARN flattening (cisco aibom)");
+assert(normalizeBedrockModelId("us.anthropic.claude-3-5-sonnet-20241022-v2:0") === "claude-3-5-sonnet",
+  "us.anthropic.claude-3-5-sonnet-20241022-v2:0 -> claude-3-5-sonnet");
+assert(normalizeBedrockModelId("meta.llama3-3-70b-instruct-v1:0") === "llama3-3-70b-instruct",
+  "meta.llama3-3-70b-instruct-v1:0 -> llama3-3-70b-instruct");
+assert(normalizeBedrockModelId("amazon.titan-text-express-v1") === "titan-text-express",
+  "amazon.titan-text-express-v1 -> titan-text-express");
+assert(normalizeBedrockModelId("anthropic.claude-3-5-haiku-20241022-v1:0") === "claude-3-5-haiku",
+  "date suffix stripped");
+assert(normalizeBedrockModelId("amazon.nova-pro-v1") === "nova-pro", "amazon.nova-pro-v1 -> nova-pro");
+assert(normalizeBedrockModelId(null) === null, "null handled");
+
+// ---------------------------------------------------------------------------
+section("stripNotebookCells — .ipynb source extraction");
+const nb = JSON.stringify({ cells: [
+  { cell_type: "code", source: ["import openai as oa\n", "client = oa.OpenAI()"] },
+  { cell_type: "markdown", source: ["# notes"] },
+  { cell_type: "code", source: "model = \"gpt-4o\"" }
+]});
+const stripped = stripNotebookCells(nb);
+assert(stripped.includes("client = oa.OpenAI()"), "array-source cells joined");
+assert(stripped.includes("model = \"gpt-4o\""), "string-source cells joined");
+assert(stripNotebookCells("not json") === "", "invalid JSON -> empty string");
+assert(stripNotebookCells(JSON.stringify({ foo: 1 })) === "", "object without cells -> empty string");
+assert(stripNotebookCells(null) === "", "null -> empty string");
+
+// ---------------------------------------------------------------------------
+section("extractContextualModelRefs — kwarg/constant/env-default extraction");
+{
+  // akumar0205 adversarial/env_driven.py scenario
+  const py1 = 'import os\nfrom langchain_openai import ChatOpenAI\nSELECTED_MODEL = os.environ.get("APP_MODEL", "gpt-4o-mini")\nllm = ChatOpenAI(model=SELECTED_MODEL)\n';
+  const r1 = extractContextualModelRefs(py1);
+  assert(r1.some(r => r.model === "gpt-4o-mini" && r.method === "env-default"), "env-default dataflow captured");
+
+  // cisco-style kwarg with constructor attribution
+  const py2 = 'from openai import OpenAI\nclient = OpenAI(model="gpt-4o-mini-2024-07-18")\nresp = client.chat.completions.create(model="o4-mini", messages=[])\n';
+  const r2 = extractContextualModelRefs(py2);
+  assert(r2.some(r => r.model === "gpt-4o-mini-2024-07-18" && r.provider === "OpenAI"), "kwarg with OpenAI ctor attribution");
+  assert(r2.some(r => r.model === "o4-mini"), "second kwarg captured");
+
+  // JS wrapper factory (akumar adversarial/wrapper_factory.ts)
+  const ts1 = 'import OpenAI from "openai";\nconst MODEL_NAME = process.env.APP_MODEL ?? "gpt-4o-mini";\nconst pinned = new OpenAI({ apiKey: key, model: "gpt-4.1-mini" });\n';
+  const r3 = extractContextualModelRefs(ts1);
+  assert(r3.some(r => r.model === "gpt-4o-mini" && r.method === "env-default"), "process.env ?? default captured");
+  assert(r3.some(r => r.model === "gpt-4.1-mini"), "object-literal kwarg captured");
+
+  // Ternary default
+  const ts2 = 'const m = process.env.LLM_MODEL ? process.env.LLM_MODEL : "claude-sonnet-4-5";';
+  assert(extractContextualModelRefs(ts2).some(r => r.model === "claude-sonnet-4-5"), "ternary env default captured");
+
+  // Constant assignment + variable resolution
+  // (assignment and its kwarg usage dedupe to one entry keyed by first method seen)
+  const py3 = 'DEFAULT_MODEL = "deepseek-v3"\nagent = AssistantAgent(name="helper", model=DEFAULT_MODEL)\n';
+  const r5 = extractContextualModelRefs(py3);
+  assert(r5.some(r => r.model === "deepseek-v3"), "module constant captured");
+  assert(r5.some(r => r.method === "constant-DEFAULT_MODEL"), "kwarg variable resolved to constant");
+  assert(r5.filter(r => r.model === "deepseek-v3").length === 1, "constant + usage deduplicated to one entry");
+
+  // Azure deployment_name
+  const az = 'deployment = AzureOpenAI(azure_endpoint=ep, deployment_name="gpt-35-turbo", api_key=k)';
+  assert(extractContextualModelRefs(az).some(r => r.model === "gpt-35-turbo"), "deployment_name kwarg captured");
+
+  // YAML-style config
+  const yml = 'provider:\n  model_name: "gemini-2.5-flash"\n  model: "qwen3:32b"\n';
+  const ry = extractContextualModelRefs(yml);
+  assert(ry.some(r => r.model === "gemini-2.5-flash"), "YAML model_name captured");
+  assert(ry.some(r => r.model === "qwen3:32b"), "YAML model with Ollama tag captured");
+
+  // False-positive baits (akumar misleading_config.yaml + junk kwargs)
+  const fp = 'model_trainer = "pytest"\nfoo(model="latest")\nbar(model_name="https://api.example.com")\nbaz(model="12345")\n';
+  const rf = extractContextualModelRefs(fp);
+  assert(!rf.some(r => r.model === "pytest"), "rejects pytest");
+  assert(!rf.some(r => r.model === "latest"), "rejects latest");
+  assert(!rf.some(r => r.model.includes("https")), "rejects URL value");
+  assert(!rf.some(r => r.model === "12345"), "rejects numeric value");
+
+  // Comments skipped
+  const cm = '# model = "gpt-4o"\n// const x = "claude-3-opus"\nconst y = "gemini-2.5-pro";\n';
+  const rc = extractContextualModelRefs(cm);
+  assert(!rc.some(r => r.model === "gpt-4o"), "python comment skipped");
+  assert(!rc.some(r => r.model === "claude-3-opus"), "JS comment skipped");
+  assert(rc.some(r => r.model === "gemini-2.5-pro"), "live line still captured");
+
+  // No default -> no invented model
+  const nd = 'model=os.environ.get("OPENAI_MODEL")\nfoo(model=API_MODEL)';
+  assert(extractContextualModelRefs(nd).length === 0, "no default -> nothing invented");
+
+  // Provider filter: attributed refs must match detected providers;
+  // unattributed (provider === null) refs are kept deliberately - discovering
+  // unknown models is the point of contextual extraction.
+  {
+    const rFiltered = extractContextualModelRefs(py2, new Set(["Anthropic"]));
+    assert(!rFiltered.some(r => r.provider === "OpenAI"), "filter drops non-matching attributed providers");
+    assert(rFiltered.some(r => r.provider === null && r.model === "o4-mini"), "unattributed refs survive the filter");
+    assert(extractContextualModelRefs(py2, new Set(["OpenAI"])).length === 2, "filter keeps matching providers");
+  }
+}
+
+// ---------------------------------------------------------------------------
+section("New literal model patterns in modelsIdentifierDetector list");
+{
+  // MODEL_PATTERNS (config detector) derives from AI_SIGNATURES models entries:
+  const mp = MODEL_PATTERNS.map(p => `${p.provider}|${p.pattern.source}`);
+  assert(mp.some(s => s.startsWith("OpenAI|") && s.includes("o4-mini")), "MODEL_PATTERNS has o4-mini");
+  assert(mp.some(s => s.startsWith("Anthropic|") && s.includes("claude-3-7-sonnet")), "MODEL_PATTERNS has claude-3-7-sonnet");
+  assert(mp.some(s => s.startsWith("Anthropic|") && s.includes("claude-sonnet-4-5")), "MODEL_PATTERNS has claude-sonnet-4-5");
+  assert(mp.some(s => s.startsWith("Google|") && s.includes("gemini-2\\.5-pro")), "MODEL_PATTERNS has gemini-2.5-pro");
+  assert(mp.some(s => s.startsWith("Cohere|")), "MODEL_PATTERNS has Cohere models");
+  assert(mp.some(s => s.startsWith("xAI|")), "MODEL_PATTERNS has Grok");
+  assert(mp.some(s => s.startsWith("AWS Bedrock|")), "MODEL_PATTERNS has Bedrock ids (vendor = AWS Bedrock)");
+}
+
+// ---------------------------------------------------------------------------
+section("Signature registry coverage (constants.js)");
+{
+  const all = Object.values(AI_SIGNATURES).flat();
+  const ids = all.map(s => s.id);
+  for (const expected of ["langgraph.framework", "google.adk", "openai.agents", "pydanticai.framework",
+    "smolagents.framework", "strands.framework", "deepagents.framework", "haystack.framework",
+    "dspy.framework", "instructor.client", "semantic-kernel.microsoft", "cohere.client", "mistral.client",
+    "groq.client", "xai.grok", "together.client", "perplexity.client", "fireworks.client", "replicate.client",
+    "ai21.client", "stability.client", "alephalpha.client", "azure.openai", "bedrock.client",
+    "vertexai.client", "openrouter.gateway", "litellm.router", "safety.guardrails", "observability.llm"]) {
+    assert(ids.includes(expected), `signature ${expected} registered`);
+  }
+  assert((AI_PACKAGE_REGISTRY.guardrails?.python || []).includes("nemoguardrails"), "guardrails packages in registry");
+  assert((AI_PACKAGE_REGISTRY.llm_observability?.python || []).includes("langfuse"), "observability packages in registry");
+  assert(AI_EXTENDED_DEPENDENCIES.python.includes("langgraph"), "langgraph in extended dependencies");
+  assert(AI_EXTENDED_DEPENDENCIES.python.includes("google-adk"), "google-adk in extended dependencies");
+  assert(AI_EXTENDED_DEPENDENCIES.node.includes("@langchain/langgraph"), "langgraph node pkg in extended dependencies");
+  assert(AI_PROTOCOL_PATTERNS.a2a.config_files.includes(".well-known/agent.json"), "A2A agent card config file registered");
+  assert(MODEL_FILE_PATTERNS.some(p => p.extension === ".ggml"), "MODEL_FILE_PATTERNS has .ggml");
+  assert(MODEL_FILE_PATTERNS.some(p => p.extension === ".ckpt" && p.pathMatch), "MODEL_FILE_PATTERNS has .ckpt (guarded)");
+  assert(AI_DEV_TOOLS.ide_copilots.config_files.includes("SKILL.md"), "SKILL.md in dev tool configs");
+}
+
+// ---------------------------------------------------------------------------
+section("Fallback manifest parsers (dependenciesDetector)");
+{
+  const GO = ["github.com/sashabaranov/go-openai", "github.com/anthropics/anthropic-sdk-go", "github.com/tmc/langchaingo"];
+  const RUST = ["async-openai", "candle-core"];
+  const JAVA = ["dev.langchain4j:langchain4j", "com.openai:openai-java", "com.google.cloud:google-cloud-aiplatform"];
+
+  const goMod = 'module github.com/example/app\n\ngo 1.22\n\nrequire github.com/sashabaranov/go-openai v1.32.5\n\nrequire (\n\tgithub.com/anthropics/anthropic-sdk-go v0.2.0\n\tgithub.com/gin-gonic/gin v0.9.1\n\tgithub.com/tmc/langchaingo v0.1.12\n)\n';
+  const gd = findInGoMod(goMod, GO);
+  assert(gd.length === 3, `go.mod finds 3 AI deps (got ${gd.length})`);
+  assert(gd[0].version === "v1.32.5", "go.mod captures version");
+  assert(findInGoMod("require github.com/stretchr/testify v1.9.0", GO).length === 0, "go.mod skips non-AI deps");
+
+  const cargo = '[package]\nname = "app"\n\n[dependencies]\ntokio = { version = "1", features = ["full"] }\nasync-openai = "0.27"\ncandle-core = { version = "0.8" }\n\n[dev-dependencies]\nllm = "0.13"\n';
+  const cd = findInCargoToml(cargo, RUST);
+  assert(cd.some(d => d.name === "async-openai" && d.version === "0.27"), "Cargo.toml simple version form");
+  assert(cd.some(d => d.name === "candle-core" && d.version === "0.8"), "Cargo.toml inline-table version");
+  assert(!cd.some(d => d.name === "tokio" || d.name === "llm"), "Cargo.toml skips non-AI + dev-deps");
+
+  const pom = '<project>\n  <dependency>\n    <groupId>dev.langchain4j</groupId>\n    <artifactId>langchain4j-open-ai</artifactId>\n    <version>1.0.0-beta3</version>\n  </dependency>\n  <dependency>\n    <groupId>org.apache.commons</groupId>\n    <artifactId>commons-lang3</artifactId>\n  </dependency>\n</project>';
+  const pd = findInPomXml(pom, JAVA);
+  assert(pd.length === 1 && pd[0].name === "dev.langchain4j:langchain4j-open-ai" && pd[0].version === "1.0.0-beta3",
+    "pom.xml finds langchain4j with version");
+
+  const gradle = 'dependencies {\n    implementation \'com.openai:openai-java:0.1.1\'\n    implementation "com.google.cloud:google-cloud-aiplatform:3.50.0"\n    testImplementation \'junit:junit:4.13\'\n}';
+  const grd = findInGradle(gradle, JAVA);
+  assert(grd.length === 2 && grd[0].version === "0.1.1", "build.gradle finds AI deps with versions");
+}
+
+// ---------------------------------------------------------------------------
+section("Ecosystem detection for new manifests");
+{
+  assert(detectEcosystem("go.mod") === "go", "go.mod -> go");
+  assert(detectEcosystem("Cargo.toml") === "rust", "Cargo.toml -> rust");
+  assert(detectEcosystem("pom.xml") === "java", "pom.xml -> java");
+  assert(detectEcosystem("build.gradle") === "java", "build.gradle -> java");
+  assert(detectEcosystem("package.json") === "node", "package.json -> node (unchanged)");
+  assert(detectEcosystem("requirements.txt") === "python", "requirements.txt -> python (unchanged)");
+}
+
+// ---------------------------------------------------------------------------
+section("Infrastructure patterns (digest pinning, model env config)");
+{
+  const digest = INFRASTRUCTURE_PATTERNS.containerization.patterns.find(p => p.platform === "Digest-Pinned Base Image");
+  assert(!!digest, "Digest-Pinned Base Image pattern registered");
+  assert(digest && digest.pattern.test("FROM ghcr.io/acme/ai-service@sha256:" + "a".repeat(64)), "matches digest-pinned FROM");
+  assert(digest && !digest.pattern.test("FROM python:3.11-slim"), "does not match tag-pinned FROM");
+
+  const imgDigest = INFRASTRUCTURE_PATTERNS.orchestration.patterns.find(p => p.platform === "Digest-Pinned Container Image");
+  assert(imgDigest && imgDigest.pattern.test("image: us-docker.pkg.dev/org/proj/ai-api@sha256:" + "b".repeat(64)), "matches k8s digest-pinned image");
+
+  const modelEnv = INFRASTRUCTURE_PATTERNS.orchestration.patterns.find(p => p.platform === "AI Model Environment Config");
+  assert(modelEnv && modelEnv.pattern.test("          - name: MODEL_DEPLOYMENT\n            value: gpt-4o-mini"), "matches k8s MODEL_* env var name");
+  assert(modelEnv && !modelEnv.pattern.test("          - name: APP_LOG_LEVEL\n            value: debug"), "does not match unrelated env vars");
+}
+
+// ---------------------------------------------------------------------------
+section("OWASP LLM Top-10 derivation (extended AIBOM)");
+{
+  const findings = [
+    { category: "dependencies", title: "Dependency: chromadb", description: "LLM-related dependency: chromadb", dependencyInfo: { name: "chromadb" } },
+    { category: "code", title: "CrewAI SDK Usage Detected", description: "Found CrewAI SDK usage" },
+    { modelInfo: { provider: "OpenAI", modelName: "gpt-4o" }, title: "OpenAI model", description: "OpenAI model" },
+    { category: "protocol", title: "MCP Server Config Usage", description: "Model Context Protocol (MCP) server config" }
+  ];
+  const owasp = assessOWASPLLMTop10(findings);
+  assert(owasp.some(r => r.id === "LLM01" && r.status === "exposure-surface-detected"), "LLM01 surface from protocol findings");
+  assert(owasp.some(r => r.id === "LLM02"), "LLM02 surface from cloud model usage");
+  assert(owasp.some(r => r.id === "LLM03"), "LLM03 surface from dependencies");
+  assert(owasp.some(r => r.id === "LLM06"), "LLM06 surface from agent framework");
+  assert(owasp.some(r => r.id === "LLM08" && (r.rationale || "").includes("Vector stores")), "LLM08 surface from vector store dep");
+  assert(!owasp.some(r => r.id === "LLM04"), "LLM04 not raised without fine-tuning findings");
+
+  const mitigated = assessOWASPLLMTop10([
+    { title: "Guardrails SDK Usage Detected", description: "Found Guardrails SDK usage in 1 file(s)" }
+  ]);
+  assert(mitigated.some(r => r.id === "MITIGATION"), "guardrail detection emits mitigation entry");
+}
+
+// ---------------------------------------------------------------------------
+section("Tree truncation plumbing");
+{
+  assert(typeof wasLastTreeTruncated === "function", "wasLastTreeTruncated exposed from github-api.js");
+  assert(wasLastTreeTruncated() === false, "defaults to false before any fetch");
+}
+
+// ---------------------------------------------------------------------------
+document.getElementById("results").innerHTML = out.join("");
+document.getElementById("summary").innerHTML =
+  `<span class="${failed === 0 ? "pass" : "fail"}">${passed} passed, ${failed} failed</span>` +
+  (failed === 0 ? " — all detection tests green ✅" : " — see failures above ❌");
+</script>
+</body>
+</html>

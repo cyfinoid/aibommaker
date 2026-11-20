@@ -69,7 +69,22 @@ function renderScoreBadge(score, confidence) {
 function renderAnalysisNotes(findings, analysisResult, fileTree = null) {
     const container = document.getElementById('analysis-notes-list');
     container.innerHTML = '';
-    
+
+    // Scan-completeness warnings first (e.g. GitHub tree truncation)
+    if (analysisResult?.warnings?.length > 0) {
+        const warningSection = document.createElement('div');
+        warningSection.className = 'analysis-note-section';
+        warningSection.innerHTML = `
+            <h3 class="subheading" style="margin-bottom: 1rem; color: var(--status-warning, #b45309);">⚠️ Scan Completeness Warnings</h3>
+            ${analysisResult.warnings.map(w => `
+                <div class="info-message" style="padding: 0.75rem 1rem; margin-bottom: 0.75rem; border-left: 3px solid var(--status-warning, #b45309);">
+                    <p class="body" style="margin: 0;">${escapeHtml(w.message)}</p>
+                </div>
+            `).join('')}
+        `;
+        container.appendChild(warningSection);
+    }
+
     // Scan-specific: What we looked for but didn't find in THIS repository
     const notFound = [];
     
@@ -164,8 +179,8 @@ function renderAnalysisNotes(findings, analysisResult, fileTree = null) {
         });
     }
     
-    // If everything was found, show a positive message
-    if (notFound.length === 0) {
+    // If everything was found (and no warnings), show a positive message
+    if (notFound.length === 0 && !analysisResult?.warnings?.length) {
         container.innerHTML = `
             <div class="info-message" style="padding: 2rem; text-align: center; color: var(--text-secondary);">
                 <p style="font-size: 1.1rem; margin-bottom: 0.5rem;">✅ Comprehensive detection achieved</p>

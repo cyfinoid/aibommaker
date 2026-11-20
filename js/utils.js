@@ -482,3 +482,267 @@ function groupFindingsByType(findings) {
 
   return grouped;
 }
+
+// ============================================================================
+// CONTEXTUAL MODEL EXTRACTION (inspired by cisco aibom + akumar0205 AIBOM)
+// ============================================================================
+// These helpers capture model references that literal model-name matching
+// misses: kwargs like `model="gpt-4o"`, module constants like
+// `MODEL_NAME = "gpt-4o"`, and env-default dataflow like
+// `os.environ.get("MODEL", "gpt-4o")`. Unknown/new model ids become visible
+// without needing a literal pattern update for every release.
+// ============================================================================
+
+/**
+ * Check if an extracted string is plausibly a model id (not a version,
+ * URL, path, deployment literal, or placeholder).
+ * Follows cisco aibom's deployment-literal rejection heuristics.
+ * @param {string} value - Candidate model id
+ * @returns {boolean} True if the value looks like a model id
+ */
+function isPlausibleModelId(value) {
+  if (!value || typeof value !== "string") return false;
+  const v = value.trim();
+
+  // Length bounds: 3-80 chars (cisco uses similar bounds)
+  if (v.length < 3 || v.length > 80) return false;
+
+  // Charset: model ids are alphanumeric with . _ / : - separators
+  if (!/^[a-zA-Z0-9][a-zA-Z0-9._/:-]*$/.test(v)) return false;
+
+  // Must contain at least one letter (reject pure numbers/versions)
+  if (!/[a-zA-Z]/.test(v)) return false;
+
+  const lower = v.toLowerCase();
+
+  // Reject URLs, IPs, ports, templates, file extensions
+  if (v.includes("://")) return false;
+  if (/^\d{1,3}(\.\d{1,3}){3}/.test(v)) return false; // IPv4
+  if (/^[0-9]+(\.[0-9]+)+$/.test(v)) return false; // bare version
+  if (lower.includes("{{") || lower.includes("}}")) return false; // templates
+  if (lower.startsWith("localhost") || lower.startsWith("127.0.0.1")) return false;
+  if (lower === "latest" || lower === "unknown" || lower === "none") return false;
+  if (lower === "null" || lower === "true" || lower === "false") return false;
+  if (/\.(png|jpg|jpeg|gif|svg|css|html|json|yml|yaml|txt|md|pdf|csv)$/i.test(v)) return false;
+
+  // Reject well-known non-model config keys (akumar0205 misleading_config fixture):
+  // values like "pytest" for model_trainer, "openai" for provider etc.
+  const nonModelValues = [
+    "pytest", "provider", "openai", "anthropic", "azure", "aws", "gcp",
+    "google", "huggingface", "azureml", "vertexai", "bedrock", "ollama",
+    "config", "default", "template", "placeholder", "example", "sample",
+    "test", "change-me", "changeme", "your-model", "your_model", "xxx",
+  ];
+  if (nonModelValues.includes(lower)) return false;
+
+  return true;
+}
+
+/**
+ * Normalize a Bedrock-style model id to its public model name.
+ * e.g. "us.anthropic.claude-3-5-sonnet-20241022-v2:0" -> "claude-3-5-sonnet"
+ * Follows cisco aibom's Bedrock ARN flattening (model_detector.py alias logic).
+ * @param {string} raw - Raw Bedrock model id
+ * @returns {string|null} Normalized model id, or null if not normalizable
+ */
+function normalizeBedrockModelId(raw) {
+  if (!raw || typeof raw !== "string") return null;
+  let id = raw.trim();
+
+  // Strip inference-profile / regional prefixes: us., eu., apac., us-gov.
+  id = id.replace(/^(?:us|eu|apac|us-gov)\./i, "");
+
+  // Strip provider prefixes: anthropic., amazon., meta., ai21., cohere., deepseek.
+  const providerMatch = id.match(/^(anthropic|amazon|meta|ai21|cohere|deepseek|mistral)\.(.+)$/i);
+  if (providerMatch) {
+    id = providerMatch[2];
+  } else if (/^[a-z0-9-]+\.[a-z]/i.test(id)) {
+    // Unknown provider prefix (e.g. "openai.gpt-...") - strip it too
+    id = id.replace(/^[a-z0-9-]+\./i, "");
+  }
+
+  // Strip version suffix: -v1:0 / -v2:0 / :0
+  id = id.replace(/(-v\d+)?(:\d+)?$/i, "");
+
+  // Strip trailing date suffix: -20241022 (keeps id resolvable against literal lists)
+  id = id.replace(/-\d{8}$/i, "");
+
+  return isPlausibleModelId(id) ? id : null;
+}
+
+/**
+ * Convert Jupyter notebook JSON content to plain source text so code/model
+ * detectors can scan .ipynb files. Returns empty string for invalid notebooks.
+ * @param {string} content - Raw .ipynb file content (JSON)
+ * @returns {string} Joined cell source code
+ */
+function stripNotebookCells(content) {
+  if (!content || typeof content !== "string") return "";
+  let notebook;
+  try {
+    notebook = JSON.parse(content);
+  } catch (e) {
+    return "";
+  }
+  if (!notebook || !Array.isArray(notebook.cells)) return "";
+
+  const sources = [];
+  for (const cell of notebook.cells) {
+    const src = cell?.source;
+    if (Array.isArray(src)) {
+      sources.push(src.join(""));
+    } else if (typeof src === "string") {
+      sources.push(src);
+    }
+  }
+  return sources.join("\n");
+}
+
+// Provider hints for constructor-based attribution of extracted model refs.
+// Maps constructor/class names to provider names (order: most specific first).
+const MODEL_CTOR_PROVIDER_HINTS = [
+  { pattern: /ChatOpenAI|AzureChatOpenAI/, provider: "OpenAI" },
+  { pattern: /ChatAnthropic/, provider: "Anthropic" },
+  { pattern: /ChatGoogleGenerativeAI|GenerativeModel|ChatVertexAI/, provider: "Google" },
+  { pattern: /ChatBedrock|BedrockRuntime|BedrockEmbeddings/, provider: "AWS Bedrock" },
+  { pattern: /ChatGroq|Groq\(/, provider: "Groq" },
+  { pattern: /ChatMistralAI|Mistral\(/, provider: "Mistral" },
+  { pattern: /ChatCohere|Cohere\(/, provider: "Cohere" },
+  { pattern: /ChatOllama|Ollama\(|OllamaEmbeddings/, provider: "Ollama" },
+  { pattern: /HuggingFacePipeline|HuggingFaceEndpoint|HuggingFaceHub/, provider: "HuggingFace" },
+  { pattern: /AzureOpenAI/, provider: "OpenAI" },
+  { pattern: /OpenAI(?:Client)?\(/, provider: "OpenAI" },
+  { pattern: /Anthropic\(/, provider: "Anthropic" },
+];
+
+/**
+ * Guess the provider from the constructor/class name used on the same line
+ * as a model reference.
+ * @param {string} line - The line containing the model reference
+ * @returns {string|null} Provider name, or null if unknown
+ */
+function inferProviderFromLine(line) {
+  for (const hint of MODEL_CTOR_PROVIDER_HINTS) {
+    if (hint.pattern.test(line)) return hint.provider;
+  }
+  return null;
+}
+
+/**
+ * Extract model references from code using context (kwargs, constants,
+ * env-with-default) instead of hardcoded model-name literals.
+ * Returns candidates validated by isPlausibleModelId, deduplicated,
+ * with optional provider attribution from constructor context.
+ *
+ * @param {string} content - File content to scan
+ * @param {Set} providersUsed - Set of providers already detected in the repo
+ *   (used to gate the "unknown provider" bucket; optional)
+ * @returns {Array<{model: string, provider: string|null, method: string, line: number}>}
+ */
+function extractContextualModelRefs(content, providersUsed = null) {
+  if (!content || typeof content !== "string") return [];
+  const results = [];
+  const seen = new Set();
+  const lines = content.split("\n");
+
+  // Pass 1: collect constant-name -> model-id map for variable resolution.
+  // Python/JS module constants: MODEL_NAME = "gpt-4o", model_id = "claude-..."
+  const constMap = new Map();
+  const constPattern = /^\s*(?:const\s+|let\s+|var\s+)?([A-Za-z_][A-Za-z0-9_]*(?:[A-Z_]{2,}|[Mm]odel[A-Za-z0-9_]*))\s*=\s*["']([^"']{3,80})["']/;
+  for (let i = 0; i < lines.length; i++) {
+    const m = lines[i].match(constPattern);
+    if (m && isPlausibleModelId(m[2])) {
+      // Only track variables that look model-related by name
+      if (/model/i.test(m[1]) || /^[A-Z_]*_MODEL/.test(m[1])) {
+        constMap.set(m[1], { model: m[2], line: i + 1 });
+      }
+    }
+  }
+
+  const addResult = (model, provider, method, line) => {
+    if (!isPlausibleModelId(model)) return;
+    const key = `${provider || "?"}-${model}`;
+    if (seen.has(key)) return;
+    // Skip if this exact model id was assigned from a tracked constant
+    // (avoid double-counting declaration + usage when provider is unknown)
+    seen.add(key);
+    results.push({ model, provider: provider || null, method, line });
+  };
+
+  const kwargPattern = /[{,(\s](model|model_name|model_id|deployment_name)\s*[:=]\s*["']([^"']{3,80})["']/g;
+  const kwargVarPattern = /[{,(\s](model|model_name|model_id|deployment_name)\s*[:=]\s*([A-Za-z_][A-Za-z0-9_.]*)\s*[,)}]/g;
+  const envDefaultPatterns = [
+    /(?:os\.environ\.get|os\.getenv)\(\s*["'][^"']+["']\s*,\s*["']([^"']{3,80})["']\s*\)/g,
+    /process\.env\.[A-Za-z_]+\s*(?:\?\?|\|\|)\s*["']([^"']{3,80})["']/g,
+    /process\.env\.[A-Za-z_]+\s*\?\s*[^:]+:\s*["']([^"']{3,80})["']/g,
+  ];
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i];
+
+    // Skip comments and long string-literal-only lines (existing FP heuristics)
+    if (isCommentOrStringLiteral(line)) continue;
+    if (line.length > 10000) continue; // ReDoS guard (mirrors ai-spotter)
+
+    const providerHint = inferProviderFromLine(line);
+
+    // 1. Direct kwarg literals: model="gpt-4o"
+    kwargPattern.lastIndex = 0;
+    let m;
+    while ((m = kwargPattern.exec(line)) !== null) {
+      addResult(m[2], providerHint, `kwarg-${m[1]}`, i + 1);
+    }
+
+    // 2. Kwarg referencing a tracked constant: model=DEFAULT_MODEL
+    kwargVarPattern.lastIndex = 0;
+    while ((m = kwargVarPattern.exec(line)) !== null) {
+      const varName = m[2].split(".").pop(); // allow config.model references
+      const resolved = constMap.get(varName);
+      if (resolved) {
+        addResult(resolved.model, providerHint, `constant-${varName}`, i + 1);
+      }
+    }
+
+    // 3. Env-with-default dataflow (both os.environ.get and process.env forms)
+    for (const pattern of envDefaultPatterns) {
+      pattern.lastIndex = 0;
+      while ((m = pattern.exec(line)) !== null) {
+        addResult(m[1], providerHint, "env-default", i + 1);
+      }
+    }
+  }
+
+  // 4. Assignments of tracked constants themselves (module-level MODEL_NAME = "...")
+  for (const [varName, info] of constMap) {
+    const provider = inferProviderFromName(varName);
+    addResult(info.model, provider, `assignment-${varName}`, info.line);
+  }
+
+  // When the repo's providers are known, drop refs attributed to providers we
+  // did not detect. Refs with provider === null (unattributed) are kept on
+  // purpose: discovering unknown models is exactly what this pass is for -
+  // the caller merges them into existing entries or marks them "Unknown".
+  if (providersUsed && providersUsed.size > 0) {
+    return results.filter((r) => r.provider === null || providersUsed.has(r.provider));
+  }
+  return results;
+}
+
+/**
+ * Guess provider from a constant variable name (e.g. OPENAI_MODEL -> OpenAI).
+ * @param {string} varName - Variable name
+ * @returns {string|null} Provider name or null
+ */
+function inferProviderFromName(varName) {
+  const name = varName.toLowerCase();
+  if (name.includes("openai")) return "OpenAI";
+  if (name.includes("anthropic") || name.includes("claude")) return "Anthropic";
+  if (name.includes("gemini") || name.includes("google") || name.includes("vertex")) return "Google";
+  if (name.includes("bedrock") || name.includes("aws")) return "AWS Bedrock";
+  if (name.includes("ollama")) return "Ollama";
+  if (name.includes("groq")) return "Groq";
+  if (name.includes("mistral")) return "Mistral";
+  if (name.includes("cohere")) return "Cohere";
+  if (name.includes("azure")) return "OpenAI";
+  return null;
+}

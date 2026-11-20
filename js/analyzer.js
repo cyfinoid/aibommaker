@@ -365,11 +365,24 @@ async function analyzeRepository(input, onProgress = null) {
     });
     
     console.log('='.repeat(80));
-    
+
+    // Surface scan-completeness warnings (e.g. GitHub tree truncation)
+    const warnings = [];
+    if (typeof wasLastTreeTruncated === "function" && wasLastTreeTruncated()) {
+        warnings.push({
+            type: 'tree-truncated',
+            message: 'GitHub truncated the repository file tree during fetching. ' +
+                     'The scan covered a partial tree - some files may not have been analyzed. ' +
+                     'Results may be incomplete for very large repositories.'
+        });
+        console.warn('[Analyzer] ⚠️  Tree was truncated by GitHub - analysis may be incomplete');
+    }
+
     return {
         score,
         confidence,
         findings: mergedFindings,
+        warnings,
         repository: {
             owner: input.owner,
             repo: input.repo,
