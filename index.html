@@ -226,9 +226,6 @@
                         <button class="tab-btn" data-tab="extended-aibom">
                             Extended AIBOM
                         </button>
-                        <button class="tab-btn" data-tab="compliance">
-                            Standards Compliance
-                        </button>
                     </div>
 
                     <div class="bom-content">
@@ -336,41 +333,61 @@
                             </div>
                             <pre><code id="extended-aibom-preview" class="code-preview"></code></pre>
                         </div>
-
-                        <div id="compliance" class="tab-content">
-                            <div
-                                class="compliance-info"
-                                style="
-                                    margin-bottom: 1rem;
-                                    padding: 1rem;
-                                    background: var(--bg-secondary);
-                                    border-radius: 8px;
-                                "
-                            >
-                                <p
-                                    style="
-                                        margin: 0 0 0.5rem 0;
-                                        color: var(--text-secondary);
-                                        font-size: 0.9rem;
-                                    "
-                                >
-                                    📏
-                                    <strong>Standards Compliance:</strong>
-                                    the BOMs you just generated are checked
-                                    against CycloneDX 1.7, SPDX 3.0.1
-                                    (JSON-LD) and the NTIA minimum elements,
-                                    and the tool's AIBOM output surface is
-                                    scored element-by-element against
-                                    CERT-In Table 10, the G7 SBOM-for-AI
-                                    minimum elements, and the OWASP AIBOM
-                                    Foundations checklist. Full methodology:
-                                    <code>guidance/guidance_details.md</code> §6.
-                                </p>
-                            </div>
-                            <div id="compliance-dynamic"></div>
-                            <div id="compliance-scorecard"></div>
-                        </div>
                     </div>
+                </div>
+            </section>
+
+            <section id="compliance-section" class="card hidden">
+                <div
+                    style="
+                        display: flex;
+                        justify-content: space-between;
+                        align-items: center;
+                        margin-bottom: 1.5rem;
+                    "
+                >
+                    <h2 class="heading" style="margin-bottom: 0">
+                        Standards Compliance
+                    </h2>
+                    <button
+                        id="collapse-compliance"
+                        class="section-collapse-btn"
+                    >
+                        Collapse
+                    </button>
+                </div>
+
+                <div class="collapsible-content" id="compliance-wrapper">
+                    <div
+                        class="compliance-info"
+                        style="
+                            margin-bottom: 1rem;
+                            padding: 1rem;
+                            background: var(--bg-secondary);
+                            border-radius: 8px;
+                        "
+                    >
+                        <p
+                            style="
+                                margin: 0;
+                                color: var(--text-secondary);
+                                font-size: 0.9rem;
+                            "
+                        >
+                            📏
+                            <strong>Standards Compliance:</strong>
+                            the BOMs you just generated are checked against
+                            CycloneDX 1.7, SPDX 3.0.1 (JSON-LD) and the NTIA
+                            minimum elements, and the tool's AIBOM output
+                            surface is scored element-by-element against
+                            CERT-In Table 10, the G7 SBOM-for-AI minimum
+                            elements, and the OWASP AIBOM Foundations
+                            checklist. Full methodology:
+                            <code>guidance/guidance_details.md</code> §6.
+                        </p>
+                    </div>
+                    <div id="compliance-dynamic"></div>
+                    <div id="compliance-scorecard"></div>
                 </div>
             </section>
 

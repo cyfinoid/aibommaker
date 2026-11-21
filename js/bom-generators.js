@@ -98,9 +98,10 @@ async function generateCycloneDXJson(analysisResult, selectedFindings) {
             }
         },
         components: [],
+        services: [],
         dependencies: []
     };
-    
+
     // Group findings to create proper ML model components
     console.log('[BOM Generator] Creating components from findings...');
     const { components: modelComponents, modelRefs, libraryRefs, mcpRefs, hardwareInfo, infraInfo, governanceInfo, protocolInfo } = await createMLModelComponents(selectedFindings);
@@ -270,16 +271,51 @@ async function generateCycloneDXJson(analysisResult, selectedFindings) {
         ref: mainRef,
         dependsOn: bom.components.map(c => c['bom-ref'])
     });
-    
-    // ML models depend on their framework libraries
+
+    // External AI services: cloud models are consumed through third-party
+    // inference APIs — represent them as CycloneDX services (trust boundary)
+    // and wire the graph: repo → service, model → service.
+    const serviceRefsByProvider = {};
+    modelRefs.forEach(model => {
+        const provider = model.component.author;
+        const svcDef = provider && typeof AI_SERVICE_ENDPOINTS !== 'undefined'
+            ? AI_SERVICE_ENDPOINTS[provider] : null;
+        if (!svcDef) return;
+        if (!serviceRefsByProvider[provider]) {
+            const serviceRef = `service-${provider.toLowerCase().replace(/[^a-z0-9]/g, '-')}`;
+            serviceRefsByProvider[provider] = serviceRef;
+            bom.services.push({
+                'bom-ref': serviceRef,
+                provider: { name: provider },
+                name: svcDef.service,
+                description: `External ${provider} inference API consumed by this application (third-party trust boundary)`,
+                endpoints: svcDef.endpoints.slice(),
+                authenticated: true,
+                externalReferences: [{ type: 'documentation', url: svcDef.docs }]
+            });
+        }
+    });
+
+    const serviceRefs = Object.values(serviceRefsByProvider);
+    if (serviceRefs.length > 0) {
+        bom.dependencies.find(d => d.ref === mainRef).dependsOn.push(...serviceRefs);
+    }
+
+    // ML models depend on their framework libraries and their inference service
     modelRefs.forEach(model => {
         const deps = [];
-        
+
+        // The model is accessed through the provider's external API
+        const provider = model.component.author;
+        if (provider && serviceRefsByProvider[provider]) {
+            deps.push(serviceRefsByProvider[provider]);
+        }
+
         // Check if model uses known libraries
         const modelComp = model.component;
         if (modelComp.properties) {
             const category = modelComp.properties.find(p => p.name === 'category')?.value;
-            
+
             // Add library dependencies based on model type
             if (category === 'text-generation' || category === 'feature-extraction') {
                 if (libraryRefIds.includes('lib-transformers')) deps.push('lib-transformers');
@@ -289,7 +325,7 @@ async function generateCycloneDXJson(analysisResult, selectedFindings) {
                 if (libraryRefIds.includes('lib-pytorch')) deps.push('lib-pytorch');
             }
         }
-        
+
         bom.dependencies.push({
             ref: model.bomRef,
             dependsOn: deps
@@ -305,6 +341,165 @@ async function generateCycloneDXJson(analysisResult, selectedFindings) {
     });
     
     return JSON.stringify(bom, null, 2);
+}
+
+/**
+ * Extract a string list from a structured model-card field (e.g.
+ * intendedUse.primaryUses, limitations.knownLimitations). Returns [] when the
+ * field is absent or carries no readable strings. Falls back to splitting a
+ * plain string value on '; ' when `allowStringFallback` is set (off for
+ * out-of-scope extraction — a flat intended-use string is never out-of-scope
+ * data).
+ * @param {Object|string|null} field Raw card field
+ * @param {string[]} keys Object keys to read, in order
+ * @param {boolean} [allowStringFallback=true] Split plain-string fields
+ * @returns {string[]}
+ */
+function structuredCardList(field, keys, allowStringFallback = true) {
+  if (field === null || field === undefined) return [];
+  if (typeof field === 'string') {
+    return allowStringFallback
+      ? field.split(';').map((s) => s.trim()).filter(Boolean)
+      : [];
+  }
+  if (typeof field !== 'object') return [];
+  for (const key of keys) {
+    const value = field[key];
+    if (Array.isArray(value)) {
+      const items = value.filter((v) => typeof v === 'string' && v.trim()).map((v) => v.trim());
+      if (items.length > 0) return items;
+    } else if (typeof value === 'string' && value.trim()) {
+      return value.split(';').map((s) => s.trim()).filter(Boolean);
+    }
+  }
+  return [];
+}
+
+/**
+ * Resolve a clean library identity for a dependency finding. Prefers the
+ * structured `dependencyInfo` the dependencies detector attaches; falls back
+ * to parsing the "Dependency: <name>" title and "(version: <x>)" description.
+ * Returns version: null when unknown — no invented versions.
+ * @param {Object} finding
+ * @returns {{name: string, version: string|null, ecosystem: string|null}}
+ */
+function resolveLibraryIdentity(finding) {
+  const info = finding.dependencyInfo || null;
+  let name = info?.name || null;
+  let version = info?.version || null;
+  let ecosystem = info?.ecosystem || null;
+
+  if (!name) {
+    const titleMatch = (finding.title || '').match(/^Dependency:\s*(.+)$/i);
+    name = titleMatch ? titleMatch[1].trim() : finding.title;
+  }
+  if (!version || version === 'unknown' || version === 'detected') {
+    const descMatch = (finding.description || '').match(/\(version:\s*([^)]+)\)/i);
+    version = descMatch ? descMatch[1].trim() : null;
+  }
+  if (!version) version = null;
+
+  return { name: String(name), version, ecosystem: ecosystem || null };
+}
+
+/**
+ * Build a Package URL for a resolved library identity. Version omitted when
+ * unknown. Maven names ("group:artifact") map to group/artifact layout.
+ * @param {string} name Clean package name
+ * @param {string|null} version Version or null
+ * @param {string|null} ecosystem Ecosystem from the detector (python, npm, go, maven, rust...)
+ * @returns {string|null} purl or null when the ecosystem is unknown
+ */
+function buildLibraryPurl(name, version, ecosystem) {
+  if (!name || !ecosystem) return null;
+  const eco = String(ecosystem).toLowerCase();
+  const typeMap = {
+    python: 'pypi',
+    pypi: 'pypi',
+    npm: 'npm',
+    node: 'npm',
+    go: 'golang',
+    golang: 'golang',
+    maven: 'maven',
+    java: 'maven',
+    gradle: 'maven',
+    rust: 'cargo',
+    cargo: 'cargo'
+  };
+  const type = typeMap[eco];
+  if (!type) return null;
+
+  let purl;
+  if (type === 'maven' && name.includes(':')) {
+    const [group, artifact] = name.split(':');
+    purl = `pkg:maven/${group}/${artifact}`;
+  } else if (type === 'golang') {
+    purl = `pkg:golang/${name}`;
+  } else if (type === 'npm' && name.startsWith('@')) {
+    // purl spec: npm scopes encode the leading @ as %40 but keep '/' as the
+    // namespace separator (pkg:npm/%40langchain/community@1.2.3)
+    purl = `pkg:npm/${name.replace(/^@/, '%40')}`;
+  } else {
+    purl = `pkg:${type}/${name}`;
+  }
+  return version ? `${purl}@${encodeURIComponent(version)}` : purl;
+}
+
+/**
+ * Build native CycloneDX evidence (identity + occurrences) from a finding.
+ * Technique/confidence: structured manifest provenance → manifest-analysis
+ * (0.9); source imports → source-code-analysis (0.7); code detections map
+ * severity high/medium/low → 0.9/0.7/0.5. Occurrences come from evidence
+ * entries that carry a real line number; snippets ride along as
+ * additionalContext. Returns null when there is nothing usable.
+ * @param {Object} finding
+ * @returns {Object|null} CycloneDX evidence object
+ */
+function buildNativeEvidence(finding) {
+  let technique;
+  let confidence;
+  if (finding.dependencyInfo?.source === 'github-sbom-api' || finding.dependencyInfo?.source === 'manual-parsing') {
+    technique = 'manifest-analysis';
+    confidence = 0.9;
+  } else if (finding.dependencyInfo?.source === 'source-import-analysis') {
+    technique = 'source-code-analysis';
+    confidence = 0.7;
+  } else {
+    technique = 'source-code-analysis';
+    confidence = finding.severity === 'high' ? 0.9 : (finding.severity === 'medium' ? 0.7 : 0.5);
+  }
+
+  const evidence = {
+    identity: [{
+      field: 'name',
+      confidence,
+      methods: [{ technique, confidence }]
+    }]
+  };
+
+  const occurrences = (finding.evidence || [])
+    .filter((ev) => ev.file && ev.line && ev.line > 0)
+    .map((ev) => {
+      const occ = { location: ev.file, line: ev.line };
+      if (ev.snippet) occ.additionalContext = ev.snippet;
+      return occ;
+    });
+  if (occurrences.length > 0) {
+    evidence.occurrences = occurrences;
+  }
+
+  return evidence;
+}
+
+/**
+ * Push a name/value property onto a modelCard.properties array only when the
+ * same name+value pair is not already present (prevents duplicate
+ * aibom:model-type etc. when both a local card and HF config provide it).
+ */
+function pushPropertyOnce(modelCard, name, value) {
+  if (!modelCard.properties.some((p) => p.name === name && p.value === value)) {
+    modelCard.properties.push({ name, value });
+  }
 }
 
 async function createMLModelComponents(findings) {
@@ -331,11 +526,21 @@ async function createMLModelComponents(findings) {
                     'bom-ref': bomRef,
                     author: provider,
                     name: modelName,
-                    version: 'latest',
+                    // No invented version: source identifiers don't pin one and
+                    // local cards carry no version field. Unknown stays unknown
+                    // (properties below record why), per model-identity guidance.
                     description: finding.description,
                     scope: 'required',
-                    properties: []
+                    properties: [
+                        {
+                            name: 'aibom:model:version-status',
+                            value: modelCardData?.version ? 'derived-from-model-card' : 'unpinned-in-source'
+                        }
+                    ]
                 };
+                if (modelCardData?.version) {
+                    component.version = String(modelCardData.version);
+                }
                 
                 // Add detection source if available
                 if (detectionSource) {
@@ -459,11 +664,11 @@ async function createMLModelComponents(findings) {
                     });
                 }
                 
-                // Add modelCard for ML models
+                // Add modelCard for ML models (CycloneDX 1.7 schema-valid shape:
+                // modelParameters has no `tasks`/`modelType`/`contextLength`;
+                // extra card data lives in modelCard.properties as aibom:* keys)
                 const modelCard = {
-                    modelParameters: {
-                        tasks: []
-                    },
+                    modelParameters: {},
                     considerations: {},
                     properties: []
                 };
@@ -481,61 +686,124 @@ async function createMLModelComponents(findings) {
                 if (localModelCardData) {
                     console.log(`[ModelCard] Integrating data for ${provider}/${modelName}`);
 
+                    // All modelCard/modelParameters/considerations fields below
+                    // are CycloneDX 1.7 schema-valid names (modelCard has
+                    // additionalProperties:false). Card data that has no native
+                    // slot lands in modelCard.properties under the `aibom:`
+                    // namespace so enrichment survives validation.
+
                     // Model parameters from local model card
-                    if (localModelCardData.modelType) {
-                        modelCard.modelParameters.modelType = localModelCardData.modelType;
-                    }
                     if (localModelCardData.architecture && localModelCardData.architecture.contextLength) {
-                        modelCard.modelParameters.contextLength = localModelCardData.architecture.contextLength;
+                        // `contextLength` is not a CycloneDX modelParameters field
+                        modelCard.properties.push({
+                            name: 'aibom:context-length',
+                            value: String(localModelCardData.architecture.contextLength)
+                        });
+                    }
+                    if (localModelCardData.modelType) {
+                        // schema has no modelParameters.modelType — keep as property
+                        pushPropertyOnce(modelCard, 'aibom:model-type', localModelCardData.modelType);
                     }
 
-                    // Intended use
-                    if (localModelCardData.intendedUse) {
-                        modelCard.intendedUse = formatModelCardField(localModelCardData.intendedUse, {
-                            primaryUses: '',
-                            primaryUseCases: '',
-                            outOfScope: 'Out of scope'
+                    // Intended use → considerations.useCases[] (schema: array of
+                    // strings); out-of-scope uses recorded as properties.
+                    const intendedUses = structuredCardList(localModelCardData.intendedUse, ['primaryUses', 'primaryUseCases']);
+                    const outOfScopeUses = structuredCardList(localModelCardData.intendedUse, ['outOfScope'], false);
+                    if (intendedUses.length > 0) {
+                        modelCard.considerations.useCases = [
+                            ...(modelCard.considerations.useCases || []),
+                            ...intendedUses
+                        ];
+                    }
+                    outOfScopeUses.forEach((use) => {
+                        modelCard.properties.push({
+                            name: 'aibom:out-of-scope-use',
+                            value: use
+                        });
+                    });
+
+                    // Limitations → considerations.technicalLimitations[]
+                    const knownLimitations = structuredCardList(localModelCardData.limitations, ['knownLimitations']);
+                    if (knownLimitations.length > 0) {
+                        modelCard.considerations.technicalLimitations = [
+                            ...(modelCard.considerations.technicalLimitations || []),
+                            ...knownLimitations
+                        ];
+                    }
+
+                    // Training data → property (schema has no free-text slot)
+                    const trainingDataText = formatModelCardField(localModelCardData.trainingData, {
+                        description: ''
+                    });
+                    if (trainingDataText) {
+                        modelCard.properties.push({
+                            name: 'aibom:training-data',
+                            value: trainingDataText
                         });
                     }
 
-                    // Limitations
-                    if (localModelCardData.limitations) {
-                        modelCard.limitations = formatModelCardField(localModelCardData.limitations, {
-                            knownLimitations: ''
-                        });
+                    // Ethical considerations → ethicalConsiderations[] risk objects
+                    const ec = localModelCardData.ethicalConsiderations;
+                    if (ec) {
+                        modelCard.considerations.ethicalConsiderations = [
+                            ...(modelCard.considerations.ethicalConsiderations || [])
+                        ];
+                        if (ec.biasAndFairness) {
+                            modelCard.considerations.ethicalConsiderations.push({
+                                name: 'Bias & Fairness',
+                                mitigationStrategy: ec.biasAndFairness
+                            });
+                        }
+                        if (ec.safetyMeasures) {
+                            modelCard.considerations.ethicalConsiderations.push({
+                                name: 'Safety',
+                                mitigationStrategy: ec.safetyMeasures
+                            });
+                        }
+                        if (ec.privacyConsiderations) {
+                            modelCard.considerations.ethicalConsiderations.push({
+                                name: 'Privacy',
+                                mitigationStrategy: ec.privacyConsiderations
+                            });
+                        }
                     }
 
-                    // Training data
-                    if (localModelCardData.trainingData) {
-                        modelCard.trainingData = formatModelCardField(localModelCardData.trainingData, {
-                            description: ''
-                        });
-                    }
-
-                    // Ethical considerations
-                    if (localModelCardData.ethicalConsiderations) {
-                        modelCard.considerations.ethical = {
-                            biasAndFairness: localModelCardData.ethicalConsiderations.biasAndFairness,
-                            safetyMeasures: localModelCardData.ethicalConsiderations.safetyMeasures,
-                            privacyConsiderations: localModelCardData.ethicalConsiderations.privacyConsiderations
-                        };
-                    }
-
-                    // Capabilities
+                    // Capabilities → properties (no native field)
                     if (localModelCardData.capabilities && Array.isArray(localModelCardData.capabilities)) {
-                        modelCard.capabilities = localModelCardData.capabilities;
+                        localModelCardData.capabilities.forEach((capability) => {
+                            modelCard.properties.push({
+                                name: 'aibom:capability',
+                                value: capability
+                            });
+                        });
                     }
 
-                    // Add model card source reference
-                    modelCard.modelCardSource = `modelcards/${provider.toLowerCase()}/${modelName.toLowerCase().replace(/[^a-z0-9-]/g, '-')}.json`;
+                    // Lifecycle status (e.g. "Deprecated - superseded by ...")
+                    if (localModelCardData.access && localModelCardData.access.status) {
+                        modelCard.properties.push({
+                            name: 'aibom:lifecycle-status',
+                            value: localModelCardData.access.status
+                        });
+                    }
+
+                    // Enrichment provenance → property
+                    modelCard.properties.push({
+                        name: 'aibom:model-card-source',
+                        value: `modelcards/${provider.toLowerCase()}/${modelName.toLowerCase().replace(/[^a-z0-9-]/g, '-')}.json`
+                    });
                 }
 
                 if (huggingface) {
-                    // Tasks
+                    // Tasks (CycloneDX 1.7: modelParameters.task is a single string)
                     if (huggingface.pipeline_tag) {
-                        modelCard.modelParameters.tasks.push({
-                            task: huggingface.pipeline_tag
-                        });
+                        if (!modelCard.modelParameters.task) {
+                            modelCard.modelParameters.task = huggingface.pipeline_tag;
+                        } else if (modelCard.modelParameters.task !== huggingface.pipeline_tag) {
+                            modelCard.properties.push({
+                                name: 'aibom:additional-task',
+                                value: huggingface.pipeline_tag
+                            });
+                        }
                     }
                     
                     // Architecture from config or cardData
@@ -552,22 +820,28 @@ async function createMLModelComponents(findings) {
                         }
                     }
                     
-                    // Add model type
-                    if (modelType) {
-                        modelCard.modelParameters.modelType = modelType;
+                    // Add model type (schema: no modelParameters.modelType — keep
+                    // as property; local card wins, HF default 'transformer'
+                    // without config evidence is not an assertion)
+                    if (modelType && modelType !== 'transformer' &&
+                        !modelCard.properties.some(p => p.name === 'aibom:model-type')) {
+                        pushPropertyOnce(modelCard, 'aibom:model-type', modelType);
                     }
-                    
+
                     // Datasets from cardData or ModelCard
                     const datasets = cardData.datasets || modelCardData?.datasets || [];
                     if (datasets.length > 0) {
-                        modelCard.modelParameters.datasets = Array.isArray(datasets) 
+                        modelCard.modelParameters.datasets = Array.isArray(datasets)
                             ? datasets.map(ds => typeof ds === 'string' ? { type: 'dataset', name: ds } : ds)
                             : [{ type: 'dataset', name: String(datasets) }];
                     }
-                    
-                    // Base model
+
+                    // Base model (schema: no modelParameters.baseModel — keep as property)
                     if (cardData.base_model || modelCardData?.base_model) {
-                        modelCard.modelParameters.baseModel = cardData.base_model || modelCardData.base_model;
+                        modelCard.properties.push({
+                            name: 'aibom:base-model',
+                            value: String(cardData.base_model || modelCardData.base_model)
+                        });
                     }
                     
                     // Inputs/Outputs based on pipeline
@@ -590,7 +864,14 @@ async function createMLModelComponents(findings) {
                     ) || [];
                     
                     if (useCaseTags.length > 0) {
-                        modelCard.considerations.useCases = useCaseTags;
+                        // Merge with use cases already parsed from the local
+                        // card — never overwrite card data with HF tags.
+                        modelCard.considerations.useCases = [
+                            ...new Set([
+                                ...(modelCard.considerations.useCases || []),
+                                ...useCaseTags
+                            ])
+                        ];
                     }
                     
                     // Enhanced ModelCard properties from cardData and ModelCard YAML
@@ -724,35 +1005,49 @@ async function createMLModelComponents(findings) {
                         });
                     }
                     
-                    // Limitations from ModelCard considerations
+                    // Limitations from ModelCard considerations (merge with the
+                    // structured parse above; guard against non-string shapes)
                     if (modelCardData?.limitations || modelCardData?.limitation) {
                         const limitations = modelCardData.limitations || modelCardData.limitation;
-                        if (Array.isArray(limitations)) {
-                            modelCard.considerations.limitations = limitations;
-                        } else {
-                            modelCard.considerations.limitations = [String(limitations)];
+                        let entries = [];
+                        if (typeof limitations === 'string') {
+                            entries = limitations.split(';').map(s => s.trim()).filter(Boolean);
+                        } else if (Array.isArray(limitations)) {
+                            entries = limitations
+                                .filter(x => typeof x === 'string' || typeof x === 'number')
+                                .map(String);
+                        }
+                        if (entries.length > 0) {
+                            modelCard.considerations.technicalLimitations = [
+                                ...new Set([
+                                    ...(modelCard.considerations.technicalLimitations || []),
+                                    ...entries
+                                ])
+                            ];
                         }
                     }
-                    
-                    // Ethical considerations
+
+                    // Ethical considerations (schema: array of risk objects)
                     if (modelCardData?.ethical_considerations || modelCardData?.ethics) {
-                        modelCard.considerations.ethical = modelCardData.ethical_considerations || modelCardData.ethics;
+                        const ethical = modelCardData.ethical_considerations || modelCardData.ethics;
+                        modelCard.considerations.ethicalConsiderations = Array.isArray(ethical)
+                            ? ethical.map((e) => typeof e === 'string' ? { name: e } : e)
+                            : [{ name: String(ethical) }];
                     }
-                    
+
                     // Quantitative Analysis section with performance metrics
                     if (evalResults) {
                         const performanceMetrics = parseEvalResults(evalResults);
                         if (performanceMetrics.length > 0) {
                             modelCard.quantitativeAnalysis = {
-                                performanceMetrics: performanceMetrics,
-                                graphics: {}
+                                performanceMetrics: performanceMetrics
                             };
                         }
                     }
                 } else {
                     // Use explicit modelType from finding for better accuracy
                     if (modelType === 'text-generation') {
-                        modelCard.modelParameters.tasks.push({ task: 'text-generation' });
+                        modelCard.modelParameters.task = 'text-generation';
                         modelCard.modelParameters.inputs = [{ format: 'text' }];
                         modelCard.modelParameters.outputs = [{ format: 'text' }];
                         // Add architecture family if we can detect it from model name
@@ -770,41 +1065,44 @@ async function createMLModelComponents(findings) {
                             modelCard.modelParameters.architectureFamily = 'deepseek';
                         }
                     } else if (modelType === 'embeddings') {
-                        modelCard.modelParameters.tasks.push({ task: 'feature-extraction' });
+                        modelCard.modelParameters.task = 'feature-extraction';
                         modelCard.modelParameters.inputs = [{ format: 'text' }];
                         modelCard.modelParameters.outputs = [{ format: 'vector' }];
                     } else if (modelType === 'text-to-image') {
-                        modelCard.modelParameters.tasks.push({ task: 'text-to-image' });
+                        modelCard.modelParameters.task = 'text-to-image';
                         modelCard.modelParameters.inputs = [{ format: 'text' }];
                         modelCard.modelParameters.outputs = [{ format: 'image' }];
                     } else if (modelType === 'multimodal') {
-                        modelCard.modelParameters.tasks.push({ task: 'multimodal' });
+                        modelCard.modelParameters.task = 'multimodal';
                         modelCard.modelParameters.inputs = [{ format: 'text' }, { format: 'image' }];
                         modelCard.modelParameters.outputs = [{ format: 'text' }, { format: 'image' }];
                     } else {
                         // Fallback to name-based detection if type is unknown
-                        if (modelName.includes('gpt') || modelName.includes('claude') || modelName.includes('gemini') || 
+                        if (modelName.includes('gpt') || modelName.includes('claude') || modelName.includes('gemini') ||
                             modelName.includes('llama') || modelName.includes('mistral') || modelName.includes('qwen')) {
-                        modelCard.modelParameters.tasks.push({ task: 'text-generation' });
+                        modelCard.modelParameters.task = 'text-generation';
                         modelCard.modelParameters.inputs = [{ format: 'text' }];
                         modelCard.modelParameters.outputs = [{ format: 'text' }];
                     } else if (modelName.includes('embedding')) {
-                        modelCard.modelParameters.tasks.push({ task: 'feature-extraction' });
+                        modelCard.modelParameters.task = 'feature-extraction';
                         modelCard.modelParameters.inputs = [{ format: 'text' }];
                         modelCard.modelParameters.outputs = [{ format: 'vector' }];
                         }
                     }
                 }
-                
+
                 // Only add modelCard if it has content
-                if (modelCard.modelParameters.tasks.length > 0 || 
+                if (modelCard.modelParameters.task ||
                     Object.keys(modelCard.considerations).length > 0 ||
                     modelCard.modelParameters.architectureFamily ||
                     (modelCard.properties && modelCard.properties.length > 0) ||
                     modelCard.quantitativeAnalysis) {
-                    // Remove empty properties array if no properties were added
+                    // Remove empty containers (schema-valid but pure noise)
                     if (modelCard.properties && modelCard.properties.length === 0) {
                         delete modelCard.properties;
+                    }
+                    if (Object.keys(modelCard.modelParameters).length === 0) {
+                        delete modelCard.modelParameters;
                     }
                     component.modelCard = modelCard;
                 }
@@ -815,6 +1113,12 @@ async function createMLModelComponents(findings) {
                     { name: 'cdx:detection:confidence', value: finding.severity },
                     { name: 'cdx:detection:weight', value: finding.weight.toString() }
                 );
+
+                // Native CycloneDX evidence (identity + source occurrences)
+                const modelEvidence = buildNativeEvidence(finding);
+                if (modelEvidence) {
+                    component.evidence = modelEvidence;
+                }
                 
                 if (huggingface) {
                     component.properties.push(
@@ -890,12 +1194,14 @@ async function createMLModelComponents(findings) {
                 modelMap.set(key, { component, bomRef });
             }
         } else {
-            // Generic finding - create a library/framework component
+            // Generic finding - create a library/framework component with a
+            // clean identity (name/version/purl from structured dependency
+            // info — never "Dependency: <name>" with version "detected").
+            const identity = resolveLibraryIdentity(finding);
             const component = {
                 type: finding.category === 'dependencies' ? 'library' : 'framework',
                 'bom-ref': `component-${generateShortId()}`,
-                name: finding.title,
-                version: 'detected',
+                name: identity.name,
                 description: finding.description,
                 scope: 'required',
                 properties: [
@@ -904,20 +1210,33 @@ async function createMLModelComponents(findings) {
                     { name: 'cdx:detection:weight', value: finding.weight.toString() }
                 ]
             };
-            
+            if (identity.version) {
+                component.version = identity.version;
+            }
+            const purl = buildLibraryPurl(identity.name, identity.version, identity.ecosystem);
+            if (purl) {
+                component.purl = purl;
+            }
+
+            // Native CycloneDX evidence (identity + source occurrences)
+            const evidence = buildNativeEvidence(finding);
+            if (evidence) {
+                component.evidence = evidence;
+            }
+
             // Add evidence with line numbers
             finding.evidence?.forEach((ev, idx) => {
                 if (idx < 3) {
                     // Include file path with line number for precise reference
-                    const location = ev.line && ev.line > 0 
-                        ? `${ev.file}:${ev.line}` 
+                    const location = ev.line && ev.line > 0
+                        ? `${ev.file}:${ev.line}`
                         : ev.file;
-                    
+
                     component.properties.push({
                         name: `cdx:evidence:location:${idx}`,
                         value: location
                     });
-                    
+
                     // Also add snippet if available
                     if (ev.snippet) {
                         component.properties.push({
@@ -927,7 +1246,7 @@ async function createMLModelComponents(findings) {
                     }
                 }
             });
-            
+
             components.push(component);
         }
     }
@@ -1272,17 +1591,23 @@ async function generateCycloneDXXml(analysisResult, selectedFindings) {
     xml += '    </component>\n';
     xml += '  </metadata>\n';
     
-    // Components
+    // Components (single assembly — the dependency graph must reference the
+    // SAME bom-refs as the component list)
     xml += '  <components>\n';
-    const { components } = await createMLModelComponents(selectedFindings);
-    
+    const { components, modelRefs, libraryRefs } = await createMLModelComponents(selectedFindings);
+
     components.forEach(comp => {
         xml += `    <component type="${comp.type}" bom-ref="${escapeXml(comp['bom-ref'])}">\n`;
         if (comp.group) {
             xml += `      <group>${escapeXml(comp.group)}</group>\n`;
         }
         xml += `      <name>${escapeXml(comp.name)}</name>\n`;
-        xml += `      <version>${escapeXml(comp.version)}</version>\n`;
+        if (comp.version) {
+            xml += `      <version>${escapeXml(comp.version)}</version>\n`;
+        }
+        if (comp.author) {
+            xml += `      <author>${escapeXml(comp.author)}</author>\n`;
+        }
         if (comp.description) {
             xml += `      <description>${escapeXml(comp.description)}</description>\n`;
         }
@@ -1320,28 +1645,62 @@ async function generateCycloneDXXml(analysisResult, selectedFindings) {
     });
     
     xml += '  </components>\n';
-    
-    // Dependencies - need to regenerate to match JSON structure
+
+    // Services (external AI inference APIs — trust-boundary documentation,
+    // mirrors the JSON generator)
+    const serviceRefsByProvider = {};
+    if (typeof AI_SERVICE_ENDPOINTS !== 'undefined') {
+        modelRefs.forEach(model => {
+            const provider = model.component.author;
+            const svcDef = provider ? AI_SERVICE_ENDPOINTS[provider] : null;
+            if (!svcDef) return;
+            if (!serviceRefsByProvider[provider]) {
+                const serviceRef = `service-${provider.toLowerCase().replace(/[^a-z0-9]/g, '-')}`;
+                serviceRefsByProvider[provider] = serviceRef;
+                xml += `    <service bom-ref="${escapeXml(serviceRef)}">\n`;
+                xml += `      <provider>\n        <name>${escapeXml(provider)}</name>\n      </provider>\n`;
+                xml += `      <name>${escapeXml(svcDef.service)}</name>\n`;
+                xml += `      <description>${escapeXml(`External ${provider} inference API consumed by this application (third-party trust boundary)`)}</description>\n`;
+                xml += '      <endpoints>\n';
+                svcDef.endpoints.forEach(endpoint => {
+                    xml += `        <endpoint>${escapeXml(endpoint)}</endpoint>\n`;
+                });
+                xml += '      </endpoints>\n';
+                xml += '      <authenticated>true</authenticated>\n';
+                xml += `      <externalReferences>\n        <reference type="documentation"><url>${escapeXml(svcDef.docs)}</url></reference>\n      </externalReferences>\n`;
+                xml += '    </service>\n';
+            }
+        });
+    }
+
+    // Dependencies - reference the same bom-refs as the component list
     xml += '  <dependencies>\n';
-    
-    const { modelRefs, libraryRefs } = await createMLModelComponents(selectedFindings);
+
     const libraryRefIds = libraryRefs.map(l => l['bom-ref']);
-    
-    // Main repo depends on all components
+
+    // Main repo depends on all components and services
     xml += `    <dependency ref="repo-${escapeXml(repository.owner)}-${escapeXml(repository.repo)}">\n`;
     components.forEach(comp => {
         xml += `      <dependency ref="${escapeXml(comp['bom-ref'])}" />\n`;
     });
+    Object.values(serviceRefsByProvider).forEach(serviceRef => {
+        xml += `      <dependency ref="${escapeXml(serviceRef)}" />\n`;
+    });
     xml += '    </dependency>\n';
-    
-    // ML models depend on their libraries
+
+    // ML models depend on their libraries and their inference service
     modelRefs.forEach(model => {
         xml += `    <dependency ref="${escapeXml(model.bomRef)}">\n`;
-        
+
+        const provider = model.component.author;
+        if (provider && serviceRefsByProvider[provider]) {
+            xml += `      <dependency ref="${escapeXml(serviceRefsByProvider[provider])}" />\n`;
+        }
+
         const modelComp = model.component;
         if (modelComp.properties) {
             const category = modelComp.properties.find(p => p.name === 'category')?.value;
-            
+
             if (category === 'text-generation' || category === 'feature-extraction') {
                 if (libraryRefIds.includes('lib-transformers')) {
                     xml += '      <dependency ref="lib-transformers" />\n';
@@ -1355,7 +1714,7 @@ async function generateCycloneDXXml(analysisResult, selectedFindings) {
                 }
             }
         }
-        
+
         xml += '    </dependency>\n';
     });
     
@@ -1452,12 +1811,25 @@ function generateSPDX(analysisResult, selectedFindings) {
                 },
                 'name': modelName,
                 'summary': finding.description,
-                'packageVersion': 'latest',
                 'suppliedBy': {
                     'type': 'Organization',
                     'name': provider
                 }
             };
+            // No invented version: omit packageVersion unless the model card
+            // carries a real version (unknown stays unknown).
+            if (finding.modelInfo.modelCardData?.version) {
+                aiPackage.packageVersion = String(finding.modelInfo.modelCardData.version);
+            }
+
+            // Preserve detection evidence (source locations + snippets) as a
+            // package comment — SPDX 3.0.1 Element.comment.
+            const evidenceLines = (finding.evidence || [])
+                .filter(ev => ev.file && ev.line && ev.line > 0)
+                .map(ev => `Detected at ${ev.file}:${ev.line}${ev.snippet ? ` — ${ev.snippet}` : ''}`);
+            if (evidenceLines.length > 0) {
+                aiPackage.comment = evidenceLines.join('\n');
+            }
             
             // Add detection source if available
             if (detectionSource) {
@@ -1568,7 +1940,9 @@ function generateSPDX(analysisResult, selectedFindings) {
                 'completeness': 'noAssertion'
             });
         } else {
-            // Regular library package
+            // Regular library package with clean identity (no "Dependency: "
+            // prefix, no placeholder version; version omitted when unknown).
+            const identity = resolveLibraryIdentity(finding);
             const libId = `${namespace}/Package-${generateShortId()}`;
             const libPackage = {
                 '@id': libId,
@@ -1580,13 +1954,31 @@ function generateSPDX(analysisResult, selectedFindings) {
                     'created': analyzedAt,
                     'createdBy': ['Tool: AI BOM Generator-1.0.0']
                 },
-                'name': finding.title,
+                'name': identity.name,
                 'summary': finding.description,
-                'packageVersion': 'detected',
                 'downloadLocation': 'NOASSERTION',
                 'primaryPurpose': 'library'
             };
-            
+            if (identity.version) {
+                libPackage.packageVersion = identity.version;
+            }
+            const purl = buildLibraryPurl(identity.name, identity.version, identity.ecosystem);
+            if (purl) {
+                libPackage.externalIdentifier = [{
+                    'type': 'ExternalIdentifier',
+                    'externalIdentifierType': 'purl',
+                    'identifier': purl
+                }];
+            }
+
+            // Preserve detection evidence as a package comment.
+            const evidenceLines = (finding.evidence || [])
+                .filter(ev => ev.file)
+                .map(ev => `Detected at ${ev.file}${ev.line && ev.line > 0 ? `:${ev.line}` : ''}${ev.snippet ? ` — ${ev.snippet}` : ''}`);
+            if (evidenceLines.length > 0) {
+                libPackage.comment = evidenceLines.join('\n');
+            }
+
             spdx.element.push(libPackage);
             
             relationships.push({

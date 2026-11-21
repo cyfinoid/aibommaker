@@ -243,6 +243,154 @@ async function dependenciesDetector({
   };
 }
 
+/**
+ * Detect AI packages that are imported in source code but missing from the
+ * declared dependencies (e.g. langchain-community / langchain-core, which are
+ * only transitive manifest entries yet imported directly). Complements the
+ * manifest/SBOM-based dependenciesDetector the way Snyk's source-code-analysis
+ * does, so undeclared-but-used AI libraries are not silently dropped from the
+ * inventory.
+ *
+ * Findings carry dependencyInfo.source = 'source-import-analysis' and no
+ * version (unknown stays unknown).
+ */
+async function aiImportsDetector({ tree, aiFilesFound, getFileContent, allFindings }) {
+  console.log("[Detector: AI Imports] Scanning source imports for undeclared AI packages...");
+  const findings = [];
+
+  // Scan AI-relevant files found by the Code detector PLUS repo source files
+  // from the tree — an undeclared-only import chain may never enter
+  // aiFilesFound (smart-mode searches target declared dependencies). Capped
+  // to keep fetch cost bounded on large repos.
+  const SOURCE_EXT = /\.(py|js|jsx|ts|tsx|mjs|cjs)$/i;
+  const MAX_EXTRA_FILES = 120;
+  const seenFiles = new Set();
+  let scanList = [];
+  for (const f of Array.isArray(aiFilesFound) ? aiFilesFound : []) {
+    if (!seenFiles.has(f) && SOURCE_EXT.test(f)) { seenFiles.add(f); scanList.push(f); }
+  }
+  const repoPaths = new Set();
+  for (const entry of Array.isArray(tree) ? tree : []) {
+    if (!entry?.path || !SOURCE_EXT.test(entry.path)) continue;
+    repoPaths.add(entry.path);
+    if (scanList.length < MAX_EXTRA_FILES && !seenFiles.has(entry.path)) {
+      seenFiles.add(entry.path);
+      scanList.push(entry.path);
+    }
+  }
+  if (scanList.length === 0) {
+    console.log("[Detector: AI Imports] No source files to scan");
+    return { findings };
+  }
+  if (repoPaths.size > MAX_EXTRA_FILES) {
+    console.log(
+      `[Detector: AI Imports] Note: ${repoPaths.size} source files in tree, scanning first ${scanList.length}`,
+    );
+  }
+
+  // Normalize names for dedupe: PEP 503 (python -/_/. equal) and lowercase.
+  const normalize = (name) => name.toLowerCase().replace(/[-_.]/g, "-");
+  const knownDeps = new Set();
+  for (const f of allFindings || []) {
+    if (f.category === "dependencies") {
+      const name = f.dependencyInfo?.name || (f.title || "").replace(/^Dependency:\s*/i, "");
+      if (name) knownDeps.add(normalize(name));
+    }
+  }
+
+  const pyMap = AI_IMPORT_MODULE_MAP.python || {};
+  const nodeMap = AI_IMPORT_MODULE_MAP.node || {};
+
+  const seen = new Set();
+  for (const file of scanList) {
+    const isPython = /\.py$/i.test(file);
+    const isJs = /\.(js|jsx|ts|tsx|mjs|cjs)$/i.test(file);
+    if (!isPython && !isJs) continue;
+
+    const content = await getFileContent(file);
+    if (!content) continue;
+
+    const lines = content.split("\n");
+    for (let i = 0; i < lines.length; i++) {
+      const line = lines[i];
+      const trimmed = line.trim();
+      // Skip comment lines (cheap heuristic — import lines never start with
+      // a comment marker)
+      if (trimmed.startsWith("#") || trimmed.startsWith("//")) continue;
+
+      let pkg = null;
+
+      if (isPython) {
+        const m = line.match(/^\s*(?:from|import)\s+([A-Za-z_][A-Za-z0-9_]*)/);
+        if (m) {
+          const mod = m[1];
+          if (pyMap[mod]) {
+            pkg = pyMap[mod];
+          } else if (/^langchain_[a-z0-9_]+$/.test(mod)) {
+            // Generic langchain_* → langchain-* distribution namespace,
+            // but skip repo-local modules (a repo's own langchain_utils.py
+            // is not the langchain-utils distribution)
+            if (repoPaths.has(`${mod}.py`) ||
+                repoPaths.has(`${mod.replace(/_/g, "/")}.py`) ||
+                [...repoPaths].some((p) => p.startsWith(`${mod.replace(/_/g, "/")}/`))) {
+              continue;
+            }
+            pkg = mod.replace(/_/g, "-");
+          }
+        }
+      } else {
+        const m = line.match(
+          /(?:require\s*\(\s*|from\s+|import\s+.*\bfrom\s+|import\s+)["']([^"']+)["']/,
+        );
+        if (m) {
+          const spec = m[1];
+          // Scoped packages keep scope/name; plain packages take segment 0
+          const mod = spec.startsWith("@")
+            ? spec.split("/").slice(0, 2).join("/")
+            : spec.split("/")[0];
+          if (nodeMap[mod]) {
+            pkg = nodeMap[mod];
+          } else if (/^@langchain\/[a-z0-9-]+$/.test(mod)) {
+            pkg = mod;
+          }
+        }
+      }
+
+      if (!pkg) continue;
+      const key = `${isPython ? "py" : "js"}:${normalize(pkg)}`;
+      if (seen.has(key) || knownDeps.has(normalize(pkg))) continue;
+      seen.add(key);
+
+      findings.push({
+        id: `import-${isPython ? "py" : "js"}-${pkg.replace(/[^a-zA-Z0-9]/g, "-")}`,
+        title: `Dependency: ${pkg}`,
+        category: "dependencies",
+        severity: "medium",
+        weight: 3,
+        description: `AI package imported in source but not declared in manifests: ${pkg} (version unknown)`,
+        evidence: [
+          {
+            file,
+            line: i + 1,
+            snippet: line.trim().slice(0, 200),
+          },
+        ],
+        dependencyInfo: {
+          name: pkg,
+          version: "unknown",
+          ecosystem: isPython ? "python" : "npm",
+          source: "source-import-analysis",
+        },
+      });
+    }
+  }
+
+  console.log(
+    `[Detector: AI Imports] Complete. Found ${findings.length} undeclared AI package import(s)`,
+  );
+  return { findings };
+}
+
 function extractLLMDependenciesFromSBOM(sbom) {
   console.log("[SBOM Parser] Extracting AI/LLM dependencies from SPDX SBOM...");
   const llmDeps = [];

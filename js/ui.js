@@ -551,6 +551,7 @@ document.addEventListener('DOMContentLoaded', () => {
         try {
             hide(document.getElementById('findings-section'));
             hide(document.getElementById('bom-section'));
+            hide(document.getElementById('compliance-section'));
             hide(form);
             show(document.getElementById('loading-state'));
             document.getElementById('loading-message').textContent = 'Parsing input...';
@@ -602,6 +603,7 @@ document.addEventListener('DOMContentLoaded', () => {
             show(document.getElementById('findings-section'));
             show(document.getElementById('analysis-notes-section'));
             show(document.getElementById('bom-section'));
+            show(document.getElementById('compliance-section'));
             
             // Score badge removed - AIBOM focuses on what's found, not scoring
             // renderScoreBadge(result.score, result.confidence);
@@ -715,6 +717,13 @@ document.addEventListener('DOMContentLoaded', () => {
         content.classList.toggle('collapsed');
         this.textContent = content.classList.contains('collapsed') ? 'Expand' : 'Collapse';
     });
+
+    // Collapse/Expand Standards Compliance section
+    document.getElementById('collapse-compliance').addEventListener('click', function() {
+        const content = document.getElementById('compliance-wrapper');
+        content.classList.toggle('collapsed');
+        this.textContent = content.classList.contains('collapsed') ? 'Expand' : 'Collapse';
+    });
 });
 
 async function regenerateBOMs() {
@@ -738,7 +747,7 @@ async function regenerateBOMs() {
         renderBOMPreview('cyclonedx-xml', generatedBOMs['cyclonedx-xml']);
         renderBOMPreview('spdx', generatedBOMs['spdx']);
         renderBOMPreview('extended-aibom', generatedBOMs['extended-aibom']);
-        renderComplianceTab();
+        renderComplianceSection();
         console.log('[BOM] ⚠️  No findings selected, showing placeholder');
         console.log('📄'.repeat(40) + '\n');
         return;
@@ -776,7 +785,7 @@ async function regenerateBOMs() {
         console.log(`[BOM] 📊 Total size: ${(parseFloat(jsonSize) + parseFloat(xmlSize) + parseFloat(spdxSize)).toFixed(2)} KB`);
         console.log('📄'.repeat(40) + '\n');
 
-        renderComplianceTab();
+        renderComplianceSection();
     } catch (error) {
         console.error('[BOM] ❌ Error generating BOMs:', error);
         console.log('📄'.repeat(40) + '\n');
@@ -899,10 +908,10 @@ function complianceScorecardHtml() {
 }
 
 /**
- * Render the Standards Compliance tab: dynamic validation of the freshly
+ * Render the Standards Compliance section: dynamic validation of the freshly
  * generated CycloneDX/SPDX/NTIA documents plus the static AIBOM scorecard.
  */
-function renderComplianceTab() {
+function renderComplianceSection() {
     const dynamicEl = document.getElementById('compliance-dynamic');
     const scorecardEl = document.getElementById('compliance-scorecard');
     if (!dynamicEl || !scorecardEl) return;
@@ -915,7 +924,7 @@ function renderComplianceTab() {
         `;
         scorecardEl.innerHTML = complianceScorecardHtml();
     } catch (error) {
-        console.error('[Compliance] Failed to render compliance tab:', error);
+        console.error('[Compliance] Failed to render compliance section:', error);
         dynamicEl.innerHTML = `<p class="compliance-error">Compliance check failed: ${escapeHtml(error.message)}</p>`;
         scorecardEl.innerHTML = '';
     }

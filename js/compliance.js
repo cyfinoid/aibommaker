@@ -9,8 +9,17 @@
 // 2. Static AIBOM standards scorecard — element-by-element conformance of
 //    this tool's output surface against CERT-In Table 10, the G7 SBOM-for-AI
 //    minimum elements, and the OWASP AIBOM Foundations checklist. Transcribed
-//    from guidance/guidance_details.md §6 (2026-11-20 assessment); the score
-//    math must keep reproducing that document's headline numbers.
+//    from guidance/guidance_details.md §6 (2026-11-20 assessment) and updated
+//    when the implementation changes — scores move with the code, and the
+//    changed rows (and why) are documented in DETAILED_CHANGELOG.md. Recent
+//    deltas vs the §6 snapshot (2026-11-21): CERT-In #2 dropped to unmet —
+//    invented model versions ("latest") removed so unknown stays unknown;
+//    CERT-In #16 rose to met — out-of-scope uses extracted (R10, local
+//    cards); G7 #22 dropped to unmet (same version cleanup); G7 #16 note
+//    updated — external inference services now carry endpoints/trust-boundary
+//    info (still no flow payload typing).
+//    Net vs §6 (65.8/45.0/50.0 weighted): CERT-In 68.4% (13/19, strict
+//    52.6%), G7 44.0% (22/50), OWASP 50.0% unchanged.
 //
 // Status vocabulary for dynamic checks: 'pass' | 'warn' | 'fail'
 // Status vocabulary for scorecard rows:  'met' | 'partial' | 'unmet'
@@ -112,7 +121,8 @@ function validateCycloneDXBom(text) {
     `${withPurl}/${components.length} components carry a pkg: purl`));
 
   const depRefs = new Set([...components.map((c) => c['bom-ref']),
-    ...(metaComp ? [metaComp['bom-ref']] : [])].filter(Boolean));
+    ...(metaComp ? [metaComp['bom-ref']] : []),
+    ...((Array.isArray(bom.services) ? bom.services : []).map((s) => s['bom-ref']))].filter(Boolean));
   const deps = Array.isArray(bom.dependencies) ? bom.dependencies : [];
   const unresolved = [];
   for (const dep of deps) {
@@ -284,7 +294,7 @@ const AIBOM_SCORECARD = [
     ref: 'guidance/guidance_details.md §6.1',
     rows: [
       { n: 1, element: 'Model Name', status: 'met', note: 'modelsIdentifierDetector → component name' },
-      { n: 2, element: 'Model Version', status: 'partial', note: 'version "latest" unless derived from model card; no commit/tag pinning' },
+      { n: 2, element: 'Model Version', status: 'unmet', note: 'version omitted unless derived from a model card (invented "latest" removed 2026-11-21); no commit/tag pinning' },
       { n: 3, element: 'Model Type', status: 'met', note: 'text-generation / embeddings / text-to-image + typeOfModel' },
       { n: 4, element: 'Model Developer', status: 'met', note: 'provider attribution (author on component; HF org)' },
       { n: 5, element: 'Model Licensing Information', status: 'partial', note: 'licenseConcluded only from verified HF model card; repo LICENSE not correlated per model' },
@@ -298,7 +308,7 @@ const AIBOM_SCORECARD = [
       { n: 13, element: 'Input', status: 'met', note: 'modelCard.modelParameters.inputs' },
       { n: 14, element: 'Output', status: 'met', note: 'modelCard.modelParameters.outputs' },
       { n: 15, element: 'Intended Usage', status: 'met', note: 'modelCard.considerations.useCases + aibom:intended-use' },
-      { n: 16, element: 'Out of Scope Usage', status: 'unmet', note: 'not extracted from model cards (R10)' },
+      { n: 16, element: 'Out of Scope Usage', status: 'met', note: 'aibom:out-of-scope-use properties from card outOfScope (added 2026-11-21, R10 closed for local cards)' },
       { n: 17, element: 'Environmental Impact', status: 'partial', note: 'carbon-footprint estimate in extended AIBOM (heuristic, labeled as such)' },
       { n: 18, element: 'Vulnerabilities', status: 'unmet', structural: true, note: 'no CVE feed client-side; obtain via supplier VEX/advisory channels' },
       { n: 19, element: 'Attestations', status: 'unmet', note: 'no signature/attestation state recorded (R4 deferred)' }
@@ -325,13 +335,13 @@ const AIBOM_SCORECARD = [
       { n: 13, cluster: 'System Level (§2.2)', element: 'System producer', status: 'partial', note: 'repo owner in name/purl; no explicit producer field' },
       { n: 14, cluster: 'System Level (§2.2)', element: 'System version', status: 'unmet', note: 'repo version not detected (package.json version not read)' },
       { n: 15, cluster: 'System Level (§2.2)', element: 'System timestamp', status: 'unmet', note: 'model/update timestamps not emitted' },
-      { n: 16, cluster: 'System Level (§2.2)', element: 'System data flow', status: 'partial', note: 'dependency graph approximates; no endpoint/modality/protocol flow description' },
+      { n: 16, cluster: 'System Level (§2.2)', element: 'System data flow', status: 'partial', note: 'dependency graph + external inference services (endpoints, trust boundary); no flow payload/modality typing' },
       { n: 17, cluster: 'System Level (§2.2)', element: 'System data usage', status: 'unmet', structural: true, note: 'training-improvement/API-logging disclosure lives in policies, not source' },
       { n: 18, cluster: 'System Level (§2.2)', element: 'System input/output properties', status: 'partial', note: 'per-model I/O from cards; no system-level aggregation' },
       { n: 19, cluster: 'System Level (§2.2)', element: 'Intended application area', status: 'partial', note: 'per-model intended use; not system-level' },
       { n: 20, cluster: 'Models (§2.3)', element: 'Model name', status: 'met', note: '' },
       { n: 21, cluster: 'Models (§2.3)', element: 'Model identifier (CPE/PURL)', status: 'met', note: 'pkg:pypi/…, pkg:huggingface/…, pkg:ml/… purls' },
-      { n: 22, cluster: 'Models (§2.3)', element: 'Model version', status: 'partial', note: '"latest" default' },
+      { n: 22, cluster: 'Models (§2.3)', element: 'Model version', status: 'unmet', note: 'version omitted (invented "latest" removed 2026-11-21); identifier preserved as-is' },
       { n: 23, cluster: 'Models (§2.3)', element: 'Model timestamp', status: 'unmet', note: 'release dates not emitted' },
       { n: 24, cluster: 'Models (§2.3)', element: 'Model producer', status: 'met', note: 'provider attribution via lineage' },
       { n: 25, cluster: 'Models (§2.3)', element: 'Model description (lineage, dependencies)', status: 'met', note: 'fine-tuned-from relationships, relatedModels' },

@@ -9,6 +9,53 @@ below; drop sections that genuinely don't apply.
 
 ---
 
+## 2026-11-21 (later) — Snyk-comparison uplift: identity/evidence/services + compliance section + PR #2 port
+
+**Summary:** Compared our chatAssistant AIBOMs against Snyk's (`projects/snyk/glm-comparision.md`, independent of ChatGPT's `compare.md`), extracted the highest-value defects, and fixed them in the generators; moved the Standards Compliance panel to its own section; reviewed and ported cyfinoid/aibommaker PR #2 (Go/Java/Rust MCP SDK detection — our `js/constants.js` had the identical gap).
+
+**Why:** Snyk comparison showed complementary recall (we 2/2 models but 3/5 libraries; Snyk 1/2 models but 4/5 — they detect undeclared imports, we missed `langchain-community`/`langchain-core`), a structured-identity defect (`"Dependency: langchain"` + `version: "detected"` with the real version only in prose), invented model versions (`latest`), and — verified field-by-field against `bom-1.7.schema.json` — ten emitted `modelCard` fields that violate `additionalProperties: false`. Snyk's strengths (native evidence structures, honest unknowns) and our strengths (model recall, card enrichment, identifier fidelity) were combined.
+
+**What changed:**
+- `js/bom-generators.js`:
+  - `resolveLibraryIdentity` / `buildLibraryPurl` / `buildNativeEvidence` helpers; library components use clean name/version/purl (pypi/npm-with-%40-encoding/maven group:artifact/golang layouts), version omitted when unknown; model components drop invented `latest` (added `aibom:model:version-status` property; version only from real card data)
+  - modelCard remapped to CycloneDX 1.7-valid fields: `modelParameters.task` (singular string), `considerations.useCases[]`, `considerations.technicalLimitations[]`, `considerations.ethicalConsiderations[]` risk objects; non-schema data → `modelCard.properties` as `aibom:capability`, `aibom:training-data`, `aibom:context-length`, `aibom:model-type`, `aibom:base-model`, `aibom:out-of-scope-use`, `aibom:lifecycle-status`, `aibom:model-card-source`, `aibom:additional-task`
+  - native `evidence` on model + library components (identity technique manifest-analysis/source-code-analysis with confidence by provenance/severity; occurrences with `additionalContext` snippets); `structuredCardList` helper
+  - CycloneDX `services`: `AI_SERVICE_ENDPOINTS`-matched providers emit external inference services (endpoint, provider, authenticated) + graph edges repo→service and model→service
+  - SPDX: clean library names/versions, `packageVersion` omitted when unknown, purls as `externalIdentifier`, detection evidence as package `comment`, no invented AI package versions
+  - CycloneDX XML generator: emits `services` (parity with JSON), guarded optional `version`, and now assembles once so dependency refs match the component list (previously it ran the assembly twice with different random bom-refs)
+- `js/constants.js`: `AI_SERVICE_ENDPOINTS` (6 providers, public endpoints — HuggingFace deliberately excluded: local `transformers` use would make the "external API consumed" claim speculative); `AI_IMPORT_MODULE_MAP` (python + npm module→package); PR #2 port — `mcp_protocol` packages go/java/rust, Go code patterns (signature + protocol patterns), `generateExtendedDependencies` go/java wiring
+- `js/detectors.js`: new `aiImportsDetector` (source-import analysis; scans aiFilesFound + tree source files capped at 120; dedupes against declared deps; skips comment lines and repo-local `langchain_*` modules; `source-import-analysis` provenance)
+- `js/analyzer.js`: AI Imports detector wired after Code (needsAIFiles + needsAllFindings)
+- `index.html`: compliance tab → standalone `#compliance-section` with collapse control
+- `js/ui.js`: `renderComplianceSection()` + section show/hide (incl. hidden on re-scan) + collapse wiring
+- `js/compliance.js`: scorecard rows updated honestly (CERT-In #2 → unmet, #16 → met; G7 #22 → unmet, #16 note); validator resolves service refs in dependency graph check
+- `tests.html`: async-aware harness tail; bom-generators.js loaded; 27 new assertions (identity/purl layouts, npm %40 encoding, evidence techniques/confidences, import detector incl. the chatAssistant langchain-community/core scenario, scorecard post-uplift numbers)
+- `scripts/tests/` (new): committed Node verification harnesses — `verify-compliance.js`, `verify-e2e.js` (real generators end-to-end), `run-tests-html.js` (headless tests.html runner) — reproducible without a browser
+- `README.md`, `CHANGELOG.md`, `projects/snyk/glm-comparision.md` (new), this file
+
+**How / commands run:**
+```
+node --check js/{constants,detectors,analyzer,bom-generators,ui,compliance}.js   # syntax OK
+node scripts/tests/verify-compliance.js      # scorecard/validators: PASS (68.4/44.0/50.0 weighted)
+node scripts/tests/verify-e2e.js             # 60 assertions on REAL generator output: PASS
+node scripts/tests/run-tests-html.js         # tests.html headless: 187 passed / 1 pre-existing failure
+curl -sL https://github.com/cyfinoid/aibommaker/pull/2.diff   # exact PR patch reviewed
+curl -sL https://cyclonedx.org/schema/bom-1.7.schema.json     # schema used for field-level verification
+```
+
+**Verification notes:**
+- e2e asserts against the real `generateCycloneDXJson`/`generateSPDX` with a finding set mirroring the chatAssistant scan (incl. an import finding): clean identities, no `Dependency:` names, no placeholder/invented versions, schema-valid modelCard (no `tasks`/`modelType`/`contextLength`/`baseModel` keys, `task` singular), services + unique dependency refs, SPDX comments/purls, NTIA honesty (version MISSING when unpinned; supplier 2/4 warn).
+- Scorecard deltas documented: CERT-In 65.8→68.4 (version row unmet −0.5, out-of-scope row met +1.0; strict 47.4→52.6), G7 45.0→44.0 weighted (version row unmet). `guidance_details.md` §6 left untouched as the dated 2026-11-20 snapshot.
+- PR #2 review verdict: applies cleanly to this repo (same gap in `AI_SIGNATURES.mcp_protocol`, same `generateExtendedDependencies`/protocol-pattern structure); ported with identical package lists (taken verbatim from the PR, not from memory); `rust` already had `mcp_protocol` wired in our tree, `go`/`java` did not; added `a2a_protocols?.go` spread per the PR (our a2a registry has no go packages yet — the spread is future-proof, not dead-verifiable).
+- Fresh-eyes review findings, all fixed: HF `considerations.limitations` block re-read the same structured card object and emitted `["[object Object]"]` over the parsed `technicalLimitations` (string/number-array merge with Set dedupe now); HF `useCaseTags` overwrote card-derived `useCases` (merged with Set dedupe); npm scoped purls used `%2F` (now spec form `pkg:npm/%40langchain/community`); aiImportsDetector now also scans tree source files (capped 120) — smart-mode aiFilesFound only targets declared dependencies, which would have skipped undeclared-only files; out-of-scope extraction no longer mislabels flat-string intended uses; CERT-In #16 updated to met (out-of-scope extraction implemented this diff — scorecard/68.4% headline now matches code); duplicate `aibom:model-type` properties deduped (card wins over HF `transformer` default); empty `modelParameters: {}` dropped; XML generator emits services + guarded version + single assembly (its old double-assembly produced dependency refs pointing at different random bom-refs than the component list — pre-existing bug found and fixed); comment-line and repo-local `langchain_*` guards in the import detector; compliance section hidden on re-scan; constants formatting glitches; purl versions percent-encoded; "40+ assertions" corrected to 27; duplicate CHANGELOG compliance bullets merged; verification harnesses committed under `scripts/tests/`.
+- HuggingFace removed from `AI_SERVICE_ENDPOINTS`: HF-hosted models are often run locally via `transformers`; emitting an "external API consumed by this application" service would have been speculative.
+- Pre-existing tests.html failure still flagged: `extractContextualModelRefs` bare live-line constant case.
+
+**Files:** `js/bom-generators.js`, `js/constants.js`, `js/detectors.js`, `js/analyzer.js`, `js/ui.js`, `js/compliance.js`, `index.html`, `tests.html`, `scripts/tests/{verify-compliance,verify-e2e,run-tests-html}.js` (new), `projects/snyk/glm-comparision.md` (new), `README.md`, `CHANGELOG.md`, `DETAILED_CHANGELOG.md`, `logs/2026-11-21-snyk-comparison-uplift.md`.
+
+---
+
+
 ## 2026-11-21 — Fix `[object Object]` in model card display + add Standards Compliance tab
 
 **Summary:** Two user-reported items from a KhanFaheed/chatAssistant scan: (1) the Model Card Information panel rendered `[object Object]` for Intended Use / Limitations, and (2) the previously produced standards-compliance scorecard (guidance §6) was not visible anywhere in the UI. Fixed the stringification bug via a shared `formatModelCardField` helper, and added a "Standards Compliance" tab to the BOM section backed by a new pure-logic module `js/compliance.js`.

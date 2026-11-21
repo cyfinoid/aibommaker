@@ -30,6 +30,7 @@
 <script src="js/utils.js"></script>
 <script src="js/github-api.js"></script>
 <script src="js/detectors.js"></script>
+<script src="js/bom-generators.js"></script>
 <script src="js/extended-aibom-generator.js"></script>
 <script src="js/compliance.js"></script>
 
@@ -383,13 +384,18 @@ section("compliance.js — CycloneDX 1.7 / SPDX 3.0.1 / NTIA validators");
 }
 
 // ---------------------------------------------------------------------------
-section("compliance.js — AIBOM scorecard reproduces guidance §6 headline");
+section("compliance.js — AIBOM scorecard matches post-uplift implementation state");
 {
-  const expected = { certin: [65.8, 47.4], g7: [45.0, 34.0], owasp: [50.0, 29.2] };
+  // guidance §6 headline (2026-11-20 snapshot): 65.8/47.4, 45.0/34.0, 50.0/29.2.
+  // 2026-11-21 uplift deltas: invented model versions removed → CERT-In #2 and
+  // G7 #22 honestly unmet (CERT-In 12/19 = 63.2%); out-of-scope extraction
+  // added → CERT-In #16 met (13/19 = 68.4%, strict 10/19 = 52.6%). G7 22/50
+  // = 44.0%. OWASP unchanged.
+  const expected = { certin: [68.4, 52.6], g7: [44.0, 34.0], owasp: [50.0, 29.2] };
   for (const doc of AIBOM_SCORECARD) {
     const s = computeScorecardStats(doc);
     const [w, st] = expected[doc.id];
-    assert(s.weightedPct === w, `${doc.id}: weighted ${s.weightedPct}% === documented ${w}%`);
+    assert(s.weightedPct === w, `${doc.id}: weighted ${s.weightedPct}% === post-uplift ${w}%`);
     assert(s.strictPct === st, `${doc.id}: strict ${s.strictPct}% === documented ${st}%`);
     assert(s.total === doc.rows.length, `${doc.id}: ${s.total} rows scored`);
     assert(s.met + s.partial + s.unmet === s.total, `${doc.id}: every row classified`);
@@ -397,10 +403,125 @@ section("compliance.js — AIBOM scorecard reproduces guidance §6 headline");
 }
 
 // ---------------------------------------------------------------------------
+section("bom-generators — library identity, purls, evidence (Snyk-comparison uplift)");
+{
+  assert(typeof resolveLibraryIdentity === "function", "resolveLibraryIdentity exposed");
+  // Real chatAssistant finding shape: dependencyInfo carries name/version/ecosystem
+  const depFinding = {
+    title: "Dependency: langchain",
+    description: "LLM-related dependency: langchain (version: 0.1.13)",
+    dependencyInfo: { name: "langchain", version: "0.1.13", ecosystem: "python", source: "github-sbom-api" },
+    evidence: [{ file: "GitHub Dependency Graph (SBOM)", snippet: "SPDX Package: langchain@0.1.13" }]
+  };
+  const id1 = resolveLibraryIdentity(depFinding);
+  assert(id1.name === "langchain" && id1.version === "0.1.13", "dependencyInfo name/version preferred");
+  assert(buildLibraryPurl(id1.name, id1.version, id1.ecosystem) === "pkg:pypi/langchain@0.1.13",
+    "versioned pypi purl built");
+  // Fallback parse without dependencyInfo
+  const id2 = resolveLibraryIdentity({
+    title: "Dependency: chromadb",
+    description: "LLM-related dependency: chromadb (version: 0.4.24)"
+  });
+  assert(id2.name === "chromadb" && id2.version === "0.4.24", "title/description fallback parse");
+  // Unknown versions stay null (no invented versions)
+  const id3 = resolveLibraryIdentity({ title: "Dependency: langchain-community", description: "AI package imported in source but not declared in manifests: langchain-community (version unknown)" });
+  assert(id3.version === null, "unknown version -> null (never invented)");
+  assert(buildLibraryPurl("langchain-community", null, "python") === "pkg:pypi/langchain-community",
+    "unversioned purl");
+  assert(buildLibraryPurl("@langchain/community", null, "npm") === "pkg:npm/%40langchain/community",
+    "npm scoped name: %40-encoded @, / kept as namespace separator");
+  assert(buildLibraryPurl("io.modelcontextprotocol.sdk:mcp", null, "java") === "pkg:maven/io.modelcontextprotocol.sdk/mcp",
+    "maven group:artifact layout");
+  assert(buildLibraryPurl("github.com/mark3labs/mcp-go", null, "go") === "pkg:golang/github.com/mark3labs/mcp-go",
+    "golang module path layout");
+  assert(buildLibraryPurl("x", "1", "unknown-eco") === null, "unknown ecosystem -> null purl");
+
+  // Native CycloneDX evidence
+  const ev1 = buildNativeEvidence({
+    severity: "medium",
+    dependencyInfo: { source: "github-sbom-api" },
+    evidence: [{ file: "GitHub Dependency Graph (SBOM)", snippet: "SPDX Package: langchain@0.1.13" }]
+  });
+  assert(ev1.identity[0].methods[0].technique === "manifest-analysis" && ev1.identity[0].methods[0].confidence === 0.9,
+    "SBOM-sourced identity -> manifest-analysis 0.9");
+  assert(ev1.occurrences === undefined, "evidence without line numbers -> no occurrences");
+  const ev2 = buildNativeEvidence({
+    severity: "medium",
+    dependencyInfo: { source: "source-import-analysis" },
+    evidence: [{ file: "app/utils/prepare_vectordb.py", line: 1, snippet: "from langchain_community.document_loaders import ..." }]
+  });
+  assert(ev2.identity[0].methods[0].technique === "source-code-analysis" && ev2.identity[0].methods[0].confidence === 0.7,
+    "import-sourced identity -> source-code-analysis 0.7");
+  assert(ev2.occurrences.length === 1 && ev2.occurrences[0].line === 1 &&
+         ev2.occurrences[0].additionalContext.includes("langchain_community"),
+    "occurrence with line + additionalContext snippet");
+  const ev3 = buildNativeEvidence({ severity: "high", evidence: [{ file: "app/utils/chatbot.py", line: 23 }] });
+  assert(ev3.identity[0].confidence === 0.9, "high severity model detection -> 0.9");
+  const ev4 = buildNativeEvidence({ severity: "low", evidence: [] });
+  assert(ev4.identity[0].confidence === 0.5 && ev4.occurrences === undefined, "low severity -> 0.5, no occurrences");
+
+  // structuredCardList: schema arrays from card shapes (embedding-001 shape)
+  assert(JSON.stringify(structuredCardList(
+    { primaryUses: ["Semantic search and retrieval", "Document similarity"], outOfScope: ["Text generation"] },
+    ["primaryUses", "primaryUseCases"])) === JSON.stringify(["Semantic search and retrieval", "Document similarity"]),
+    "structuredCardList reads primaryUses array");
+  assert(JSON.stringify(structuredCardList(
+    { knownLimitations: ["Superseded by text-embedding-004", "2048-token cap"] },
+    ["knownLimitations"])) === JSON.stringify(["Superseded by text-embedding-004", "2048-token cap"]),
+    "structuredCardList reads knownLimitations array");
+  assert(JSON.stringify(structuredCardList("a; b; c", ["x"])) === JSON.stringify(["a", "b", "c"]),
+    "structuredCardList splits flat string fallback");
+  assert(structuredCardList(null, ["x"]).length === 0, "structuredCardList null -> empty");
+}
+
+// ---------------------------------------------------------------------------
+section("detectors — aiImportsDetector: undeclared-but-imported AI packages");
+{
+  assert(typeof aiImportsDetector === "function", "aiImportsDetector exposed");
+  // chatAssistant scenario: langchain-community/langchain-core imported,
+  // absent from requirements.txt and from the SBOM-derived knownDeps set.
+  const files = {
+    "app/utils/prepare_vectordb.py":
+      "from langchain_community.document_loaders import PyPDFLoader\nfrom langchain_google_genai import GoogleGenerativeAIEmbeddings\nimport chromadb\n",
+    "app/utils/chatbot.py":
+      "from langchain_core.messages import HumanMessage\nllm = ChatGoogleGenerativeAI(model=\"gemini-pro\")\n"
+  };
+  const existingDeps = {
+    findings: [
+      { category: "dependencies", title: "Dependency: chromadb", dependencyInfo: { name: "chromadb", version: "0.4.24", ecosystem: "python", source: "github-sbom-api" } },
+      { category: "dependencies", title: "Dependency: langchain-google-genai", dependencyInfo: { name: "langchain-google-genai", version: "0.0.11", ecosystem: "python", source: "github-sbom-api" } }
+    ]
+  };
+  window.__importsPromise = aiImportsDetector({
+    aiFilesFound: Object.keys(files),
+    getFileContent: (f) => files[f],
+    allFindings: existingDeps.findings
+  }).then((result) => {
+    const found = result.findings.map((f) => f.dependencyInfo.name);
+    assert(found.includes("langchain-community"), "langchain-community import detected (undeclared)");
+    assert(found.includes("langchain-core"), "langchain-core import detected (undeclared)");
+    assert(!found.includes("chromadb"), "declared chromadb not duplicated");
+    assert(!found.includes("langchain-google-genai"), "declared langchain-google-genai not duplicated");
+    const f0 = result.findings[0];
+    assert(f0.dependencyInfo.source === "source-import-analysis", "import findings tagged source-import-analysis");
+    assert(f0.dependencyInfo.version === "unknown", "import findings carry no invented version");
+    assert(f0.evidence[0].line === 1 && f0.evidence[0].file === "app/utils/prepare_vectordb.py",
+      "evidence carries file + line");
+    renderResults();
+  }).catch((err) => {
+    assert(false, "aiImportsDetector threw: " + err.message);
+    renderResults();
+  });
+}
+
+// ---------------------------------------------------------------------------
+function renderResults() {
 document.getElementById("results").innerHTML = out.join("");
 document.getElementById("summary").innerHTML =
   `<span class="${failed === 0 ? "pass" : "fail"}">${passed} passed, ${failed} failed</span>` +
   (failed === 0 ? " — all detection tests green ✅" : " — see failures above ❌");
+}
+renderResults();
 </script>
 </body>
 </html>

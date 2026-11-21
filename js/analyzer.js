@@ -145,6 +145,7 @@ async function analyzeRepository(input, onProgress = null) {
     const detectors = [
         { name: 'Dependencies', fn: dependenciesDetector }, // Run SBOM first to know what's installed
         { name: 'Code', fn: codeDetector, canResume: true, needsDependencies: true }, // Use SBOM info for targeted search
+        { name: 'AI Imports', fn: aiImportsDetector, needsAIFiles: true, needsAllFindings: true }, // Undeclared-but-imported AI packages (source-code-analysis)
         { name: 'Metadata', fn: metadataDetector },
         { name: 'AI Models', fn: modelsIdentifierDetector, needsAIFiles: true },
         { name: 'Configuration', fn: configDetector },

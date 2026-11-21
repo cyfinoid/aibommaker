@@ -988,7 +988,10 @@ const AI_SIGNATURES = {
       category: 'mcp_protocol',
       packages: {
         python: ['mcp', 'anthropic-mcp', 'mcp-server', 'mcp-client'],
-        node: ['@modelcontextprotocol/sdk', '@anthropic-ai/mcp', 'mcp-framework']
+        node: ['@modelcontextprotocol/sdk', '@anthropic-ai/mcp', 'mcp-framework'],
+        go: ['github.com/mark3labs/mcp-go', 'github.com/modelcontextprotocol/go-sdk', 'github.com/metoro-io/mcp-golang'],
+        java: ['io.modelcontextprotocol.sdk:mcp', 'io.modelcontextprotocol:java-sdk'],
+        rust: ['rmcp', 'mcp-sdk', 'mcp-server']
       },
       codePatterns: {
         python: [
@@ -1002,6 +1005,10 @@ const AI_SIGNATURES = {
           { pattern: /require\s*\(['"]@modelcontextprotocol/i, weight: 5, category: 'protocol' },
           { pattern: /McpServer|McpClient/i, weight: 4, category: 'protocol' },
           { pattern: /StdioServerTransport|SSEServerTransport/i, weight: 4, category: 'protocol' }
+        ],
+        go: [
+          { pattern: /mcp\.NewServer|mcp\.NewClient/i, weight: 5, category: 'protocol' },
+          { pattern: /mark3labs\/mcp-go|modelcontextprotocol\/go-sdk/i, weight: 4, category: 'protocol' }
         ]
       },
       configFiles: [
@@ -1365,6 +1372,104 @@ function generateAPIEndpoints() {
   return endpoints;
 }
 
+// ============================================================================
+// EXTERNAL AI SERVICE ENDPOINTS
+// ============================================================================
+// Well-known public endpoints for AI providers consumed as external services.
+// Used by the BOM generators to represent third-party inference APIs as
+// CycloneDX `services` (trust-boundary documentation). Only providers with
+// stable, publicly documented base URLs are listed.
+const AI_SERVICE_ENDPOINTS = {
+  Google: {
+    service: 'Google Generative Language API',
+    endpoints: ['https://generativelanguage.googleapis.com/v1beta'],
+    docs: 'https://ai.google.dev/gemini-api/docs'
+  },
+  OpenAI: {
+    service: 'OpenAI API',
+    endpoints: ['https://api.openai.com/v1'],
+    docs: 'https://platform.openai.com/docs/api-reference'
+  },
+  Anthropic: {
+    service: 'Anthropic API',
+    endpoints: ['https://api.anthropic.com/v1'],
+    docs: 'https://docs.anthropic.com/en/api'
+  },
+  Mistral: {
+    service: 'Mistral AI API',
+    endpoints: ['https://api.mistral.ai/v1'],
+    docs: 'https://docs.mistral.ai'
+  },
+  Cohere: {
+    service: 'Cohere API',
+    endpoints: ['https://api.cohere.com/v2'],
+    docs: 'https://docs.cohere.com'
+  },
+  Groq: {
+    service: 'Groq API',
+    endpoints: ['https://api.groq.com/openai/v1'],
+    docs: 'https://console.groq.com/docs/api'
+  }
+};
+
+// ============================================================================
+// AI IMPORT → PACKAGE MAP (source-import analysis)
+// ============================================================================
+// Maps importable module names to their distribution package names, used by
+// aiImportsDetector to catch AI packages that are imported in source code but
+// missing from manifests (e.g. langchain-community/langchain-core pulled in
+// transitively by langchain but imported directly). Only well-known, verified
+// distribution names are listed. Python names normalize per PEP 503
+// (dashes/underscores equivalent); the `langchain_<x>` family additionally
+// maps generically to the `langchain-<x>` distribution namespace.
+const AI_IMPORT_MODULE_MAP = {
+  python: {
+    langchain: 'langchain',
+    langchain_core: 'langchain-core',
+    langchain_community: 'langchain-community',
+    langchain_google_genai: 'langchain-google-genai',
+    langchain_google_vertexai: 'langchain-google-vertexai',
+    langchain_openai: 'langchain-openai',
+    langchain_anthropic: 'langchain-anthropic',
+    langchain_mistralai: 'langchain-mistralai',
+    langchain_experimental: 'langchain-experimental',
+    langchain_text_splitters: 'langchain-text-splitters',
+    chromadb: 'chromadb',
+    llama_index: 'llama-index',
+    llama_index_core: 'llama-index-core',
+    openai: 'openai',
+    anthropic: 'anthropic',
+    cohere: 'cohere',
+    mistralai: 'mistralai',
+    google_generativeai: 'google-generativeai',
+    google_genai: 'google-genai',
+    pinecone: 'pinecone-client',
+    weaviate: 'weaviate-client',
+    qdrant_client: 'qdrant-client',
+    sentence_transformers: 'sentence-transformers',
+    transformers: 'transformers',
+    diffusers: 'diffusers',
+    torch: 'torch',
+    tensorflow: 'tensorflow'
+  },
+  node: {
+    openai: 'openai',
+    anthropic: 'anthropic',
+    '@anthropic-ai/sdk': '@anthropic-ai/sdk',
+    cohere: 'cohere',
+    '@mistralai/mistralai': '@mistralai/mistralai',
+    '@google/generative-ai': '@google/generative-ai',
+    chromadb: 'chromadb',
+    '@qdrant/js-client-rest': '@qdrant/js-client-rest',
+    '@pinecone-database/pinecone': '@pinecone-database/pinecone',
+    '@langchain/community': '@langchain/community',
+    '@langchain/core': '@langchain/core',
+    '@langchain/openai': '@langchain/openai',
+    '@langchain/anthropic': '@langchain/anthropic',
+    '@langchain/google-genai': '@langchain/google-genai'
+  }
+};
+
 function generateExtendedDependencies() {
   const extended = {
     python: [
@@ -1395,8 +1500,17 @@ function generateExtendedDependencies() {
       ...AI_PACKAGE_REGISTRY.guardrails?.node || [],
       ...AI_PACKAGE_REGISTRY.llm_observability?.node || []
     ],
-    go: [...AI_PACKAGE_REGISTRY.llm_providers.go || [], ...AI_PACKAGE_REGISTRY.llm_frameworks.go || []],
-    java: [...AI_PACKAGE_REGISTRY.llm_providers.java || [], ...AI_PACKAGE_REGISTRY.llm_frameworks.java || []],
+    go: [
+      ...AI_PACKAGE_REGISTRY.llm_providers.go || [],
+      ...AI_PACKAGE_REGISTRY.llm_frameworks.go || [],
+      ...AI_PACKAGE_REGISTRY.mcp_protocol?.go || [],
+      ...AI_PACKAGE_REGISTRY.a2a_protocols?.go || []
+    ],
+    java: [
+      ...AI_PACKAGE_REGISTRY.llm_providers.java || [],
+      ...AI_PACKAGE_REGISTRY.llm_frameworks.java || [],
+      ...AI_PACKAGE_REGISTRY.mcp_protocol?.java || []
+    ],
     rust: [
       ...AI_PACKAGE_REGISTRY.llm_providers.rust || [],
       ...AI_PACKAGE_REGISTRY.llm_frameworks.rust || [],
@@ -1439,7 +1553,9 @@ function generateProtocolPatterns() {
         { pattern: /from\s+mcp\s+import|import\s+mcp/i, type: 'MCP Python' },
         { pattern: /tool\s*\(\s*["'].*["']\s*,\s*["'].*["']\s*\)/i, type: 'MCP Tool Definition' },
         { pattern: /\.register_tool\s*\(|\.add_tool\s*\(/i, type: 'MCP Tool Registration' },
-        { pattern: /ToolResult|CallToolResult/i, type: 'MCP Tool Result' }
+        { pattern: /ToolResult|CallToolResult/i, type: 'MCP Tool Result' },
+        { pattern: /mcp\.NewServer|mcp\.NewClient/i, type: 'MCP Go Server' },
+        { pattern: /mark3labs\/mcp-go|modelcontextprotocol\/go-sdk/i, type: 'MCP Go SDK' }
       ],
       json_patterns: [
         // Look for MCP server configuration in JSON
