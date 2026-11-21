@@ -9,6 +9,53 @@ below; drop sections that genuinely don't apply.
 
 ---
 
+## 2026-11-21 (evening) — R1/R3/R4 implemented + BOM download UX
+
+**Summary:** Revisited the three 2026-11-20-deferred recommendations and implemented all three, plus reworked the Generated AI BOM section for quick downloads (per-format Download-first buttons, collapsed JSON views, Download-all).
+
+**Why:** User asked what the "R3 deferred" markers mean, then approved revisiting R1/R3/R4. R3 was the cheapest (metadata-only); R1 closes the biggest ❌ cluster (hashes — Git-LFS pointers are plain text readable via the existing Contents API); R4 records attestation presence honestly. The BOM section's always-expanded JSON walls were useless at a glance — downloads should be primary, content on demand.
+
+**What changed:**
+- `js/detectors.js`:
+  - `modelsDetector` (+R1): model-file entries ≤512 bytes are fetched and parsed as Git-LFS pointers (`oid sha256:<64-hex>`, `size`); one machine-readable finding per hashed artifact with `artifactInfo {path, sha256, sizeBytes, source: 'git-lfs-pointer'}`; capped at 50 fetches
+  - `attestationDetector` (+R4, new): filename patterns (`.sigstore`, `.sig`, `.att`, `.link`, `verification.key`, `SLSA_PROVENANCE*`, `provenance.json`) + capped content check of `.github/workflows/*.yml` for slsa/provenance/sigstore/gitsign/in-toto; single governance finding with `attestationInfo` when evidence exists
+- `js/analyzer.js`: Attestations detector wired (needs tree + getFileContent); result carries `repository.scannedRef`
+- `js/bom-generators.js`:
+  - R1: `findArtifactForModel` (name-token ≥4 chars, best-score match; no match → no hash claim) attaches CycloneDX `hashes: [{alg: 'SHA-256', …}]` + `aibom:artifact:path` / `aibom:hash-source`; SPDX `checksum` + artifact comment; XML `<hashes>` in XSD position
+  - R3: JSON `metadata.lifecycles: [{phase: 'post-build'}]` + five `aibom:*` metadata properties (scope with scanned ref, completeness, generation-context, authorship, graph-type); XML metadata `<lifecycles>` + properties in XSD order; SPDX document `comment`; extended AIBOM `source_scope`
+  - R4: `getAttestationState` → `aibom:attestation` metadata property (JSON/XML) + SPDX repository element `comment`; detected types or explicit "none found in repository scan"
+  - guards: `artifactInfo`/`attestationInfo` findings are state metadata — skipped in the CDX generic-component branch and SPDX package branch (they must not become components)
+  - XML generator: metadata `<lifecycles>` + header properties in XSD order; `<hashes>` emission; guarded optional `<version>`/`<author>`
+- `js/ui.js` + `index.html` + `styles.css`: per-tab Download-first actions, **Show content** toggle (`bom-preview.collapsed` default), **Download all** staggered batch; Analysis Notes section moved below Standards Compliance and reformatted as a compact gap table (Missing / What we searched / What it would add) with category chips, icons, count-in-heading and a clearer "gaps, not errors" caption
+- `js/compliance.js`: scorecard rows for R1/R3/R4 flipped with dated notes; header headline updated
+- scorecard notes later cleaned to factual where/why statements only (no dates/change commentary — user request); movement history stays in this changelog
+- `tests.html`: 15 new assertions (artifact-to-model matching incl. generic-token/no-overlap cases, attestation state derivation, LFS pointer parsing end-to-end with stubbed fetch); scorecard expectations updated
+- `scripts/tests/verify-e2e.js`: fixture gains an LFS artifact + sigstore finding; asserts hashes/checksum, header properties/lifecycles, attestation states, XML parity (lifecycles, services, hashes, no `undefined` version, single assembly)
+- `README.md`, `CHANGELOG.md`, this file
+
+**How / commands run:**
+```
+node --check js/{constants,detectors,analyzer,bom-generators,ui,compliance}.js && node --check scripts/tests/*.js
+node scripts/tests/verify-compliance.js   # scorecard: PASS (73.7/50.0/68.8 weighted)
+node scripts/tests/verify-e2e.js          # real generators: PASS (incl. R1/R3/R4 + XML parity assertions)
+node scripts/tests/run-tests-html.js      # 202 passed / 1 pre-existing failure
+aidc-scan                                 # clean after fixing 3 semgrep findings in the harnesses
+```
+
+**Verification notes:**
+- e2e caught: stale `tasks: []` initializer, service refs unresolved in the validator, NTIA supplier tally drift (2/4 after new fixtures), G7 expected 26/50 vs actual 25/50 (recounted — tests corrected, not the rows), attestation finding leaking into the component list (guard added), and the download-all placeholder filter excluding the real XML (`startsWith('<')` matched `<?xml` — replaced with explicit `//`/`<!--` placeholder markers).
+- Fresh-eyes review (round 3) findings, all fixed: hash matching required filename-hit-weighted score ≥2 with generic path tokens (`models`, `weights`, `checkpoints`…) excluded — a bare directory-token match can no longer attach another file's sha256 to a model; one-to-one greedy assignment so two similar models never share one hash claim; short ids (`gpt-4o`) match via 3-char tokens; artifact/attestation findings downgraded to `severity: low` (positive integrity facts, not risks); dead `attestationState` return removed; `aibom:attestation` now derives from ALL scan findings — deselecting the attestation finding can no longer flip the recorded state to a false "none found"; LFS candidates restricted to weight-artifact extensions (tokenizer/config JSONs excluded); stale tests.html comment corrected.
+- Hash matching is deliberately conservative: unmatched artifacts stay hash-less (no invented integrity).
+- R4 absence is explicit: "none found in repository scan" — never a silent clean bill (R6 principle).
+- Scorecard movement all traceable: CERT-In 68.4→73.7 (+#19), G7 44.0→50.0 (+#8/#26/#27), OWASP 50.0→68.8 (+#1–3/#18, #19 partial).
+- Semgrep `path-join-resolve-traversal` / `insecure-object-assign` findings on the committed harnesses fixed via literal whitelists + direct property assignment.
+- Pre-existing tests.html failure still flagged (bare live-line constant capture).
+
+**Files:** `js/detectors.js`, `js/analyzer.js`, `js/bom-generators.js`, `js/ui.js`, `js/compliance.js`, `index.html`, `styles.css`, `tests.html`, `scripts/tests/*.js`, `README.md`, `CHANGELOG.md`, `DETAILED_CHANGELOG.md`.
+
+---
+
+
 ## 2026-11-21 (later) — Snyk-comparison uplift: identity/evidence/services + compliance section + PR #2 port
 
 **Summary:** Compared our chatAssistant AIBOMs against Snyk's (`projects/snyk/glm-comparision.md`, independent of ChatGPT's `compare.md`), extracted the highest-value defects, and fixed them in the generators; moved the Standards Compliance panel to its own section; reviewed and ported cyfinoid/aibommaker PR #2 (Go/Java/Rust MCP SDK detection — our `js/constants.js` had the identical gap).

@@ -153,6 +153,7 @@ async function analyzeRepository(input, onProgress = null) {
         { name: 'Model Files', fn: modelsDetector },
         { name: 'Fine-tuning', fn: fineTuningDetector },
         { name: 'Data Pipeline', fn: dataPipelineDetector },
+        { name: 'Attestations', fn: attestationDetector }, // R4: signing/provenance presence
         { name: 'Prompts', fn: promptsDetector },
         { name: 'Protocols', fn: protocolDetector }, // MCP, A2A, and plugin systems
         { name: 'AI Dev Tools', fn: aiDevToolsDetector }, // Cursor, Copilot, Claude Code (low confidence)
@@ -391,7 +392,8 @@ async function analyzeRepository(input, onProgress = null) {
             htmlUrl: repoMeta.htmlUrl,
             description: repoMeta.description,
             topics: repoMeta.topics,
-            languages: repoMeta.languages
+            languages: repoMeta.languages,
+            scannedRef: input.ref || repoMeta.defaultBranch || 'main'
         },
         parsedDocs: parsedDocs, // Include parsed documentation for BOM generation
         analyzedAt: new Date().toISOString()

@@ -8,18 +8,12 @@
 //
 // 2. Static AIBOM standards scorecard — element-by-element conformance of
 //    this tool's output surface against CERT-In Table 10, the G7 SBOM-for-AI
-//    minimum elements, and the OWASP AIBOM Foundations checklist. Transcribed
-//    from guidance/guidance_details.md §6 (2026-11-20 assessment) and updated
-//    when the implementation changes — scores move with the code, and the
-//    changed rows (and why) are documented in DETAILED_CHANGELOG.md. Recent
-//    deltas vs the §6 snapshot (2026-11-21): CERT-In #2 dropped to unmet —
-//    invented model versions ("latest") removed so unknown stays unknown;
-//    CERT-In #16 rose to met — out-of-scope uses extracted (R10, local
-//    cards); G7 #22 dropped to unmet (same version cleanup); G7 #16 note
-//    updated — external inference services now carry endpoints/trust-boundary
-//    info (still no flow payload typing).
-//    Net vs §6 (65.8/45.0/50.0 weighted): CERT-In 68.4% (13/19, strict
-//    52.6%), G7 44.0% (22/50), OWASP 50.0% unchanged.
+//    minimum elements, and the OWASP AIBOM Foundations checklist. Scores move
+//    with the implementation; movement history lives in DETAILED_CHANGELOG.md.
+//    Notes are factual where/why statements only — no dates or change
+//    commentary (UI-facing).
+//    Current headline: CERT-In 73.7% weighted / 57.9% strict (14/19, 11/19),
+//    G7 50.0% / 40.0% (25/50, 20/50), OWASP 68.8% / 45.8% (16.5/24, 11/24).
 //
 // Status vocabulary for dynamic checks: 'pass' | 'warn' | 'fail'
 // Status vocabulary for scorecard rows:  'met' | 'partial' | 'unmet'
@@ -281,11 +275,11 @@ function validateSpdxBom(text) {
 // 2. STATIC AIBOM STANDARDS SCORECARD
 // ============================================================================
 //
-// Transcribed from guidance/guidance_details.md §6.1–§6.3 (assessment dated
-// 2026-11-20). Row statuses: met (✅, 1.0) / partial (🟡, 0.5) / unmet (❌, 0).
+// Row statuses: met (✅, 1.0) / partial (🟡, 0.5) / unmet (❌, 0).
 // `structural: true` marks ⛔ rows — not derivable by a post-hoc, browser-only
 // scanner, so they are structural limits rather than unimplemented features.
-// Several rows note the recommendation (R1/R3/R4/R5/R10) that would close them.
+// Notes state where the element is implemented or why it cannot be; change
+// history lives in DETAILED_CHANGELOG.md, not here.
 
 const AIBOM_SCORECARD = [
   {
@@ -294,7 +288,7 @@ const AIBOM_SCORECARD = [
     ref: 'guidance/guidance_details.md §6.1',
     rows: [
       { n: 1, element: 'Model Name', status: 'met', note: 'modelsIdentifierDetector → component name' },
-      { n: 2, element: 'Model Version', status: 'unmet', note: 'version omitted unless derived from a model card (invented "latest" removed 2026-11-21); no commit/tag pinning' },
+      { n: 2, element: 'Model Version', status: 'unmet', note: 'version omitted unless derivable from a model card; no commit/tag pinning' },
       { n: 3, element: 'Model Type', status: 'met', note: 'text-generation / embeddings / text-to-image + typeOfModel' },
       { n: 4, element: 'Model Developer', status: 'met', note: 'provider attribution (author on component; HF org)' },
       { n: 5, element: 'Model Licensing Information', status: 'partial', note: 'licenseConcluded only from verified HF model card; repo LICENSE not correlated per model' },
@@ -308,10 +302,10 @@ const AIBOM_SCORECARD = [
       { n: 13, element: 'Input', status: 'met', note: 'modelCard.modelParameters.inputs' },
       { n: 14, element: 'Output', status: 'met', note: 'modelCard.modelParameters.outputs' },
       { n: 15, element: 'Intended Usage', status: 'met', note: 'modelCard.considerations.useCases + aibom:intended-use' },
-      { n: 16, element: 'Out of Scope Usage', status: 'met', note: 'aibom:out-of-scope-use properties from card outOfScope (added 2026-11-21, R10 closed for local cards)' },
+      { n: 16, element: 'Out of Scope Usage', status: 'met', note: 'aibom:out-of-scope-use properties from model card outOfScope' },
       { n: 17, element: 'Environmental Impact', status: 'partial', note: 'carbon-footprint estimate in extended AIBOM (heuristic, labeled as such)' },
       { n: 18, element: 'Vulnerabilities', status: 'unmet', structural: true, note: 'no CVE feed client-side; obtain via supplier VEX/advisory channels' },
-      { n: 19, element: 'Attestations', status: 'unmet', note: 'no signature/attestation state recorded (R4 deferred)' }
+      { n: 19, element: 'Attestations', status: 'met', note: 'aibom:attestation property records presence state: detected types or explicit none-found' }
     ]
   },
   {
@@ -327,7 +321,7 @@ const AIBOM_SCORECARD = [
       { n: 5, cluster: 'Metadata (§2.1)', element: 'SBOM author signature', status: 'unmet', structural: true, note: 'browser has no signing keys' },
       { n: 6, cluster: 'Metadata (§2.1)', element: 'SBOM tool name', status: 'met', note: '"AI BOM Generator" metadata component' },
       { n: 7, cluster: 'Metadata (§2.1)', element: 'SBOM tool version', status: 'met', note: 'tool component version' },
-      { n: 8, cluster: 'Metadata (§2.1)', element: 'SBOM generation context', status: 'unmet', note: 'no declared lifecycle phase (R3 deferred)' },
+      { n: 8, cluster: 'Metadata (§2.1)', element: 'SBOM generation context', status: 'met', note: 'aibom:generation-context property + CycloneDX metadata lifecycles (post-build)' },
       { n: 9, cluster: 'Metadata (§2.1)', element: 'SBOM timestamp', status: 'met', note: 'metadata.timestamp / <timestamp> / created' },
       { n: 10, cluster: 'Metadata (§2.1)', element: 'SBOM dependency relationship', status: 'met', note: 'dependencies graph' },
       { n: 11, cluster: 'System Level (§2.2)', element: 'System name', status: 'met', note: 'repository component' },
@@ -341,22 +335,22 @@ const AIBOM_SCORECARD = [
       { n: 19, cluster: 'System Level (§2.2)', element: 'Intended application area', status: 'partial', note: 'per-model intended use; not system-level' },
       { n: 20, cluster: 'Models (§2.3)', element: 'Model name', status: 'met', note: '' },
       { n: 21, cluster: 'Models (§2.3)', element: 'Model identifier (CPE/PURL)', status: 'met', note: 'pkg:pypi/…, pkg:huggingface/…, pkg:ml/… purls' },
-      { n: 22, cluster: 'Models (§2.3)', element: 'Model version', status: 'unmet', note: 'version omitted (invented "latest" removed 2026-11-21); identifier preserved as-is' },
+      { n: 22, cluster: 'Models (§2.3)', element: 'Model version', status: 'unmet', note: 'version omitted unless derivable; identifier preserved as-is' },
       { n: 23, cluster: 'Models (§2.3)', element: 'Model timestamp', status: 'unmet', note: 'release dates not emitted' },
       { n: 24, cluster: 'Models (§2.3)', element: 'Model producer', status: 'met', note: 'provider attribution via lineage' },
       { n: 25, cluster: 'Models (§2.3)', element: 'Model description (lineage, dependencies)', status: 'met', note: 'fine-tuned-from relationships, relatedModels' },
-      { n: 26, cluster: 'Models (§2.3)', element: 'Model hash value', status: 'unmet', note: 'R1 deferred (Git-LFS pointer parsing is the path)' },
-      { n: 27, cluster: 'Models (§2.3)', element: 'Model hash algorithm', status: 'unmet', note: 'R1 deferred' },
+      { n: 26, cluster: 'Models (§2.3)', element: 'Model hash value', status: 'met', note: 'Git-LFS pointer sha256 on matched artifacts; unmatched artifacts stay hash-less' },
+      { n: 27, cluster: 'Models (§2.3)', element: 'Model hash algorithm', status: 'met', note: 'SHA-256 declared via CycloneDX hashes[].alg / SPDX checksum' },
       { n: 28, cluster: 'Models (§2.3)', element: 'Model properties (params, architecture)', status: 'met', note: 'num_parameters, architectureFamily, hyperparameter/contextWindow' },
       { n: 29, cluster: 'Models (§2.3)', element: 'Model input-output properties', status: 'partial', note: 'context window yes; tokenizer type not extracted' },
       { n: 30, cluster: 'Models (§2.3)', element: 'Model training properties', status: 'partial', note: 'informationAboutTraining from card when present; not parsed from configs' },
       { n: 31, cluster: 'Models (§2.3)', element: 'Model license', status: 'partial', note: 'verified HF cards only' },
       { n: 32, cluster: 'Models (§2.3)', element: 'Model external references', status: 'met', note: 'model card object, HF URL, provider docs' },
-      { n: 33, cluster: 'Datasets (§2.4)', element: 'Dataset name', status: 'partial', note: 'names in data-pipeline findings (R5 would componentize)' },
+      { n: 33, cluster: 'Datasets (§2.4)', element: 'Dataset name', status: 'partial', note: 'names captured in data-pipeline findings; not componentized' },
       { n: 34, cluster: 'Datasets (§2.4)', element: 'Dataset description', status: 'unmet', note: '' },
       { n: 35, cluster: 'Datasets (§2.4)', element: 'Dataset content (format/encoding)', status: 'unmet', note: '' },
       { n: 36, cluster: 'Datasets (§2.4)', element: 'Dataset identifier', status: 'partial', note: 'HF org/name / Kaggle ids from dataPipelineDetector' },
-      { n: 37, cluster: 'Datasets (§2.4)', element: 'Dataset hash', status: 'unmet', note: 'R1 deferred' },
+      { n: 37, cluster: 'Datasets (§2.4)', element: 'Dataset hash', status: 'unmet', note: 'datasets are external to the scanned repository' },
       { n: 38, cluster: 'Datasets (§2.4)', element: 'Dataset provenance', status: 'unmet', structural: true, note: 'collection methods not in source code' },
       { n: 39, cluster: 'Datasets (§2.4)', element: 'Dataset statistical properties', status: 'unmet', structural: true, note: 'requires dataset access' },
       { n: 40, cluster: 'Datasets (§2.4)', element: 'Dataset sensitivity', status: 'unmet', note: 'no classification field' },
@@ -367,7 +361,7 @@ const AIBOM_SCORECARD = [
       { n: 45, cluster: 'Security (§2.6)', element: 'Security controls (incl. prompt-injection)', status: 'partial', note: 'guardrail packages + OWASP-pack mitigation indicator; no controls field' },
       { n: 46, cluster: 'Security (§2.6)', element: 'Security compliance', status: 'unmet', note: 'certification schemes not detectable in source' },
       { n: 47, cluster: 'Security (§2.6)', element: 'Cybersecurity policy info (security.txt)', status: 'met', note: 'RFC 9116 parser in documentationParser' },
-      { n: 48, cluster: 'Security (§2.6)', element: 'Vulnerability referencing', status: 'unmet', structural: true, note: 'no CVE feed (R6)' },
+      { n: 48, cluster: 'Security (§2.6)', element: 'Vulnerability referencing', status: 'unmet', structural: true, note: 'no CVE feed available client-side' },
       { n: 49, cluster: 'KPIs (§2.7)', element: 'Security metrics', status: 'unmet', structural: true, note: 'robustness benchmarks are evaluation-time artifacts' },
       { n: 50, cluster: 'KPIs (§2.7)', element: 'Operational performance KPIs', status: 'unmet', structural: true, note: 'runtime telemetry (uptime/latency/throughput)' }
     ]
@@ -378,14 +372,14 @@ const AIBOM_SCORECARD = [
     ref: 'guidance/guidance_details.md §6.3',
     clusters: true,
     rows: [
-      { n: 1, cluster: 'Part 1 — Header', element: 'Graph type declaration', status: 'unmet', note: 'not emitted (R3 deferred)' },
-      { n: 2, cluster: 'Part 1 — Header', element: 'Scope declaration', status: 'unmet', note: 'not emitted (R3 deferred)' },
-      { n: 3, cluster: 'Part 1 — Header', element: 'Completeness claim', status: 'unmet', note: 'not emitted (R3 deferred) — "silence becomes a producer assertion"' },
+      { n: 1, cluster: 'Part 1 — Header', element: 'Graph type declaration', status: 'met', note: 'aibom:graph-type metadata property' },
+      { n: 2, cluster: 'Part 1 — Header', element: 'Scope declaration', status: 'met', note: 'aibom:scope metadata property' },
+      { n: 3, cluster: 'Part 1 — Header', element: 'Completeness claim', status: 'met', note: 'aibom:completeness metadata property — partial, post-build analysis' },
       { n: 4, cluster: 'Part 1 — Header', element: 'Authorship / review metadata', status: 'partial', note: 'tool-generated metadata present; no accountable-author/reviewer fields' },
       { n: 5, cluster: 'Part 1 — Header', element: 'Validity period', status: 'unmet', note: '' },
       { n: 6, cluster: 'Part 2 — Component list', element: 'Component identity + type', status: 'met', note: 'typed components (machine-learning-model, library, platform)' },
-      { n: 7, cluster: 'Part 2 — Component list', element: 'Models category', status: 'met', note: 'incl. adapters/LoRA via lineage; base-model digests unmet (R1)' },
-      { n: 8, cluster: 'Part 2 — Component list', element: 'Datasets category', status: 'partial', note: 'names extracted, not componentized (R5)' },
+      { n: 7, cluster: 'Part 2 — Component list', element: 'Models category', status: 'met', note: 'incl. adapters/LoRA via lineage; Git-LFS digests on matched artifacts' },
+      { n: 8, cluster: 'Part 2 — Component list', element: 'Datasets category', status: 'partial', note: 'names extracted, not componentized' },
       { n: 9, cluster: 'Part 2 — Component list', element: 'Agents & Tools category', status: 'partial', note: 'agent frameworks as findings; MCP servers as components; no agent entities' },
       { n: 10, cluster: 'Part 2 — Component list', element: 'Prompts & Guardrails category', status: 'partial', note: 'guardrails detected; prompt templates intentionally not components' },
       { n: 11, cluster: 'Part 2 — Component list', element: 'Runtime / dependencies', status: 'met', note: 'full dependency detection' },
@@ -395,8 +389,8 @@ const AIBOM_SCORECARD = [
       { n: 15, cluster: 'Part 3 — Data flows', element: 'Directed data flows', status: 'partial', note: 'CycloneDX dependencies graph approximates' },
       { n: 16, cluster: 'Part 3 — Data flows', element: 'Flow kind / payload / movement properties', status: 'unmet', note: 'no data/control/event typing, no encryption/protocol metadata' },
       { n: 17, cluster: 'Part 4 — Evidence & provenance', element: 'Provenance references', status: 'met', note: 'base-model lineage (fine-tuned-from, relatedModels)' },
-      { n: 18, cluster: 'Part 4 — Evidence & provenance', element: 'Cryptographic hashes', status: 'unmet', note: 'R1 deferred' },
-      { n: 19, cluster: 'Part 4 — Evidence & provenance', element: 'Signatures / attestations', status: 'unmet', note: 'R4 deferred; self-signing structural' },
+      { n: 18, cluster: 'Part 4 — Evidence & provenance', element: 'Cryptographic hashes', status: 'met', note: 'Git-LFS sha256 on matched model artifacts' },
+      { n: 19, cluster: 'Part 4 — Evidence & provenance', element: 'Signatures / attestations', status: 'partial', note: 'presence state recorded (detected types or explicit none-found); actual signatures rare in scanned repos; self-signing not possible in browser' },
       { n: 20, cluster: 'Part 4 — Evidence & provenance', element: 'Evaluation results', status: 'met', note: 'performanceMetrics + threshold' },
       { n: 21, cluster: 'Part 4 — Evidence & provenance', element: 'External documents (model card, license)', status: 'met', note: 'modelCard object + HF references + license when verified' },
       { n: 22, cluster: 'Category-specific', element: 'MCP server identity/transport/pinning/scopes', status: 'partial', note: 'identity, command/args/env parsed; version pinning & granted scopes not captured' },

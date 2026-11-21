@@ -77,7 +77,7 @@ function renderAnalysisNotes(findings, analysisResult, fileTree = null) {
         warningSection.innerHTML = `
             <h3 class="subheading" style="margin-bottom: 1rem; color: var(--status-warning, #b45309);">⚠️ Scan Completeness Warnings</h3>
             ${analysisResult.warnings.map(w => `
-                <div class="info-message" style="padding: 0.75rem 1rem; margin-bottom: 0.75rem; border-left: 3px solid var(--status-warning, #b45309);">
+                <div class="info-message" style="padding: 0.75rem 1rem; margin-bottom: 0.75rem; border-left: 3px solid var(--status-warning, #b45309); text-align: left;">
                     <p class="body" style="margin: 0;">${escapeHtml(w.message)}</p>
                 </div>
             `).join('')}
@@ -189,28 +189,44 @@ function renderAnalysisNotes(findings, analysisResult, fileTree = null) {
         `;
         return;
     }
-    
-    // Render what we looked for but didn't find in THIS scan
-    const notFoundSection = document.createElement('div');
-    notFoundSection.className = 'analysis-note-section';
-    notFoundSection.innerHTML = `
-        <h3 class="subheading" style="margin-bottom: 1rem;">🔍 Components Not Found in This Scan</h3>
-        <p class="caption" style="margin-bottom: 1rem;">We scanned for these components but did not find them in this repository. If present, they would enhance the AIBOM:</p>
-        <div class="analysis-notes-grid">
-            ${notFound.map(item => `
-                <div class="analysis-note-card">
-                    <div class="analysis-note-header">
-                        <strong>${item.category}: ${item.item}</strong>
-                    </div>
-                    <div class="analysis-note-body">
-                        <p><strong>What We Scanned:</strong> ${item.searched}</p>
-                        <p><strong>AIBOM Benefit:</strong> ${item.benefit}</p>
-                    </div>
-                </div>
-            `).join('')}
-        </div>
-    `;
-    container.appendChild(notFoundSection);
+
+    // Render what we looked for but didn't find in THIS scan as a compact
+    // table: one row per gap, grouped visually by category chip.
+    if (notFound.length > 0) {
+        const CATEGORY_ICONS = {
+            Documentation: '📄',
+            Hardware: '🖥️',
+            Infrastructure: '☁️',
+            Governance: '⚖️',
+            'Data Pipeline': '🗂️'
+        };
+        const rows = notFound.map(item => `
+            <tr>
+                <td>
+                    <span class="analysis-category-chip">${escapeHtml(item.category)}</span>
+                    <div class="analysis-gap-item">${CATEGORY_ICONS[item.category] || '🔍'} ${escapeHtml(item.item)}</div>
+                </td>
+                <td class="analysis-gap-searched">${escapeHtml(item.searched)}</td>
+                <td class="analysis-gap-benefit">${escapeHtml(item.benefit)}</td>
+            </tr>
+        `).join('');
+
+        const notFoundSection = document.createElement('div');
+        notFoundSection.className = 'analysis-note-section';
+        notFoundSection.innerHTML = `
+            <h3 class="subheading" style="margin-bottom: 0.25rem;">🔍 Not Detected in This Repository (${notFound.length})</h3>
+            <p class="caption" style="margin-bottom: 1rem;">Each row is an area the scanner actively searched. "Not detected" means the repository shows no trace — the AIBOM omits it rather than guessing.</p>
+            <div class="analysis-notes-tablewrap">
+                <table class="analysis-notes-table">
+                    <thead>
+                        <tr><th>Missing</th><th>What we searched</th><th>What it would add</th></tr>
+                    </thead>
+                    <tbody>${rows}</tbody>
+                </table>
+            </div>
+        `;
+        container.appendChild(notFoundSection);
+    }
 }
 
 async function renderFindings(findings, repoUrl) {
@@ -417,6 +433,30 @@ function getSelectedFindings(allFindings) {
     return allFindings.filter(f => selectedIds.has(f.id));
 }
 
+/**
+ * Download one generated BOM document by format key.
+ * @param {string} format 'cyclonedx-json' | 'cyclonedx-xml' | 'spdx' | 'extended-aibom'
+ */
+function downloadBOMFile(format) {
+    const content = generatedBOMs[format];
+    if (!content) return;
+    const repo = currentAnalysis.repository.repo;
+    const date = new Date().toISOString().split('T')[0];
+    let ext, name;
+
+    if (format === 'extended-aibom') {
+        ext = 'json';
+        name = 'extended-aibom';
+    } else {
+        ext = format.includes('xml') ? 'xml' : 'json';
+        name = format.includes('spdx') ? 'spdx' : 'cyclonedx';
+    }
+
+    downloadFile(content, `${repo}-aibom-${name}-${date}.${ext}`,
+               ext === 'xml' ? 'application/xml' : 'application/json');
+    showToast('Downloaded!');
+}
+
 function renderBOMPreview(format, content) {
     const preview = document.getElementById(`${format}-preview`);
     if (!preview) return;
@@ -574,7 +614,7 @@ document.addEventListener('DOMContentLoaded', () => {
             const getFileContent = createFileContentFetcher(owner, repo, ref || repoMeta.defaultBranch, token);
             
             const result = await analyzeRepository(
-                { owner, repo, repoMeta, tree, getFileContent, token },
+                { owner, repo, repoMeta, tree, getFileContent, token, ref: ref || repoMeta.defaultBranch },
                 (progress) => {
                     document.getElementById('loading-message').textContent = 
                         `${progress.message} (${progress.step}/${progress.total})`;
@@ -658,24 +698,16 @@ document.addEventListener('DOMContentLoaded', () => {
                 });
             }
         } else if (e.target.dataset.action === 'download') {
+            downloadBOMFile(e.target.dataset.format);
+        } else if (e.target.dataset.action === 'toggle-content') {
+            // Previews are collapsed by default — the actions row is the
+            // primary surface. Toggle the raw document view on demand.
             const format = e.target.dataset.format;
-            const content = generatedBOMs[format];
-            if (content) {
-                const repo = currentAnalysis.repository.repo;
-                const date = new Date().toISOString().split('T')[0];
-                let ext, name;
-                
-                if (format === 'extended-aibom') {
-                    ext = 'json';
-                    name = 'extended-aibom';
-                } else {
-                    ext = format.includes('xml') ? 'xml' : 'json';
-                    name = format.includes('spdx') ? 'spdx' : 'cyclonedx';
-                }
-                
-                downloadFile(content, `${repo}-aibom-${name}-${date}.${ext}`, 
-                           ext === 'xml' ? 'application/xml' : 'application/json');
-                showToast('Downloaded!');
+            const pre = document.getElementById(`${format}-preview`);
+            if (pre) {
+                const collapsed = pre.classList.toggle('collapsed');
+                e.target.textContent = collapsed ? 'Show content' : 'Hide content';
+                e.target.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
             }
         }
     });
@@ -723,6 +755,22 @@ document.addEventListener('DOMContentLoaded', () => {
         const content = document.getElementById('compliance-wrapper');
         content.classList.toggle('collapsed');
         this.textContent = content.classList.contains('collapsed') ? 'Expand' : 'Collapse';
+    });
+
+    // Download all four BOM formats at once (staggered — browsers throttle
+    // multiple simultaneous programmatic downloads)
+    document.getElementById('download-all-bom').addEventListener('click', function() {
+        const formats = ['cyclonedx-json', 'cyclonedx-xml', 'spdx', 'extended-aibom'];
+        const isPlaceholder = (c) => {
+            const t = c.trim();
+            return t.startsWith('//') || t.startsWith('<!--');
+        };
+        formats.forEach((format, index) => {
+            if (generatedBOMs[format] && !isPlaceholder(generatedBOMs[format])) {
+                setTimeout(() => downloadBOMFile(format), index * 400);
+            }
+        });
+        showToast('Downloading all BOM formats…', 'success');
     });
 });
 

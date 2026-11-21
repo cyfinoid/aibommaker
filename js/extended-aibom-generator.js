@@ -235,6 +235,13 @@ function extractExtendedMetadata(findings, analysisResult) {
     console.log('[Extended AIBOM] Extracting extended metadata...');
     
     return {
+        source_scope: {
+            scope: `repository static source analysis (${analysisResult.repository.fullName}@${analysisResult.repository.scannedRef || 'main'})`,
+            completeness: 'partial — post-build source-level analysis; training-time observation not possible',
+            generation_context: 'after-build',
+            authorship: 'tool-generated',
+            graph_type: 'static dependency graph (source + manifest + SBOM analysis)'
+        },
         hardware: extractHardwareMetadata(findings),
         infrastructure: extractInfrastructureMetadata(findings),
         protocols: extractProtocolMetadata(findings),

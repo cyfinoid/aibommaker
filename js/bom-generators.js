@@ -60,6 +60,36 @@ async function generateCycloneDXJson(analysisResult, selectedFindings) {
         serialNumber: `urn:uuid:${uuid}`,
         metadata: {
             timestamp: analyzedAt,
+            // R3: explicit header self-descriptions (OWASP Part 1 / G7 #8) —
+            // declare scope, completeness, generation context and authorship
+            // instead of letting silence imply producer assertions.
+            lifecycles: [{ phase: 'post-build' }],
+            properties: [
+                {
+                    name: 'aibom:scope',
+                    value: `repository static source analysis (${repository.fullName}@${repository.scannedRef || 'main'})`
+                },
+                {
+                    name: 'aibom:completeness',
+                    value: 'partial — post-build source-level analysis; training-time observation not possible'
+                },
+                {
+                    name: 'aibom:generation-context',
+                    value: 'after-build'
+                },
+                {
+                    name: 'aibom:authorship',
+                    value: 'tool-generated'
+                },
+                {
+                    name: 'aibom:graph-type',
+                    value: 'static dependency graph (source + manifest + SBOM analysis)'
+                },
+                {
+                    name: 'aibom:attestation',
+                    value: getAttestationState(selectedFindings, analysisResult)
+                }
+            ],
             tools: {
                 components: [{
                     type: 'application',
@@ -500,6 +530,75 @@ function pushPropertyOnce(modelCard, name, value) {
   if (!modelCard.properties.some((p) => p.name === name && p.value === value)) {
     modelCard.properties.push({ name, value });
   }
+}
+
+/**
+ * R1: score how strongly an artifact path matches a model name. Filename
+ * token hit = 2, directory hit = 1. Generic path words (models/weights/
+ * checkpoints…) can't vouch for identity — every artifact lives under them.
+ * Tokens ≥3 chars so short ids like gpt-4o still match via 'gpt'.
+ * @param {Object} artifact {path, ...}
+ * @param {string} modelName
+ * @returns {number}
+ */
+function artifactMatchScore(artifact, modelName) {
+  const GENERIC = new Set(['models', 'model', 'weights', 'weight', 'checkpoints', 'checkpoint', 'artifacts', 'artifact', 'pretrained', 'saved']);
+  const tokens = String(modelName)
+    .toLowerCase()
+    .split(/[^a-z0-9]+/)
+    .filter((t) => t.length >= 3 && !GENERIC.has(t));
+  const pathLower = String(artifact.path).toLowerCase();
+  const fileNameLower = pathLower.split('/').pop();
+  let score = 0;
+  for (const token of tokens) {
+    if (fileNameLower.includes(token)) score += 2;
+    else if (pathLower.includes(token)) score += 1;
+  }
+  return score;
+}
+
+/**
+ * R1: pick the best-matching artifact for a model (score ≥ 2 required — a
+ * filename hit or two directory hits — so a generic directory token alone
+ * never produces a hash claim; emitting another file's hash as a model's
+ * integrity claim is worse than emitting none).
+ * @param {Array} artifacts [{path, sha256, sizeBytes, source}]
+ * @param {string} modelName Model identifier from the finding
+ * @returns {Object|null}
+ */
+function findArtifactForModel(artifacts, modelName) {
+  if (!artifacts || artifacts.length === 0 || !modelName) return null;
+  let best = null;
+  let bestScore = 0;
+  for (const artifact of artifacts) {
+    const score = artifactMatchScore(artifact, modelName);
+    if (score > bestScore) {
+      bestScore = score;
+      best = artifact;
+    }
+  }
+  return bestScore >= 2 ? best : null;
+}
+
+/**
+ * R4: attestation presence state for the scanned repository, recorded
+ * explicitly in the BOM metadata (detected types or an honest "none found").
+ * Derived from ALL scan findings — not the user's current selection — so
+ * deselecting the attestation finding can never flip the recorded state to a
+ * false "none found".
+ * @param {Array} selectedFindings
+ * @param {Object} [analysisResult] full analysis result (carries all findings)
+ * @returns {string}
+ */
+function getAttestationState(selectedFindings, analysisResult) {
+  const pool = (analysisResult && Array.isArray(analysisResult.findings) && analysisResult.findings.length > 0)
+    ? analysisResult.findings
+    : (selectedFindings || []);
+  const attested = pool.find((f) => f.attestationInfo?.detected);
+  if (attested) {
+    return `detected: ${attested.attestationInfo.types.join(', ')}`;
+  }
+  return 'none found in repository scan';
 }
 
 async function createMLModelComponents(findings) {
@@ -1193,6 +1292,11 @@ async function createMLModelComponents(findings) {
                 
                 modelMap.set(key, { component, bomRef });
             }
+        } else if (finding.artifactInfo || finding.attestationInfo) {
+            // R1/R4: hashed artifact + attestation findings are state metadata —
+            // matched to model components / recorded as attestation state above;
+            // not components of their own.
+            continue;
         } else {
             // Generic finding - create a library/framework component with a
             // clean identity (name/version/purl from structured dependency
@@ -1253,6 +1357,37 @@ async function createMLModelComponents(findings) {
     
     // Add all identified models
     const models = Array.from(modelMap.values()).map(m => m.component);
+    // R1: attach verified Git-LFS artifact hashes to matching model components.
+    // One-to-one greedy assignment by score: an artifact can vouch for at most
+    // one model, so two similar models never share one sha256 claim.
+    const artifacts = findings.filter(f => f.artifactInfo).map(f => f.artifactInfo);
+    if (artifacts.length > 0) {
+        const pairs = [];
+        for (const entry of modelMap.values()) {
+            for (const artifact of artifacts) {
+                const score = artifactMatchScore(artifact, entry.component.name);
+                if (score >= 2) pairs.push({ entry, artifact, score });
+            }
+        }
+        pairs.sort((a, b) => b.score - a.score);
+        const usedArtifacts = new Set();
+        const usedModels = new Set();
+        for (const pair of pairs) {
+            if (usedArtifacts.has(pair.artifact.path) || usedModels.has(pair.entry.bomRef)) continue;
+            usedArtifacts.add(pair.artifact.path);
+            usedModels.add(pair.entry.bomRef);
+            pair.entry.component.hashes = [{ alg: 'SHA-256', content: pair.artifact.sha256 }];
+            pair.entry.component.properties.push({
+                name: 'aibom:artifact:path',
+                value: pair.artifact.path
+            });
+            pair.entry.component.properties.push({
+                name: 'aibom:hash-source',
+                value: 'git-lfs-pointer'
+            });
+            console.log(`[BOM Generator] ✓ Hash attached: ${pair.artifact.path} → ${pair.entry.component.name}`);
+        }
+    }
     components.push(...models);
     
     // Add detected library dependencies
@@ -1572,6 +1707,8 @@ async function generateCycloneDXXml(analysisResult, selectedFindings) {
     // Metadata
     xml += '  <metadata>\n';
     xml += `    <timestamp>${escapeXml(analyzedAt)}</timestamp>\n`;
+    // R3: generation context as a declared lifecycle phase
+    xml += '    <lifecycles>\n      <lifecycle><phase>post-build</phase></lifecycle>\n    </lifecycles>\n';
     xml += '    <tools>\n';
     xml += '      <components>\n';
     xml += '        <component type="application" bom-ref="tool-aibom-generator">\n';
@@ -1589,6 +1726,15 @@ async function generateCycloneDXXml(analysisResult, selectedFindings) {
     }
     xml += `      <purl>pkg:github/${escapeXml(repository.owner)}/${escapeXml(repository.repo)}</purl>\n`;
     xml += '    </component>\n';
+    // R3: header self-descriptions (properties close the metadata sequence)
+    xml += '    <properties>\n';
+    xml += `      <property name="aibom:scope">repository static source analysis (${escapeXml(repository.fullName)}@${escapeXml(repository.scannedRef || 'main')})</property>\n`;
+    xml += '      <property name="aibom:completeness">partial — post-build source-level analysis; training-time observation not possible</property>\n';
+    xml += '      <property name="aibom:generation-context">after-build</property>\n';
+    xml += '      <property name="aibom:authorship">tool-generated</property>\n';
+    xml += '      <property name="aibom:graph-type">static dependency graph (source + manifest + SBOM analysis)</property>\n';
+    xml += `      <property name="aibom:attestation">${escapeXml(getAttestationState(selectedFindings, analysisResult))}</property>\n`;
+    xml += '    </properties>\n';
     xml += '  </metadata>\n';
     
     // Components (single assembly — the dependency graph must reference the
@@ -1613,6 +1759,14 @@ async function generateCycloneDXXml(analysisResult, selectedFindings) {
         }
         if (comp.scope) {
             xml += `      <scope>${escapeXml(comp.scope)}</scope>\n`;
+        }
+        // R1: verified artifact hashes (XSD order: hashes before licenses/purl)
+        if (comp.hashes && comp.hashes.length > 0) {
+            xml += '      <hashes>\n';
+            comp.hashes.forEach(hash => {
+                xml += `        <hash alg="${escapeXml(hash.alg)}">${escapeXml(hash.content)}</hash>\n`;
+            });
+            xml += '      </hashes>\n';
         }
         if (comp.purl) {
             xml += `      <purl>${escapeXml(comp.purl)}</purl>\n`;
@@ -1640,7 +1794,7 @@ async function generateCycloneDXXml(analysisResult, selectedFindings) {
             });
             xml += '      </properties>\n';
         }
-        
+
         xml += '    </component>\n';
     });
     
@@ -1756,6 +1910,14 @@ function generateSPDX(analysisResult, selectedFindings) {
             'prefix': 'ex',
             'namespace': namespace
         }],
+        // R3: header self-descriptions — scope + completeness declared on the
+        // document itself (OWASP "silence becomes a producer assertion")
+        'comment': [
+            `Scope: repository static source analysis (${repository.fullName}@${repository.scannedRef || 'main'})`,
+            'Completeness: partial — post-build source-level analysis; training-time observation not possible',
+            'Generation context: after-build',
+            'Authorship: tool-generated'
+        ].join('\n'),
         'element': [],
         'rootElement': []
     };
@@ -1779,6 +1941,8 @@ function generateSPDX(analysisResult, selectedFindings) {
         'homepage': repository.htmlUrl,
         'sourceInfo': `GitHub repository: ${repository.fullName}`,
         'primaryPurpose': 'application',
+        // R4: attestation presence state recorded explicitly
+        'comment': `Attestation state: ${getAttestationState(selectedFindings, analysisResult)}`,
         'externalIdentifier': [{
             'type': 'ExternalIdentifier',
             'externalIdentifierType': 'purl',
@@ -1791,7 +1955,11 @@ function generateSPDX(analysisResult, selectedFindings) {
     
     // Create relationships array
     const relationships = [];
-    
+    // R1: hashed model artifacts (matched to models by name tokens)
+    const artifactInfos = (selectedFindings || [])
+        .filter(f => f.artifactInfo)
+        .map(f => f.artifactInfo);
+
     // Add AI packages and libraries for each finding
     selectedFindings.forEach((finding, idx) => {
         if (finding.modelInfo) {
@@ -1827,6 +1995,16 @@ function generateSPDX(analysisResult, selectedFindings) {
             const evidenceLines = (finding.evidence || [])
                 .filter(ev => ev.file && ev.line && ev.line > 0)
                 .map(ev => `Detected at ${ev.file}:${ev.line}${ev.snippet ? ` — ${ev.snippet}` : ''}`);
+            // R1: attach verified artifact hash as an SPDX checksum
+            const artifact = findArtifactForModel(artifactInfos, modelName);
+            if (artifact) {
+                aiPackage.checksum = [{
+                    'type': 'Checksum',
+                    'algorithm': 'sha256',
+                    'checksumValue': artifact.sha256
+                }];
+                evidenceLines.push(`Artifact: ${artifact.path} (Git-LFS sha256 verified)`);
+            }
             if (evidenceLines.length > 0) {
                 aiPackage.comment = evidenceLines.join('\n');
             }
@@ -1939,6 +2117,10 @@ function generateSPDX(analysisResult, selectedFindings) {
                 'to': [aiId],
                 'completeness': 'noAssertion'
             });
+        } else if (finding.artifactInfo || finding.attestationInfo) {
+            // R1/R4: state-metadata findings — handled via checksums and the
+            // repository attestation comment; not packages of their own.
+            return;
         } else {
             // Regular library package with clean identity (no "Dependency: "
             // prefix, no placeholder version; version omitted when unknown).

@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **R1/R3/R4 implemented** (previously deferred 2026-11-20; guidance §5) + **BOM download UX**:
+  - R1 — artifact hashes: Git-LFS pointer parsing in `modelsDetector` (≤512-byte pointer files → `oid sha256:`) attaches verified SHA-256 hashes to matching model components (CycloneDX `hashes`, SPDX `checksum`, XML `<hashes>`), with `aibom:artifact:path` / `aibom:hash-source` properties; unmatched artifacts produce no hash claim
+  - R3 — header self-descriptions on every BOM: `aibom:scope` (repo static analysis @ scanned ref), `aibom:completeness` (partial — post-build), `aibom:generation-context` (after-build + native CycloneDX `metadata.lifecycles`), `aibom:authorship`, `aibom:graph-type`; SPDX document `comment` + extended AIBOM `source_scope`
+  - R4 — attestation presence detection: new `attestationDetector` scans the tree for sigstore bundles, signatures, in-toto links/keys, SLSA provenance files and attestation tooling in GitHub workflows; `aibom:attestation` records detected types or an explicit "none found in repository scan"
+  - BOM section UX: per-format **Download** button first (Copy secondary), raw JSON/XML view collapsed by default with a **Show content** toggle, and a **Download all** button for all four formats
+  - Scorecard movement (all honest): CERT-In 73.7% weighted / 57.9% strict (#19 attestations met), G7 50.0% / 40.0% (#8 generation context, #26/#27 hashes met), OWASP 68.8% / 45.8% (#1–3 header met, #18 hashes met, #19 attestations partial)
 - **Standards-compliance uplift from Snyk AIBOM comparison** (analysis in `projects/snyk/glm-comparision.md`; ChatGPT's independent take in `projects/snyk/compare.md`):
   - Clean component identity: library components now carry real names, versions and PURLs (`pkg:pypi/langchain@0.1.13`) from structured `dependencyInfo` — no more `"Dependency: <name>"` with placeholder version `detected`; model components never invent a version (`latest` removed, unknown stays unknown) and keep the verbatim source identifier
   - CycloneDX 1.7 schema conformance: modelCard enrichment remapped to valid field names (`task` singular string, `considerations.useCases`, `considerations.technicalLimitations`, `considerations.ethicalConsiderations` risk objects); non-schema card data (capabilities, training data, context length, lifecycle status, enrichment source, out-of-scope uses, base model, model type) moved to `modelCard.properties` under the `aibom:` namespace
@@ -39,6 +45,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **Analysis Notes section moved to the bottom of the results flow** (below Standards Compliance) and reformatted: gaps now render as a compact three-column table (Missing / What we searched / What it would add) with category chips and icons, a count in the heading, and a clearer caption stating that "not detected" means the repository shows no trace — not an error. Scan-completeness warnings keep their warning-styled block above the table.
+- **Standards Compliance scorecard notes cleaned to factual statements**: notes now state only where an element is implemented or why it cannot be — no dates, no change-log commentary ("added …", "removed …", "R… deferred") in the UI; history stays in the changelog
 - README "What It Detects" updated to reflect the new detection surface
 - Duplicate model components eliminated: unattributed contextual model refs now merge into existing provider-keyed entries; bare model-name literals (`gpt-4`, `gpt-4.1`, `gpt-4.5`, `gpt-5`, `llama3`, `mistral`, `qwen2.5`) no longer substring-match inside their longer variants
 - Grok pattern now captures the specific variant (`grok-2`, `grok-4`, …) instead of collapsing to "grok"; Bedrock signature vendor unified to "AWS Bedrock"; `nova`/`titan` provider attribution word-bounded

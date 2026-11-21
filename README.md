@@ -108,6 +108,8 @@ This project was developed with **Cursor IDE** and **Claude Code**. All AI-gener
 
 ## 📋 Output Formats
 
+BOM downloads are one click per format (Download button first in every tab, plus a **Download all** button in the section header); the raw JSON/XML view is collapsed by default and expands on demand via **Show content**.
+
 ### CycloneDX 1.7 (JSON & XML)
 - Individual components per dependency with PURL
 - ML model components with type classification
@@ -178,7 +180,13 @@ The **Standards Compliance** section (below the generated BOM) checks and scores
 
 **AIBOM standards scorecard (static, per tool version):** element-by-element conformance of the tool's AIBOM output surface against CERT-In Technical Guidelines Table 10 (19 elements), the G7 Cyber Group SBOM-for-AI minimum elements (50 elements), and the OWASP AIBOM Foundations checklist (24 points), with weighted (✅ 1.0 / 🟡 0.5 / ❌ 0) and strict (✅ only) scores, per-element status, and the structural (⛔) limits of a post-hoc, browser-only scanner. Full methodology and per-element citations: `guidance/guidance_details.md` §6.
 
-Current headline (2026-11-21 post-uplift): CERT-In **68.4%** weighted / 52.6% strict · G7 **44.0%** / 34.0% · OWASP **50.0%** / 29.2%. (The 2026-11-20 snapshot in `guidance/guidance_details.md` §6 read 65.8/45.0/50.0 weighted. Deltas are honest: model-version elements dropped to unmet because invented `latest` versions were removed per the Snyk-comparison review, while the out-of-scope-usage element rose to met — out-of-scope uses are now extracted from local model cards.)
+Current headline: CERT-In **73.7%** weighted / 57.9% strict · G7 **50.0%** / 40.0% · OWASP **68.8%** / 45.8% (weighted gives partial credit for partially met elements; strict counts fully met elements only). Per-element status lives in the Standards Compliance section; full methodology in `guidance/guidance_details.md` §6.
+
+### Beyond the baseline: R1 / R3 / R4
+
+- **R1 — artifact hashes**: model files stored as Git-LFS pointers (≤512-byte plain-text files with `oid sha256:…`) are parsed during scanning; the verified sha256 is attached to the matching model component (CycloneDX `hashes`, SPDX `checksum`) with `aibom:artifact:path` / `aibom:hash-source` properties. No token match → no hash claim (no invented integrity).
+- **R3 — header self-descriptions**: every BOM declares `aibom:scope` (repository static source analysis @ scanned ref), `aibom:completeness` (partial — post-build analysis), `aibom:generation-context` (after-build, plus native CycloneDX `metadata.lifecycles`), `aibom:authorship` (tool-generated) and `aibom:graph-type` — closing OWASP's "silence becomes a producer assertion" concern.
+- **R4 — attestation presence detection**: tree scan for sigstore bundles, signatures, in-toto links/keys, SLSA provenance files and attestation tooling in GitHub workflows; `aibom:attestation` records the detected types or an explicit "none found in repository scan" — never a silent clean bill of health.
 
 ### Identity, evidence and external services
 

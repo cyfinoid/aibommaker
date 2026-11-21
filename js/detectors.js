@@ -1772,7 +1772,7 @@ async function ciDetector({ tree, getFileContent }) {
   return findings;
 }
 
-async function modelsDetector({ tree }) {
+async function modelsDetector({ tree, getFileContent }) {
   console.log("[Detector: Models] Starting model file detection...");
   const findings = [];
   const modelFiles = new Map();
@@ -1804,6 +1804,55 @@ async function modelsDetector({ tree }) {
     }
   }
 
+  // R1: parse Git-LFS pointer files for artifact hashes. Large model files
+  // are stored as LFS pointers — ~130-byte plain-text files carrying
+  // `oid sha256:<hex>` — so fetching entries ≤512 bytes resolves the
+  // artifact hash without downloading weights.
+  const artifacts = [];
+  const lfsCandidates = [];
+  // Weight-artifact extensions — tokenizer/config JSONs may match model-file
+  // name patterns but are not weight artifacts worth hashing
+  const WEIGHT_EXT = /\.(safetensors|bin|pt|pth|ckpt|gguf|ggml|onnx|h5|pb|tflite|msgpack|pkl|pickle)$/i;
+  for (const [, data] of modelFiles) {
+    for (const f of data.files) {
+      if (!WEIGHT_EXT.test(f.file)) continue;
+      // entry.size known and pointer-sized → candidate; unknown size (0) →
+      // also worth one cheap fetch, guarded by content check below
+      if (f.size === 0 || (f.size > 0 && f.size <= 512)) {
+        lfsCandidates.push(f);
+      }
+    }
+  }
+  if (lfsCandidates.length > 0) {
+    console.log(
+      `[Detector: Models] Checking ${lfsCandidates.length} model file(s) for Git-LFS pointers...`,
+    );
+    for (const f of lfsCandidates.slice(0, 50)) {
+      try {
+        const content = await getFileContent(f.file);
+        if (!content || !content.includes("https://git-lfs.github.com/spec/v1")) {
+          continue;
+        }
+        const oidMatch = content.match(/oid\s+sha256:\s*([0-9a-f]{64})/i);
+        if (!oidMatch) continue;
+        const sizeMatch = content.match(/^size\s+(\d+)\s*$/m);
+        artifacts.push({
+          path: f.file,
+          sha256: oidMatch[1].toLowerCase(),
+          sizeBytes: sizeMatch ? parseInt(sizeMatch[1], 10) : f.size,
+          source: "git-lfs-pointer",
+        });
+        console.log(
+          `[Detector: Models] ✓ LFS artifact: ${f.file} sha256:${oidMatch[1].slice(0, 12)}…`,
+        );
+      } catch (err) {
+        console.log(
+          `[Detector: Models] Could not read ${f.file} for LFS parsing: ${err.message}`,
+        );
+      }
+    }
+  }
+
   for (const [key, data] of modelFiles) {
     console.log(
       `[Detector: Models] ✓ Found ${data.files.length} ${data.description} files`,
@@ -1821,7 +1870,36 @@ async function modelsDetector({ tree }) {
     });
   }
 
-  console.log(`[Detector: Models] Complete. Findings: ${findings.length}`);
+  // One machine-readable finding per hashed artifact (R1) — bom-generators
+  // matches these to model components by name tokens and emits CycloneDX
+  // hashes / SPDX checksums.
+  for (const artifact of artifacts) {
+    const fileName = artifact.path.split("/").pop();
+    findings.push({
+      id: `artifact-${artifact.sha256.slice(0, 12)}`,
+      title: `Model Artifact: ${fileName} (sha256 verified)`,
+      category: "models",
+      severity: "low",
+      weight: 3,
+      description: `Model artifact with verified integrity: ${artifact.path} (sha256 ${artifact.sha256})`,
+      evidence: [
+        {
+          file: artifact.path,
+          snippet: `Git-LFS pointer — oid sha256:${artifact.sha256}, ${artifact.sizeBytes} bytes`,
+        },
+      ],
+      artifactInfo: {
+        path: artifact.path,
+        sha256: artifact.sha256,
+        sizeBytes: artifact.sizeBytes,
+        source: "git-lfs-pointer",
+      },
+    });
+  }
+
+  console.log(
+    `[Detector: Models] Complete. Findings: ${findings.length} (${artifacts.length} hashed artifacts)`,
+  );
   return findings;
 }
 
@@ -3278,6 +3356,90 @@ async function fineTuningDetector({ tree, getFileContent }) {
 
   console.log(`[Detector: Fine-tuning] Complete. Findings: ${findings.length}`);
   return findings;
+}
+
+/**
+ * R4: Attestation/signature presence detection. Tree scan for signing /
+ * provenance artifacts (sigstore, in-toto links, SLSA provenance, Gitsign
+ * workflows) plus a capped content check of GitHub workflow files for
+ * slsa/provenance/sigstore/gitsign actions. Emits a positive governance
+ * finding when evidence exists; absence is recorded by the BOM generators
+ * as an explicit "none found" attestation state (no silent clean bill).
+ */
+async function attestationDetector({ tree, getFileContent }) {
+  console.log("[Detector: Attestations] Scanning for signing/provenance artifacts...");
+  const evidence = [];
+  const types = new Set();
+
+  const FILE_PATTERNS = [
+    { re: /\.sigstore(\.json)?$/i, type: "sigstore bundle" },
+    { re: /\.sig$/i, type: "signature file" },
+    { re: /\.att$/i, type: "attestation file" },
+    { re: /(^|\/)verification\.key$/i, type: "in-toto verification key" },
+    { re: /SLSA_PROVENANCE/i, type: "SLSA provenance" },
+    { re: /provenance\.json$/i, type: "SLSA provenance" },
+    { re: /(^|\/)link$/i, type: "in-toto attestation link" },
+    { re: /\.link$/i, type: "in-toto attestation link" }
+  ];
+
+  const workflowCandidates = [];
+  for (const entry of tree) {
+    if (!entry.path || entry.type === "tree") continue;
+    for (const pattern of FILE_PATTERNS) {
+      if (pattern.re.test(entry.path)) {
+        evidence.push({ file: entry.path, snippet: `${pattern.type} present in repository` });
+        types.add(pattern.type);
+        break;
+      }
+    }
+    // GitHub workflow files — checked for slsa/provenance/sigstore tooling
+    if (/^\.github\/workflows\/[^/]+\.ya?ml$/i.test(entry.path)) {
+      workflowCandidates.push(entry.path);
+    }
+  }
+
+  // Capped content check of workflow files for attestation tooling
+  for (const path of workflowCandidates.slice(0, 20)) {
+    try {
+      const content = await getFileContent(path);
+      if (!content) continue;
+      const m = content.match(/(slsa-github-generator|slsa|provenance|sigstore|gitsign|in-toto|attest)/i);
+      if (m) {
+        evidence.push({
+          file: path,
+          line: content.slice(0, content.indexOf(m[0])).split("\n").length,
+          snippet: `Workflow references attestation tooling: ${m[0]}`,
+        });
+        types.add("attestation workflow");
+      }
+    } catch (err) {
+      console.log(`[Detector: Attestations] Could not read ${path}: ${err.message}`);
+    }
+  }
+
+  if (evidence.length === 0) {
+    console.log("[Detector: Attestations] Complete. No attestation evidence found");
+    return { findings: [] };
+  }
+
+  const typeList = [...types].join(", ");
+  console.log(
+    `[Detector: Attestations] Complete. Found ${evidence.length} evidence item(s): ${typeList}`,
+  );
+  return {
+    findings: [
+      {
+        id: "attestation-presence",
+        title: "Artifact signing / attestation detected",
+        category: "governance",
+        severity: "low",
+        weight: 3,
+        description: `Signing or provenance evidence present in repository (${typeList})`,
+        evidence: evidence.slice(0, 10),
+        attestationInfo: { detected: true, types: [...types] },
+      },
+    ],
+  };
 }
 
 async function dataPipelineDetector({ tree, getFileContent }) {

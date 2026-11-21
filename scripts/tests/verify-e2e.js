@@ -79,6 +79,26 @@ const findings = [
     severity: 'medium', weight: 3,
     dependencyInfo: { name: 'langchain-community', version: 'unknown', ecosystem: 'python', source: 'source-import-analysis' },
     evidence: [{ file: 'app/utils/prepare_vectordb.py', line: 1, snippet: 'from langchain_community.document_loaders import PyPDFLoader' }]
+  },
+  {
+    // R1: hashed model artifact (matched to gemini-pro by name token)
+    id: 'artifact-3f79bb7b435b', category: 'models', title: 'Model Artifact: gemini-pro-7b.safetensors (sha256 verified)',
+    description: 'Model artifact with verified integrity: weights/gemini-pro-7b/model.safetensors',
+    severity: 'medium', weight: 3,
+    evidence: [{ file: 'weights/gemini-pro-7b/model.safetensors', snippet: 'Git-LFS pointer' }],
+    artifactInfo: {
+      path: 'weights/gemini-pro-7b/model.safetensors',
+      sha256: '3f79bb7b435b05321651daefd374cdc681dc06faa65e374e38337b88ca046dea',
+      sizeBytes: 1234567, source: 'git-lfs-pointer'
+    }
+  },
+  {
+    // R4: attestation presence
+    id: 'attestation-presence', category: 'governance', title: 'Artifact signing / attestation detected',
+    description: 'Signing or provenance evidence present in repository (sigstore bundle)',
+    severity: 'medium', weight: 3,
+    evidence: [{ file: 'model.sigstore.json', snippet: 'sigstore bundle present' }],
+    attestationInfo: { detected: true, types: ['sigstore bundle'] }
   }
 ];
 
@@ -99,9 +119,10 @@ const analysisResult = {
   };
 
   ctx.__analysis = analysisResult;
-ctx.__findings = findings;
+  ctx.__findings = findings;
   const cdx = await vm.runInContext('generateCycloneDXJson(__analysis, __findings)', ctx);
   const spdx = await vm.runInContext('generateSPDX(__analysis, __findings)', ctx);
+  const xml = await vm.runInContext('generateCycloneDXXml(__analysis, __findings)', ctx);
   const cdxDoc = JSON.parse(cdx);
 
   console.log('== library identity (P0 fix) ==');
@@ -180,6 +201,45 @@ ctx.__findings = findings;
   const depRefs = cdxDoc.dependencies.map(d => d.ref);
   check(new Set(depRefs).size === depRefs.length, 'dependency refs unique');
 
+  console.log('== R1: artifact hashes ==');
+  const geminiModel = models.find(m => m.name === 'gemini-pro');
+  check(Array.isArray(geminiModel.hashes) && geminiModel.hashes[0].alg === 'SHA-256' &&
+        geminiModel.hashes[0].content === '3f79bb7b435b05321651daefd374cdc681dc06faa65e374e38337b88ca046dea',
+    'matched artifact sha256 on model component');
+  const propNames0 = geminiModel.properties.map(p => p.name);
+  check(propNames0.includes('aibom:artifact:path') && propNames0.includes('aibom:hash-source'),
+    'artifact path + hash-source properties');
+  check(!models.find(m => m.name === 'models/embedding-001').hashes,
+    'unmatched model carries no hash claim');
+  check(!cdxDoc.components.some(c => (c.name || '').includes('Model Artifact')),
+    'artifact finding did not become a component');
+
+  console.log('== R3: header self-descriptions ==');
+  check(Array.isArray(cdxDoc.metadata.lifecycles) && cdxDoc.metadata.lifecycles[0].phase === 'post-build',
+    'metadata lifecycles post-build');
+  const metaProps = {};
+  (cdxDoc.metadata.properties || []).forEach(p => { metaProps[p.name] = p.value; });
+  check(metaProps['aibom:scope'] === 'repository static source analysis (KhanFaheed/chatAssistant@main)',
+    `aibom:scope (${metaProps['aibom:scope']})`);
+  check((metaProps['aibom:completeness'] || '').startsWith('partial'), 'aibom:completeness declared');
+  check(metaProps['aibom:generation-context'] === 'after-build', 'aibom:generation-context declared');
+  check(metaProps['aibom:authorship'] === 'tool-generated', 'aibom:authorship declared');
+  check(!!metaProps['aibom:graph-type'], 'aibom:graph-type declared');
+
+  console.log('== R4: attestation state ==');
+  check(metaProps['aibom:attestation'] === 'detected: sigstore bundle',
+    `attestation state recorded (${metaProps['aibom:attestation']})`);
+
+  console.log('== XML parity ==');
+  check(xml.includes('<lifecycle><phase>post-build</phase></lifecycle>'), 'XML lifecycles (R3)');
+  check(xml.includes('aibom:scope'), 'XML header properties (R3)');
+  check(xml.includes('aibom:attestation'), 'XML attestation property (R4)');
+  check(xml.includes('alg="SHA-256"'), 'XML model hashes (R1)');
+  check(xml.includes('<service bom-ref="service-google">'), 'XML services');
+  check(!xml.includes('<version>undefined</version>'), 'XML: no undefined version');
+  check((xml.match(/type="machine-learning-model"/g) || []).length === models.length,
+    'XML model components match JSON count (single assembly)');
+
   console.log('== compliance validation of new output ==');
   const rc = compliance.validateCycloneDXBom(cdx);
   for (const c of rc.checks.filter(c => c.status === 'fail')) console.log(`  [fail] ${c.id}: ${c.detail}`);
@@ -195,6 +255,11 @@ ctx.__findings = findings;
 
   console.log('== SPDX output ==');
   const spdxDoc = JSON.parse(spdx);
+  check((spdxDoc.comment || '').includes('Scope: repository static source analysis'),
+    'SPDX document scope comment (R3)');
+  const spdxRepo = spdxDoc.element.find(e => e.type === 'software_Package' && e.name === 'chatAssistant');
+  check((spdxRepo.comment || '').includes('Attestation state: detected: sigstore bundle'),
+    'SPDX repo attestation state (R4)');
   const spdxLibs = spdxDoc.element.filter(e => e.type === 'software_Package');
   check(spdxLibs.some(e => e.name === 'langchain' && e.packageVersion === '0.1.13'), 'SPDX langchain clean name+version');
   check(spdxLibs.some(e => e.name === 'langchain-community' && e.packageVersion === undefined), 'SPDX import pkg: no version');
@@ -202,6 +267,13 @@ ctx.__findings = findings;
   check(spdxLibs.every(e => e.packageVersion !== 'detected'), 'SPDX: no placeholder versions');
   const spdxAi = spdxDoc.element.filter(e => e.type === 'ai_AIPackage');
   check(spdxAi.every(e => e.packageVersion === undefined), 'SPDX: no invented AI package versions');
+  const spdxGemini = spdxAi.find(e => e.name === 'gemini-pro');
+  check(spdxGemini && spdxGemini.checksum && spdxGemini.checksum[0].checksumValue === '3f79bb7b435b05321651daefd374cdc681dc06faa65e374e38337b88ca046dea',
+    'SPDX model checksum (R1)');
+  check(spdxGemini.comment.includes('Artifact: weights/gemini-pro-7b/model.safetensors'),
+    'SPDX model artifact comment');
+  check(spdxDoc.element.every(e => !(e.name || '').startsWith('Model Artifact:')),
+    'SPDX: artifact finding did not become a package');
   check(spdxAi.some(e => e.comment && e.comment.includes('chatbot.py:23')), 'SPDX model evidence comment');
   check(spdxLibs.some(e => e.comment && e.comment.includes('prepare_vectordb.py:1')), 'SPDX import evidence comment');
   check(spdxLibs.some(e => e.externalIdentifier && e.externalIdentifier[0].identifier === 'pkg:pypi/langchain@0.1.13'),

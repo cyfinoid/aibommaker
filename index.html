@@ -10,7 +10,7 @@
             href="https://fonts.googleapis.com/css2?family=Sen:wght@400;700;800&display=swap"
             rel="stylesheet"
         />
-        <link rel="stylesheet" href="styles.css?v=0.0.4-4" />
+        <link rel="stylesheet" href="styles.css?v=0.0.4-5" />
         <script
             defer
             data-domain="cyfinoid.github.io"
@@ -169,30 +169,6 @@
             </section>
 
             <!-- Analysis Notes Section -->
-            <section id="analysis-notes-section" class="card hidden">
-                <div class="findings-header">
-                    <div>
-                        <h2 class="heading">Analysis Notes</h2>
-                        <p class="caption" style="margin-top: 0.5rem">
-                            Components we scanned for but did not find in this
-                            repository
-                        </p>
-                    </div>
-                    <div style="display: flex; align-items: center; gap: 1rem">
-                        <button
-                            id="collapse-analysis-notes"
-                            class="section-collapse-btn"
-                        >
-                            Collapse
-                        </button>
-                    </div>
-                </div>
-
-                <div class="collapsible-content" id="analysis-notes-content">
-                    <div id="analysis-notes-list"></div>
-                </div>
-            </section>
-
             <!-- BOM Section -->
             <section id="bom-section" class="card hidden">
                 <div
@@ -206,9 +182,18 @@
                     <h2 class="heading" style="margin-bottom: 0">
                         Generated AI BOM
                     </h2>
-                    <button id="collapse-bom" class="section-collapse-btn">
-                        Collapse
-                    </button>
+                    <div style="display: flex; gap: 0.5rem">
+                        <button
+                            id="download-all-bom"
+                            class="btn btn-primary"
+                            title="Download all four BOM formats"
+                        >
+                            Download all
+                        </button>
+                        <button id="collapse-bom" class="section-collapse-btn">
+                            Collapse
+                        </button>
+                    </div>
                 </div>
 
                 <div class="collapsible-content" id="bom-content-wrapper">
@@ -232,32 +217,33 @@
                         <div id="cyclonedx-json" class="tab-content active">
                             <div class="bom-actions">
                                 <button
-                                    class="btn btn-secondary"
-                                    data-action="copy"
-                                    data-format="cyclonedx-json"
-                                >
-                                    Copy to Clipboard
-                                </button>
-                                <button
                                     class="btn btn-primary"
                                     data-action="download"
                                     data-format="cyclonedx-json"
                                 >
                                     Download JSON
                                 </button>
+                                <button
+                                    class="btn btn-secondary"
+                                    data-action="copy"
+                                    data-format="cyclonedx-json"
+                                >
+                                    Copy to Clipboard
+                                </button>
+                                <button
+                                    class="btn btn-secondary"
+                                    data-action="toggle-content"
+                                    data-format="cyclonedx-json"
+                                    aria-expanded="false"
+                                >
+                                    Show content
+                                </button>
                             </div>
-                            <pre><code id="cyclonedx-json-preview" class="code-preview"></code></pre>
+                            <pre class="bom-preview collapsed"><code id="cyclonedx-json-preview" class="code-preview"></code></pre>
                         </div>
 
                         <div id="cyclonedx-xml" class="tab-content">
                             <div class="bom-actions">
-                                <button
-                                    class="btn btn-secondary"
-                                    data-action="copy"
-                                    data-format="cyclonedx-xml"
-                                >
-                                    Copy to Clipboard
-                                </button>
                                 <button
                                     class="btn btn-primary"
                                     data-action="download"
@@ -265,19 +251,27 @@
                                 >
                                     Download XML
                                 </button>
+                                <button
+                                    class="btn btn-secondary"
+                                    data-action="copy"
+                                    data-format="cyclonedx-xml"
+                                >
+                                    Copy to Clipboard
+                                </button>
+                                <button
+                                    class="btn btn-secondary"
+                                    data-action="toggle-content"
+                                    data-format="cyclonedx-xml"
+                                    aria-expanded="false"
+                                >
+                                    Show content
+                                </button>
                             </div>
-                            <pre><code id="cyclonedx-xml-preview" class="code-preview"></code></pre>
+                            <pre class="bom-preview collapsed"><code id="cyclonedx-xml-preview" class="code-preview"></code></pre>
                         </div>
 
                         <div id="spdx" class="tab-content">
                             <div class="bom-actions">
-                                <button
-                                    class="btn btn-secondary"
-                                    data-action="copy"
-                                    data-format="spdx"
-                                >
-                                    Copy to Clipboard
-                                </button>
                                 <button
                                     class="btn btn-primary"
                                     data-action="download"
@@ -285,12 +279,34 @@
                                 >
                                     Download SPDX
                                 </button>
+                                <button
+                                    class="btn btn-secondary"
+                                    data-action="copy"
+                                    data-format="spdx"
+                                >
+                                    Copy to Clipboard
+                                </button>
+                                <button
+                                    class="btn btn-secondary"
+                                    data-action="toggle-content"
+                                    data-format="spdx"
+                                    aria-expanded="false"
+                                >
+                                    Show content
+                                </button>
                             </div>
-                            <pre><code id="spdx-preview" class="code-preview"></code></pre>
+                            <pre class="bom-preview collapsed"><code id="spdx-preview" class="code-preview"></code></pre>
                         </div>
 
                         <div id="extended-aibom" class="tab-content">
                             <div class="bom-actions">
+                                <button
+                                    class="btn btn-primary"
+                                    data-action="download"
+                                    data-format="extended-aibom"
+                                >
+                                    Download Extended AIBOM
+                                </button>
                                 <button
                                     class="btn btn-secondary"
                                     data-action="copy"
@@ -299,11 +315,12 @@
                                     Copy to Clipboard
                                 </button>
                                 <button
-                                    class="btn btn-primary"
-                                    data-action="download"
+                                    class="btn btn-secondary"
+                                    data-action="toggle-content"
                                     data-format="extended-aibom"
+                                    aria-expanded="false"
                                 >
-                                    Download Extended AIBOM
+                                    Show content
                                 </button>
                             </div>
                             <div
@@ -331,7 +348,7 @@
                                     from Snyk and Trail of Bits.
                                 </p>
                             </div>
-                            <pre><code id="extended-aibom-preview" class="code-preview"></code></pre>
+                            <pre class="bom-preview collapsed"><code id="extended-aibom-preview" class="code-preview"></code></pre>
                         </div>
                     </div>
                 </div>
@@ -388,6 +405,32 @@
                     </div>
                     <div id="compliance-dynamic"></div>
                     <div id="compliance-scorecard"></div>
+                </div>
+            </section>
+
+            <!-- Analysis Notes (scan gaps + warnings) -->
+            <section id="analysis-notes-section" class="card hidden">
+                <div class="findings-header">
+                    <div>
+                        <h2 class="heading">Analysis Notes</h2>
+                        <p class="caption" style="margin-top: 0.5rem">
+                            Areas this scan actively searched with no result —
+                            gaps in the AIBOM, not errors. If present in the
+                            repository, they would be included.
+                        </p>
+                    </div>
+                    <div style="display: flex; align-items: center; gap: 1rem">
+                        <button
+                            id="collapse-analysis-notes"
+                            class="section-collapse-btn"
+                        >
+                            Collapse
+                        </button>
+                    </div>
+                </div>
+
+                <div class="collapsible-content" id="analysis-notes-content">
+                    <div id="analysis-notes-list"></div>
                 </div>
             </section>
 
@@ -495,14 +538,14 @@
         </div>
 
         <!-- JavaScript Application - Load in correct order -->
-        <script src="js/constants.js?v=0.0.4-4"></script>
-        <script src="js/utils.js?v=0.0.4-4"></script>
-        <script src="js/github-api.js?v=0.0.4-4"></script>
-        <script src="js/detectors.js?v=0.0.4-4"></script>
-        <script src="js/analyzer.js?v=0.0.4-4"></script>
-        <script src="js/bom-generators.js?v=0.0.4-4"></script>
-        <script src="js/compliance.js?v=0.0.4-4"></script>
-        <script src="js/extended-aibom-generator.js?v=0.0.4-4"></script>
-        <script src="js/ui.js?v=0.0.4-4"></script>
+        <script src="js/constants.js?v=0.0.4-5"></script>
+        <script src="js/utils.js?v=0.0.4-5"></script>
+        <script src="js/github-api.js?v=0.0.4-5"></script>
+        <script src="js/detectors.js?v=0.0.4-5"></script>
+        <script src="js/analyzer.js?v=0.0.4-5"></script>
+        <script src="js/bom-generators.js?v=0.0.4-5"></script>
+        <script src="js/compliance.js?v=0.0.4-5"></script>
+        <script src="js/extended-aibom-generator.js?v=0.0.4-5"></script>
+        <script src="js/ui.js?v=0.0.4-5"></script>
     </body>
 </html>

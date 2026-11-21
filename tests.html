@@ -388,10 +388,13 @@ section("compliance.js — AIBOM scorecard matches post-uplift implementation st
 {
   // guidance §6 headline (2026-11-20 snapshot): 65.8/47.4, 45.0/34.0, 50.0/29.2.
   // 2026-11-21 uplift deltas: invented model versions removed → CERT-In #2 and
-  // G7 #22 honestly unmet (CERT-In 12/19 = 63.2%); out-of-scope extraction
-  // added → CERT-In #16 met (13/19 = 68.4%, strict 10/19 = 52.6%). G7 22/50
-  // = 44.0%. OWASP unchanged.
-  const expected = { certin: [68.4, 52.6], g7: [44.0, 34.0], owasp: [50.0, 29.2] };
+  // G7 #22 honestly unmet; out-of-scope extraction added → CERT-In #16 met;
+  // R3 header self-descriptions → OWASP #1–3 + G7 #8 met; R1 Git-LFS hashes →
+  // G7 #26/#27 + OWASP #18 met; R4 attestation presence → CERT-In #19 met and
+  // OWASP #19 partial. Net: CERT-In 14/19 = 73.7% (strict 11/19 = 57.9%),
+  // G7 25/50 = 50.0% (strict 20/50 = 40.0%), OWASP 16.5/24 = 68.8%
+  // (strict 11/24 = 45.8%).
+  const expected = { certin: [73.7, 57.9], g7: [50.0, 40.0], owasp: [68.8, 45.8] };
   for (const doc of AIBOM_SCORECARD) {
     const s = computeScorecardStats(doc);
     const [w, st] = expected[doc.id];
@@ -475,6 +478,31 @@ section("bom-generators — library identity, purls, evidence (Snyk-comparison u
 }
 
 // ---------------------------------------------------------------------------
+section("R1/R4 — artifact-to-model matching + attestation state");
+{
+  assert(typeof findArtifactForModel === "function", "findArtifactForModel exposed");
+  const artifacts = [
+    { path: "weights/gemini-pro-7b/model.safetensors", sha256: "a".repeat(64), source: "git-lfs-pointer" },
+    { path: "models/embedding-001.bin", sha256: "b".repeat(64), source: "git-lfs-pointer" },
+    { path: "docs/readme.txt", sha256: "c".repeat(64), source: "git-lfs-pointer" }
+  ];
+  const m1 = findArtifactForModel(artifacts, "gemini-pro");
+  assert(m1 && m1.sha256 === "a".repeat(64), "artifact matched by name token (gemini)");
+  const m2 = findArtifactForModel(artifacts, "models/embedding-001");
+  assert(m2 && m2.sha256 === "b".repeat(64), "embedding artifact matched via embedding token");
+  assert(findArtifactForModel(artifacts, "qwen3-32b") === null, "no token overlap -> no hash claim");
+  assert(findArtifactForModel([], "gemini-pro") === null, "no artifacts -> null");
+
+  assert(typeof getAttestationState === "function", "getAttestationState exposed");
+  assert(getAttestationState([]) === "none found in repository scan",
+    "no attestation findings -> explicit none-found");
+  assert(getAttestationState([{ attestationInfo: { detected: true, types: ["sigstore bundle"] } }]) ===
+         "detected: sigstore bundle", "attestation types recorded");
+  assert(getAttestationState([{ category: "governance" }]) === "none found in repository scan",
+    "governance finding without attestationInfo -> none-found");
+}
+
+// ---------------------------------------------------------------------------
 section("detectors — aiImportsDetector: undeclared-but-imported AI packages");
 {
   assert(typeof aiImportsDetector === "function", "aiImportsDetector exposed");
@@ -510,6 +538,36 @@ section("detectors — aiImportsDetector: undeclared-but-imported AI packages");
     renderResults();
   }).catch((err) => {
     assert(false, "aiImportsDetector threw: " + err.message);
+    renderResults();
+  });
+}
+
+// ---------------------------------------------------------------------------
+section("R1 — modelsDetector parses Git-LFS pointers into hashed artifact findings");
+{
+  assert(typeof modelsDetector === "function", "modelsDetector exposed");
+  const pointer =
+    "version https://git-lfs.github.com/spec/v1\n" +
+    "oid sha256:3f79bb7b435b05321651daefd374cdc681dc06faa65e374e38337b88ca046dea\n" +
+    "size 1234567\n";
+  window.__lfsPromise = modelsDetector({
+    tree: [
+      { path: "weights/qwen2.5-7b/model.safetensors", size: 130 },
+      { path: "weights/qwen2.5-7b/config.json", size: 1024 },
+      { path: "README.md", size: 4096 }
+    ],
+    getFileContent: (f) => (f.endsWith("model.safetensors") ? pointer : "{}")
+  }).then((findings) => {
+    const artifactFinding = findings.find((f) => f.artifactInfo);
+    assert(!!artifactFinding, "LFS pointer parsed into artifact finding");
+    assert(artifactFinding.artifactInfo.sha256 === "3f79bb7b435b05321651daefd374cdc681dc06faa65e374e38337b88ca046dea",
+      "artifact sha256 extracted from oid line");
+    assert(artifactFinding.artifactInfo.sizeBytes === 1234567, "artifact size from pointer");
+    assert(artifactFinding.artifactInfo.source === "git-lfs-pointer", "artifact provenance recorded");
+    assert(!findings.some((f) => f.title && f.title.includes("config.json")), "non-model files not scanned");
+    renderResults();
+  }).catch((err) => {
+    assert(false, "modelsDetector LFS test threw: " + err.message);
     renderResults();
   });
 }

@@ -748,44 +748,60 @@ body {
     margin-bottom: 2rem;
 }
 
-.analysis-notes-grid {
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-    gap: 1rem;
-    margin-top: 1rem;
-}
-
-.analysis-note-card {
-    background-color: var(--bg-secondary);
-    border: 1px solid rgba(80, 200, 120, 0.2);
+.analysis-notes-tablewrap {
+    border: 1px solid var(--text-secondary);
     border-radius: 8px;
-    padding: 1.25rem;
-    transition: all 0.2s ease;
+    overflow-x: auto;
+    background: var(--bg-secondary);
 }
 
-.analysis-note-card:hover {
-    border-color: var(--text-primary);
-    box-shadow: 0 2px 8px rgba(80, 200, 120, 0.15);
+.analysis-notes-table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.88rem;
 }
 
-.analysis-note-header {
-    color: var(--text-primary);
-    font-size: 1rem;
-    margin-bottom: 0.75rem;
-    padding-bottom: 0.5rem;
-    border-bottom: 1px solid rgba(80, 200, 120, 0.2);
+.analysis-notes-table th {
+    text-align: left;
+    padding: 0.6rem 0.85rem;
+    color: var(--text-secondary);
+    font-weight: 600;
+    white-space: nowrap;
+    border-bottom: 1px solid var(--text-secondary);
 }
 
-.analysis-note-body p {
-    margin: 0.5rem 0;
-    font-size: 0.9rem;
+.analysis-notes-table td {
+    padding: 0.65rem 0.85rem;
+    border-bottom: 1px solid var(--text-secondary);
+    vertical-align: top;
+    color: var(--text-light);
+}
+
+.analysis-notes-table tr:last-child td {
+    border-bottom: none;
+}
+
+.analysis-category-chip {
+    display: inline-block;
+    padding: 0.1rem 0.5rem;
+    border-radius: 999px;
+    font-size: 0.7rem;
+    font-weight: 700;
+    letter-spacing: 0.03em;
+    color: var(--text-secondary);
+    border: 1px solid var(--text-secondary);
+    margin-bottom: 0.35rem;
+}
+
+.analysis-gap-item {
+    font-weight: 600;
+    color: var(--text-light);
+}
+
+.analysis-gap-searched,
+.analysis-gap-benefit {
     color: var(--text-secondary);
     line-height: 1.5;
-}
-
-.analysis-note-body strong {
-    color: var(--text-light);
-    font-weight: 600;
 }
 
 .info-message {
@@ -796,18 +812,13 @@ body {
     text-align: center;
 }
 
-[data-theme="light"] .analysis-note-card {
+[data-theme="light"] .analysis-notes-tablewrap {
     background-color: var(--bg-primary);
     border-color: rgba(45, 122, 79, 0.3);
 }
 
-[data-theme="light"] .analysis-note-card:hover {
-    border-color: var(--accent-green);
-    box-shadow: 0 2px 8px rgba(45, 122, 79, 0.15);
-}
-
-[data-theme="light"] .analysis-note-header {
-    border-bottom-color: rgba(45, 122, 79, 0.3);
+[data-theme="light"] .analysis-category-chip {
+    border-color: rgba(45, 122, 79, 0.4);
 }
 
 [data-theme="light"] .info-message {
@@ -1258,4 +1269,9 @@ body {
 
 [data-theme="light"] .status-pill.fail {
     color: #cf222e;
+}
+
+/* BOM tab: previews collapsed by default; actions row is primary surface */
+.bom-preview.collapsed {
+    display: none;
 }

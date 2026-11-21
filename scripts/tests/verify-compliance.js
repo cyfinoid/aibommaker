@@ -49,10 +49,11 @@ check(ctx.formatModelCardField({ description: 'desc text' }, { description: '' }
 
 // ------------------------------------------------------------------
 console.log('== scorecard math reproduces guidance headline ==');
-const expected = { certin: [68.4, 52.6], g7: [44.0, 34.0], owasp: [50.0, 29.2] };
+const expected = { certin: [73.7, 57.9], g7: [50.0, 40.0], owasp: [68.8, 45.8] };
 // Post-uplift (2026-11-21): invented model versions removed → CERT-In #2 and
-// G7 #22 honestly unmet; out-of-scope extraction added → CERT-In #16 met.
-// guidance §6 snapshot was 65.8/45.0/50.0 weighted.
+// G7 #22 honestly unmet; out-of-scope extraction added → CERT-In #16 met;
+// R3 header + R1 hashes + R4 attestation rows → met/partial as noted in
+// js/compliance.js header. guidance §6 snapshot was 65.8/45.0/50.0 weighted.
 for (const doc of compliance.AIBOM_SCORECARD) {
   const s = compliance.computeScorecardStats(doc);
   const [w, st] = expected[doc.id];
