@@ -31,6 +31,7 @@
 <script src="js/github-api.js"></script>
 <script src="js/detectors.js"></script>
 <script src="js/extended-aibom-generator.js"></script>
+<script src="js/compliance.js"></script>
 
 <script>
 "use strict";
@@ -280,6 +281,119 @@ section("Tree truncation plumbing");
 {
   assert(typeof wasLastTreeTruncated === "function", "wasLastTreeTruncated exposed from github-api.js");
   assert(wasLastTreeTruncated() === false, "defaults to false before any fetch");
+}
+
+// ---------------------------------------------------------------------------
+section("formatModelCardField — structured card fields render as text (models-embedding-001 regression)");
+{
+  assert(typeof formatModelCardField === "function", "formatModelCardField exposed from utils.js");
+  // Real card for Google models/embedding-001: intendedUse/limitations are
+  // objects — used to render as "[object Object]" in the findings UI.
+  const card = {
+    intendedUse: {
+      primaryUses: ["Semantic search and retrieval", "Document similarity"],
+      outOfScope: ["Text generation"]
+    },
+    limitations: { knownLimitations: ["Superseded by text-embedding-004", "2048-token input cap"] },
+    trainingData: { description: "Trained on diverse text data." }
+  };
+  const intended = formatModelCardField(card.intendedUse, { primaryUses: "", primaryUseCases: "", outOfScope: "Out of scope" });
+  assert(intended === "Semantic search and retrieval; Document similarity. Out of scope: Text generation",
+    "intendedUse object -> readable text with out-of-scope label");
+  assert(formatModelCardField(card.limitations, { knownLimitations: "" }) === "Superseded by text-embedding-004; 2048-token input cap",
+    "limitations.knownLimitations -> '; '-joined text");
+  assert(formatModelCardField(card.trainingData, { description: "" }) === "Trained on diverse text data.",
+    "trainingData.description passthrough");
+  assert(formatModelCardField("plain string") === "plain string", "plain string passthrough");
+  assert(formatModelCardField({ note: "legacy" }) === "legacy", "legacy .note string preferred");
+  assert(formatModelCardField(null) === "", "null -> empty string");
+  assert(formatModelCardField(undefined, {}) === "", "undefined -> empty string");
+  assert(formatModelCardField({ noReadables: { x: 1 } }) === "", "object without readable strings -> empty string");
+  assert(formatModelCardField(["a", "b"]) === "a; b", "bare string array joined");
+}
+
+// ---------------------------------------------------------------------------
+section("compliance.js — CycloneDX 1.7 / SPDX 3.0.1 / NTIA validators");
+{
+  const goodCdx = {
+    bomFormat: "CycloneDX", specVersion: "1.7", version: 1,
+    serialNumber: "urn:uuid:123e4567-e89b-12d3-a456-426614174000",
+    metadata: {
+      timestamp: "2026-11-21T00:00:00.000Z",
+      tools: { components: [{ type: "application", "bom-ref": "tool", name: "AI BOM Generator", version: "1.0.0" }] },
+      component: { type: "application", "bom-ref": "repo", name: "repo", purl: "pkg:github/o/r" }
+    },
+    components: [
+      { type: "machine-learning-model", "bom-ref": "m1", name: "m", version: "latest", purl: "pkg:ml/x/m", author: "Prov" },
+      { type: "library", "bom-ref": "l1", name: "lib", version: "1.0.0", purl: "pkg:pypi/lib@1.0.0" }
+    ],
+    dependencies: [{ ref: "repo", dependsOn: ["m1", "l1"] }]
+  };
+  const goodText = JSON.stringify(goodCdx);
+  const rc = validateCycloneDXBom(goodText);
+  assert(rc.standard === "CycloneDX 1.7", "CycloneDX report labels the standard");
+  assert(rc.checks.every(c => c.status !== "fail"), "well-formed CycloneDX doc: no failed checks");
+  assert(validateCycloneDXBom("{ not json").checks[0].status === "fail", "invalid JSON -> fail");
+  assert(validateCycloneDXBom("// No findings selected").checks[0].detail.includes("No findings"),
+    "placeholder output handled");
+  const bad = JSON.parse(goodText);
+  bad.serialNumber = "nope"; bad.metadata.timestamp = "nope";
+  bad.components[0]["bom-ref"] = "l1"; bad.dependencies[0].dependsOn.push("ghost");
+  const rb = validateCycloneDXBom(JSON.stringify(bad));
+  assert(["serial", "timestamp", "bom-ref", "dependency-refs"].every(id => rb.checks.find(c => c.id === id).status === "fail"),
+    "bad serial/timestamp/dupe-ref/unresolved-dep all detected");
+
+  const rn = checkNtiaMinimumElements(goodText);
+  assert(rn.checks.find(c => c.id === "ntia-name").status === "pass", "NTIA: names present -> pass");
+  assert(rn.checks.find(c => c.id === "ntia-version").status === "pass", "NTIA: versions present (placeholder noted) -> pass");
+  assert(rn.checks.find(c => c.id === "ntia-supplier").status === "warn" &&
+         rn.checks.find(c => c.id === "ntia-supplier").detail.includes("1/2"),
+    "NTIA: partial supplier attribution -> warn with honest tally");
+  assert(rn.checks.find(c => c.id === "ntia-author").status === "warn", "NTIA: tool-only authorship -> honest warn");
+  goodCdx.components[1].supplier = { name: "PSF" };
+  assert(checkNtiaMinimumElements(JSON.stringify(goodCdx)).checks.find(c => c.id === "ntia-supplier").status === "pass",
+    "NTIA: full attribution -> pass");
+
+  const goodSpdx = {
+    "@context": "https://spdx.org/rdf/3.0.1/spdx-context.jsonld",
+    "@id": "https://x/SpdxDocument", type: "SpdxDocument", spdxId: "https://x/SpdxDocument",
+    creationInfo: { type: "CreationInfo", specVersion: "3.0.1", created: "2026-11-21T00:00:00.000Z", createdBy: ["Tool: t-1"] },
+    name: "AI BOM",
+    element: [
+      { "@id": "https://x/Repo", type: "software_Package", spdxId: "https://x/Repo", name: "repo" },
+      { "@id": "https://x/Ai", type: "software_Package", spdxId: "https://x/Ai", name: "m" },
+      { "@id": "https://x/Rel", type: "Relationship", spdxId: "https://x/Rel", relationshipType: "dependsOn", from: "https://x/Repo", to: ["https://x/Ai"] }
+    ],
+    rootElement: ["https://x/Repo"]
+  };
+  const rs = validateSpdxBom(JSON.stringify(goodSpdx));
+  assert(rs.checks.every(c => c.status !== "fail"), "well-formed SPDX 3.0.1 doc: no failed checks");
+  const badSpdx = JSON.parse(JSON.stringify(goodSpdx));
+  badSpdx.creationInfo.specVersion = "3.0.0";
+  badSpdx.rootElement = ["https://x/Missing"];
+  badSpdx.element[2].to = ["https://x/Ghost"];
+  const rsb = validateSpdxBom(JSON.stringify(badSpdx));
+  assert(rsb.checks.find(c => c.id === "creation-spec").status === "fail", "wrong specVersion detected");
+  assert(rsb.checks.find(c => c.id === "root-elements").status === "fail", "dangling rootElement detected");
+  assert(rsb.checks.find(c => c.id === "relationships").status === "fail", "dangling relationship target detected");
+
+  const reports = buildComplianceReports({ "cyclonedx-json": goodText, "spdx": JSON.stringify(goodSpdx) });
+  assert(reports.length === 3, "buildComplianceReports -> CycloneDX + NTIA + SPDX");
+  assert(buildComplianceReports({}).every(r => r.checks[0].status === "fail"), "empty BOM map -> fail checks");
+}
+
+// ---------------------------------------------------------------------------
+section("compliance.js — AIBOM scorecard reproduces guidance §6 headline");
+{
+  const expected = { certin: [65.8, 47.4], g7: [45.0, 34.0], owasp: [50.0, 29.2] };
+  for (const doc of AIBOM_SCORECARD) {
+    const s = computeScorecardStats(doc);
+    const [w, st] = expected[doc.id];
+    assert(s.weightedPct === w, `${doc.id}: weighted ${s.weightedPct}% === documented ${w}%`);
+    assert(s.strictPct === st, `${doc.id}: strict ${s.strictPct}% === documented ${st}%`);
+    assert(s.total === doc.rows.length, `${doc.id}: ${s.total} rows scored`);
+    assert(s.met + s.partial + s.unmet === s.total, `${doc.id}: every row classified`);
+  }
 }
 
 // ---------------------------------------------------------------------------

@@ -9,6 +9,49 @@ below; drop sections that genuinely don't apply.
 
 ---
 
+## 2026-11-21 — Fix `[object Object]` in model card display + add Standards Compliance tab
+
+**Summary:** Two user-reported items from a KhanFaheed/chatAssistant scan: (1) the Model Card Information panel rendered `[object Object]` for Intended Use / Limitations, and (2) the previously produced standards-compliance scorecard (guidance §6) was not visible anywhere in the UI. Fixed the stringification bug via a shared `formatModelCardField` helper, and added a "Standards Compliance" tab to the BOM section backed by a new pure-logic module `js/compliance.js`.
+
+**Why:** Local model card JSONs store `intendedUse`/`limitations` as structured objects (`{primaryUses, outOfScope}` / `{knownLimitations}` — see `modelcards/google/models-embedding-001.json`), but `js/ui.js:281-282` and `js/bom-generators.js:494/499` used the pattern `field.note || field`, assuming a flat string with an optional `note`. No card carries `note`, so the raw object fell through and stringified as `[object Object]`. The compliance scorecard from the 2026-11-20 guidance work existed only as Markdown.
+
+**What changed:**
+- `js/utils.js`: `formatModelCardField(value, labels)` — renders strings, arrays, `{note}`, `{primaryUses, outOfScope}`, `{knownLimitations}`, `{description}` shapes as human-readable text; labeled sub-objects (e.g. `Out of scope: …`) supported; empty string when nothing readable.
+- `js/ui.js`: Model Card Information panel uses the helper for intendedUse/limitations/trainingData (escaped at the HTML sink, empty render suppressed); new `renderComplianceTab()` + report/scorecard HTML builders (native `<details>` sections, status pills), called from both `regenerateBOMs()` branches; the no-findings branch now writes placeholders into `generatedBOMs` so the compliance tab (and copy/download) can never validate stale documents from a previous selection.
+- `js/bom-generators.js`: modelCard extension (`intendedUse`, `limitations`, `trainingData`) now embeds formatted strings instead of raw objects.
+- `js/compliance.js` (new): pure validators `validateCycloneDXBom` (10 checks), `validateSpdxBom` (10 checks), `checkNtiaMinimumElements` (8 checks), `parseBomJson` defensive parse; static `AIBOM_SCORECARD` (CERT-In 19 + G7 50 + OWASP 24 rows transcribed from `guidance/guidance_details.md` §6.1–§6.3 with structural ⛔ markers) and `computeScorecardStats` (weighted ✅1.0/🟡0.5/❌0 + strict ✅-only; reproduces the documented headline 65.8/47.4, 45.0/34.0, 50.0/29.2). Node `module.exports` guard for test tooling.
+- `index.html`: new tab button + `#compliance` tab content; `compliance.js` script include; cache-bust `?v=0.0.4-4` on scripts **and** `styles.css`.
+- `styles.css`: `.compliance-*` report/table/cluster/headline styles, `.status-pill.pass|warn|fail` with light-theme variants.
+- `tests.html`: `compliance.js` loaded; 38 new assertions (formatter regression incl. the embedding-001 shapes, validator pass/fail matrices, scorecard-vs-guidance headline equality).
+- `README.md`: "Standards Compliance (report tab)" section under Output Formats. `CHANGELOG.md` + this file updated.
+
+**How / commands run:**
+```
+sudo apt-get update && sudo apt-get install -y --no-install-recommends nodejs  # node v22.22.1 (none in container)
+node --check js/{compliance,utils,ui,bom-generators}.js                        # syntax OK
+# pure-function verification: 60 assertions over formatModelCardField,
+# validateCycloneDXBom/checkNtiaMinimumElements/validateSpdxBom, scorecard math,
+# buildComplianceReports  -> ALL VERIFICATIONS PASSED
+# end-to-end: real generators loaded in a vm sandbox (fetch shimmed to modelcards/
+# on disk, crypto.webcrypto provided), findings mirroring the chatAssistant scan
+# (Google models/embedding-001 @ prepare_vectordb.py:52 + langchain dep):
+#   generateCycloneDXJson + generateSPDX executed; modelCard.intendedUse in the
+#   emitted BOM is readable text; both real documents pass all validator checks.
+# tests.html harness executed headlessly (vm + DOM stubs): 159 passed / 1 failed;
+#   the failure ("live line still captured") is pre-existing — reproduced on the
+#   stashed original tree (121 passed / 1 failed there).
+```
+
+**Verification notes:**
+- Scorecard math computed from transcribed rows equals the documented headline percentages exactly (single source of truth; guards future transcription drift).
+- NTIA supplier check counts `supplier|author|publisher|group` — the real generated doc attributes models via CycloneDX `author`, which an earlier draft missed (showed 0/2); e2e run caught it.
+- Fresh-eyes review findings, all fixed: `styles.css` cache-bust was missed (styles changed, scripts bumped); the no-findings branch validated stale `generatedBOMs` from a previous selection (placeholders now written before `renderComplianceTab`); formatted model-card text now escaped at the HTML sinks; `trainingData` routed through `formatModelCardField` in bom-generators too; NTIA identifier detail no longer conflates missing refs with duplicates; README honesty sentence corrected (partial attribution reports PARTIAL with tally, not MISSING); changelog check/assertion counts corrected (10 SPDX checks, 38 assertions); dead `.compliance-cluster-cont` class removed, `.compliance-headline` styled.
+- Pre-existing failure flagged, not fixed (out of scope): `extractContextualModelRefs` does not capture bare string-constant live lines (`const y = "gemini-2.5-pro";`) — fails identically at git HEAD; needs a deliberate detector decision (bare constants risk false positives), tracked here for a follow-up.
+
+**Files:** `js/utils.js`, `js/ui.js`, `js/bom-generators.js`, `js/compliance.js` (new), `index.html`, `styles.css`, `tests.html`, `README.md`, `CHANGELOG.md`, `DETAILED_CHANGELOG.md`.
+
+---
+
 ## 2026-11-20 — Implement detection gap fixes from reference-project sync
 
 **Summary:** Implemented the highest-priority gaps from `mdfiles/GAP_ANALYSIS.md` in pure HTML/JS/CSS: 27 new provider/agent/guardrail/observability signatures, generic model-kwargs/env-default extraction, Bedrock ARN + Ollama tag normalization, go/Java/Rust manifest fallback parsing, notebook support, A2A agent cards + Semantic Kernel activation, digest-pinned-image provenance, OWASP LLM Top-10 exposure assessment, and a tree-truncation warning. Shipped with `tests.html` (browser test suite). User removed the duplicate `owasp-aibom-generator` checkout and re-synced `xbom` (now at `2b092b7`) before implementation.

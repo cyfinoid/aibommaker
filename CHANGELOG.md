@@ -9,6 +9,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Added
 
+- **Standards Compliance tab** (new `js/compliance.js`, rendered in the BOM section): the freshly generated CycloneDX 1.7 JSON and SPDX 3.0.1 JSON-LD are validated field-by-field against their specs (serialNumber URN, timestamps, bom-ref uniqueness, dependency/root/relationship ref resolution, `@context`, `creationInfo`), the NTIA 2021 minimum-elements baseline is checked honestly (pass/warn/fail per element, including supplier and author gaps), and the AIBOM standards scorecard from `guidance/guidance_details.md` §6 — CERT-In Table 10, G7 SBOM-for-AI minimum elements, OWASP AIBOM Foundations, weighted + strict — is now visible element-by-element in the UI instead of living only in the docs.
+
+### Fixed
+
+- **`[object Object]` in Model Card Information**: structured card fields (`intendedUse` as `{primaryUses, outOfScope}`, `limitations` as `{knownLimitations}`) rendered as `[object Object]` in the findings UI (e.g. Google `models/embedding-001`) and were embedded as raw objects in generated BOMs. New `formatModelCardField` helper in `js/utils.js` renders them as readable text ("Semantic search and retrieval; … . Out of scope: …") in both `js/ui.js` and the `js/bom-generators.js` modelCard extension.
+
 - **Detection coverage from 2026-11 reference-project sync** (details in `mdfiles/GAP_ANALYSIS.md`, test suite in `tests.html`):
   - 16 new LLM provider/gateway signatures (Cohere, Mistral, Groq, xAI Grok, Together, Perplexity, Fireworks, Replicate, AI21, Stability, Aleph Alpha, Azure OpenAI, AWS Bedrock, Vertex AI, OpenRouter, LiteLLM) with SDK packages, code patterns, and API endpoints
   - 11 new agent-framework signatures (LangGraph, Google ADK, OpenAI Agents SDK, PydanticAI, SmolAgents, Strands, DeepAgents, Haystack, DSPy, Instructor, Semantic Kernel) plus AutoGen ecosystem variants

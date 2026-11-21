@@ -170,6 +170,16 @@ A comprehensive format that enhances standard BOMs with industry best practices 
 
 > **Note:** Analysis notes are **scan-specific** - they list what we actively searched for in THIS repository but didn't find. Not philosophical limitations, but practical gaps that could be filled.
 
+### Standards Compliance (report tab)
+
+The **Standards Compliance** tab in the BOM section checks and scores the output in two halves:
+
+**Generated documents (dynamic, per scan):** the freshly generated CycloneDX JSON and SPDX JSON-LD are validated field-by-field against their respective specifications — required/recommended fields (`serialNumber` URN format, `metadata.timestamp`, `bom-ref` uniqueness, dependency-ref resolution, `@context`, `creationInfo`, element/relationship integrity) — plus the [NTIA "The Minimum Elements For An SBOM" (2021)](https://www.ntia.gov/report/2021/minimum-elements-software-supply-chain-security) seven-element baseline (supplier, name, version, unique identifiers, relationships, author, timestamp). Results are honest: satisfied checks report **PASS**, partially satisfied checks report **PARTIAL** with the exact tally (e.g. "1/2 components carry supplier attribution"), and missing required fields report **MISSING** — no blanket pass.
+
+**AIBOM standards scorecard (static, per tool version):** element-by-element conformance of the tool's AIBOM output surface against CERT-In Technical Guidelines Table 10 (19 elements), the G7 Cyber Group SBOM-for-AI minimum elements (50 elements), and the OWASP AIBOM Foundations checklist (24 points), with weighted (✅ 1.0 / 🟡 0.5 / ❌ 0) and strict (✅ only) scores, per-element status, and the structural (⛔) limits of a post-hoc, browser-only scanner. Full methodology and per-element citations: `guidance/guidance_details.md` §6.
+
+Current headline (2026-11-20 assessment): CERT-In **65.8%** weighted / 47.4% strict · G7 **45.0%** / 34.0% · OWASP **50.0%** / 29.2%.
+
 ## 🚀 How It Works
 
 1. **SBOM-First Approach**: Leverages GitHub's Dependency Graph SBOM API for efficient, standardized dependency detection

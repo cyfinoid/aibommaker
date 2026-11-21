@@ -273,14 +273,25 @@ async function renderFindings(findings, repoUrl) {
         let modelCardHtml = '';
         if (finding.modelInfo && finding.modelInfo.modelCardData) {
             const modelCard = finding.modelInfo.modelCardData;
+            const intendedUseText = formatModelCardField(modelCard.intendedUse, {
+                primaryUses: '',
+                primaryUseCases: '',
+                outOfScope: 'Out of scope'
+            });
+            const limitationsText = formatModelCardField(modelCard.limitations, {
+                knownLimitations: ''
+            });
+            const trainingDataText = formatModelCardField(modelCard.trainingData, {
+                description: ''
+            });
             modelCardHtml = `
                 <div class="model-card-section">
                     <h4>📋 Model Card Information</h4>
                     <div class="model-card-content">
-                        ${modelCard.description ? `<p><strong>Description:</strong> ${modelCard.description}</p>` : ''}
-                        ${modelCard.intendedUse ? `<p><strong>Intended Use:</strong> ${modelCard.intendedUse.note || modelCard.intendedUse}</p>` : ''}
-                        ${modelCard.limitations ? `<p><strong>Limitations:</strong> ${modelCard.limitations.note || modelCard.limitations}</p>` : ''}
-                        ${modelCard.trainingData ? `<p><strong>Training Data:</strong> ${modelCard.trainingData.description || modelCard.trainingData}</p>` : ''}
+                        ${modelCard.description ? `<p><strong>Description:</strong> ${escapeHtml(String(modelCard.description))}</p>` : ''}
+                        ${intendedUseText ? `<p><strong>Intended Use:</strong> ${escapeHtml(intendedUseText)}</p>` : ''}
+                        ${limitationsText ? `<p><strong>Limitations:</strong> ${escapeHtml(limitationsText)}</p>` : ''}
+                        ${trainingDataText ? `<p><strong>Training Data:</strong> ${escapeHtml(trainingDataText)}</p>` : ''}
                         ${modelCard.architecture && modelCard.architecture.contextLength ? `<p><strong>Context Length:</strong> ${modelCard.architecture.contextLength}</p>` : ''}
                         ${modelCard.capabilities && modelCard.capabilities.length > 0 ? `<p><strong>Capabilities:</strong> ${modelCard.capabilities.join(', ')}</p>` : ''}
                         ${modelCard.ethicalConsiderations ? `
@@ -716,9 +727,18 @@ async function regenerateBOMs() {
     console.log(`📊 Selected Findings: ${selected.length}`);
     
     if (selected.length === 0) {
-        renderBOMPreview('cyclonedx-json', '// No findings selected');
-        renderBOMPreview('cyclonedx-xml', '<!-- No findings selected -->');
-        renderBOMPreview('spdx', '// No findings selected');
+        // Keep generatedBOMs in sync with the previews so the compliance tab
+        // (and copy/download) never validate stale documents from a previous
+        // selection.
+        generatedBOMs['cyclonedx-json'] = '// No findings selected';
+        generatedBOMs['cyclonedx-xml'] = '<!-- No findings selected -->';
+        generatedBOMs['spdx'] = '// No findings selected';
+        generatedBOMs['extended-aibom'] = '// No findings selected';
+        renderBOMPreview('cyclonedx-json', generatedBOMs['cyclonedx-json']);
+        renderBOMPreview('cyclonedx-xml', generatedBOMs['cyclonedx-xml']);
+        renderBOMPreview('spdx', generatedBOMs['spdx']);
+        renderBOMPreview('extended-aibom', generatedBOMs['extended-aibom']);
+        renderComplianceTab();
         console.log('[BOM] ⚠️  No findings selected, showing placeholder');
         console.log('📄'.repeat(40) + '\n');
         return;
@@ -755,10 +775,149 @@ async function regenerateBOMs() {
         console.log(`\n[BOM] ⏱️  Generation time: ${elapsed}ms`);
         console.log(`[BOM] 📊 Total size: ${(parseFloat(jsonSize) + parseFloat(xmlSize) + parseFloat(spdxSize)).toFixed(2)} KB`);
         console.log('📄'.repeat(40) + '\n');
+
+        renderComplianceTab();
     } catch (error) {
         console.error('[BOM] ❌ Error generating BOMs:', error);
         console.log('📄'.repeat(40) + '\n');
         showToast('Error generating BOM: ' + error.message, 'error');
+    }
+}
+
+// ============================================================================
+// STANDARDS COMPLIANCE TAB
+// ============================================================================
+
+const COMPLIANCE_STATUS_META = {
+    pass:   { icon: '✓', cls: 'pass',  label: 'PASS' },
+    met:    { icon: '✓', cls: 'pass',  label: 'MET' },
+    warn:   { icon: '△', cls: 'warn',  label: 'PARTIAL' },
+    partial:{ icon: '△', cls: 'warn',  label: 'PARTIAL' },
+    fail:   { icon: '✗', cls: 'fail',  label: 'MISSING' },
+    unmet:  { icon: '✗', cls: 'fail',  label: 'MISSING' }
+};
+
+function complianceStatusPill(status) {
+    const meta = COMPLIANCE_STATUS_META[status] || COMPLIANCE_STATUS_META.fail;
+    return `<span class="status-pill ${meta.cls}">${meta.icon} ${meta.label}</span>`;
+}
+
+function complianceReportHtml(report, index) {
+    const passed = report.checks.filter((c) => c.status === 'pass').length;
+    const warned = report.checks.filter((c) => c.status === 'warn').length;
+    const failed = report.checks.filter((c) => c.status === 'fail').length;
+    const open = index === 0 ? ' open' : '';
+    const rows = report.checks.map((check) => `
+        <tr>
+            <td class="compliance-check-label">${check.label}</td>
+            <td>${complianceStatusPill(check.status)}</td>
+            <td class="compliance-check-detail">${escapeHtml(check.detail || '')}</td>
+        </tr>
+    `).join('');
+    return `
+        <details class="compliance-report" ${open}>
+            <summary>
+                <strong>${report.standard}</strong>
+                <span class="compliance-report-format">(${report.format})</span>
+                <span class="compliance-report-tally">
+                    ${passed} pass · ${warned} partial · ${failed} missing
+                </span>
+            </summary>
+            <table class="compliance-table">
+                <tbody>${rows}</tbody>
+            </table>
+        </details>
+    `;
+}
+
+function complianceScorecardHtml() {
+    const headline = AIBOM_SCORECARD.map((docEntry) => {
+        const stats = computeScorecardStats(docEntry);
+        return `
+            <tr>
+                <td>${docEntry.name}</td>
+                <td><strong>${stats.weightedPct.toFixed(1)}%</strong> (${stats.score}/${stats.total})</td>
+                <td>${stats.strictPct.toFixed(1)}% (${stats.met}/${stats.total})</td>
+                <td>${complianceStatusPill('met')} ${stats.met}</td>
+                <td>${complianceStatusPill('partial')} ${stats.partial}</td>
+                <td>${complianceStatusPill('unmet')} ${stats.unmet}${stats.structural ? ` <span class="compliance-structural">(${stats.structural} structural)</span>` : ''}</td>
+            </tr>
+        `;
+    }).join('');
+
+    const details = AIBOM_SCORECARD.map((docEntry) => {
+        const stats = computeScorecardStats(docEntry);
+        let lastCluster = null;
+        const rows = docEntry.rows.map((row) => {
+            const clusterCell = row.cluster && row.cluster !== lastCluster
+                ? `<td class="compliance-cluster">${escapeHtml(row.cluster)}</td>`
+                : '<td class="compliance-cluster"></td>';
+            if (row.cluster) lastCluster = row.cluster;
+            const structural = row.structural
+                ? ' <span class="compliance-structural" title="Not derivable by a post-hoc, browser-only scanner">⛔</span>'
+                : '';
+            return `
+                <tr>
+                    <td class="compliance-num">${row.n}</td>
+                    ${docEntry.clusters ? clusterCell : ''}
+                    <td class="compliance-check-label">${escapeHtml(row.element)}</td>
+                    <td>${complianceStatusPill(row.status)}${structural}</td>
+                    <td class="compliance-check-detail">${escapeHtml(row.note || '')}</td>
+                </tr>
+            `;
+        }).join('');
+        const columns = docEntry.clusters
+            ? '<th>#</th><th>Cluster</th><th>Element</th><th>Status</th><th>Where / Why</th>'
+            : '<th>#</th><th>Element</th><th>Status</th><th>Where / Why</th>';
+        return `
+            <details class="compliance-report">
+                <summary>
+                    <strong>${docEntry.name}</strong>
+                    <span class="compliance-report-tally">
+                        weighted ${stats.weightedPct.toFixed(1)}% · strict ${stats.strictPct.toFixed(1)}%
+                    </span>
+                </summary>
+                <table class="compliance-table">
+                    <thead><tr>${columns}</tr></thead>
+                    <tbody>${rows}</tbody>
+                </table>
+                <p class="compliance-source">Source: ${docEntry.ref} · scoring ✅ 1.0 / 🟡 0.5 / ❌ 0 · ⛔ = structural limit for a post-hoc, browser-only scanner</p>
+            </details>
+        `;
+    }).join('');
+
+    return `
+        <h4 class="compliance-heading">AIBOM standards scorecard — this tool's output surface</h4>
+        <table class="compliance-table compliance-headline">
+            <thead>
+                <tr><th>Standard</th><th>Weighted</th><th>Strict</th><th colspan="3">Elements</th></tr>
+            </thead>
+            <tbody>${headline}</tbody>
+        </table>
+        ${details}
+    `;
+}
+
+/**
+ * Render the Standards Compliance tab: dynamic validation of the freshly
+ * generated CycloneDX/SPDX/NTIA documents plus the static AIBOM scorecard.
+ */
+function renderComplianceTab() {
+    const dynamicEl = document.getElementById('compliance-dynamic');
+    const scorecardEl = document.getElementById('compliance-scorecard');
+    if (!dynamicEl || !scorecardEl) return;
+
+    try {
+        const reports = buildComplianceReports(generatedBOMs);
+        dynamicEl.innerHTML = `
+            <h4 class="compliance-heading">Generated documents</h4>
+            ${reports.map((report, index) => complianceReportHtml(report, index)).join('')}
+        `;
+        scorecardEl.innerHTML = complianceScorecardHtml();
+    } catch (error) {
+        console.error('[Compliance] Failed to render compliance tab:', error);
+        dynamicEl.innerHTML = `<p class="compliance-error">Compliance check failed: ${escapeHtml(error.message)}</p>`;
+        scorecardEl.innerHTML = '';
     }
 }
 

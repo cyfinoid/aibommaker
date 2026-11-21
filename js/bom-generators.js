@@ -491,17 +491,25 @@ async function createMLModelComponents(findings) {
 
                     // Intended use
                     if (localModelCardData.intendedUse) {
-                        modelCard.intendedUse = localModelCardData.intendedUse.note || localModelCardData.intendedUse;
+                        modelCard.intendedUse = formatModelCardField(localModelCardData.intendedUse, {
+                            primaryUses: '',
+                            primaryUseCases: '',
+                            outOfScope: 'Out of scope'
+                        });
                     }
 
                     // Limitations
                     if (localModelCardData.limitations) {
-                        modelCard.limitations = localModelCardData.limitations.note || localModelCardData.limitations;
+                        modelCard.limitations = formatModelCardField(localModelCardData.limitations, {
+                            knownLimitations: ''
+                        });
                     }
 
                     // Training data
                     if (localModelCardData.trainingData) {
-                        modelCard.trainingData = localModelCardData.trainingData.description || localModelCardData.trainingData;
+                        modelCard.trainingData = formatModelCardField(localModelCardData.trainingData, {
+                            description: ''
+                        });
                     }
 
                     // Ethical considerations

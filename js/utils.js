@@ -203,6 +203,79 @@ function parseEvalResults(evalResults) {
   return metrics;
 }
 
+/**
+ * Format a model-card field for display.
+ *
+ * Local model card JSONs store some fields as structured objects rather than
+ * plain strings, e.g.:
+ *   intendedUse: { primaryUses: [...], outOfScope: [...] }
+ *   limitations: { knownLimitations: [...] }
+ *   trainingData: { description: "..." }
+ * Interpolating such an object into a template literal renders "[object
+ * Object]", so callers must run it through this formatter first. A plain
+ * string field (or a `note` string on the object) is returned as-is.
+ *
+ * @param {*} value Raw field value from the model card JSON
+ * @param {Object} [labels] Optional label per object key, e.g.
+ *   { outOfScope: 'Out of scope' }. Empty label = no prefix. Keys listed in
+ *   `labels` are rendered in insertion order; nested string arrays are joined
+ *   with '; '.
+ * @returns {string} Human-readable text, or '' when nothing readable exists
+ */
+function formatModelCardField(value, labels = {}) {
+  if (value === null || value === undefined) {
+    return '';
+  }
+
+  if (typeof value === 'string') {
+    return value.trim();
+  }
+
+  if (Array.isArray(value)) {
+    return value
+      .filter((item) => typeof item === 'string' && item.trim())
+      .map((item) => item.trim())
+      .join('; ');
+  }
+
+  if (typeof value === 'object') {
+    // Prefer a free-form note string if the card carries one.
+    if (typeof value.note === 'string' && value.note.trim()) {
+      return value.note.trim();
+    }
+
+    const parts = [];
+    for (const [key, label] of Object.entries(labels)) {
+      const nested = value[key];
+      if (typeof nested === 'string' && nested.trim()) {
+        parts.push(label ? `${label}: ${nested.trim()}` : nested.trim());
+      } else if (Array.isArray(nested) && nested.length) {
+        const items = nested
+          .filter((item) => typeof item === 'string' && item.trim())
+          .map((item) => item.trim())
+          .join('; ');
+        if (items) {
+          parts.push(label ? `${label}: ${items}` : items);
+        }
+      }
+    }
+
+    // Fallback: first readable string on the object (unknown card shapes).
+    if (parts.length === 0) {
+      for (const nested of Object.values(value)) {
+        if (typeof nested === 'string' && nested.trim()) {
+          parts.push(nested.trim());
+          break;
+        }
+      }
+    }
+
+    return parts.join('. ');
+  }
+
+  return String(value);
+}
+
 // ============================================================================
 // ENHANCED FALSE POSITIVE DETECTION (inspired by ai-spotter)
 // ============================================================================
