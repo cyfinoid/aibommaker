@@ -67,6 +67,7 @@ async function fetchRepoMeta(owner, repo, token = null) {
     topics: data.topics || [],
     languages: Object.keys(languages),
     owner: data.owner.login,
+    pushedAt: data.pushed_at,
   };
 
   console.log(
@@ -429,9 +430,27 @@ async function fetchHuggingFaceModelInfo(modelId) {
         null;
     }
 
+    try {
+      // Fetch tokenizer_config.json for tokenizer identity (G7 #29)
+      const tokenizerResponse = await fetch(
+        `https://huggingface.co/${modelId}/resolve/main/tokenizer_config.json`,
+      );
+      if (tokenizerResponse.ok) {
+        const tokenizerData = await tokenizerResponse.json();
+        if (tokenizerData.tokenizer_class) {
+          modelParameters.tokenizerClass = tokenizerData.tokenizer_class;
+          console.log(`[HuggingFace API] ✓ Fetched tokenizer_class for ${modelId}`);
+        }
+      }
+    } catch (e) {
+      console.log(`[HuggingFace API] Could not fetch tokenizer_config.json for ${modelId}: ${e.message}`);
+    }
+
     return {
       verified: true,
       id: data.id,
+      sha: data.sha,
+      lastModified: data.lastModified,
       author: data.author,
       downloads: data.downloads || 0,
       likes: data.likes || 0,
@@ -469,6 +488,30 @@ async function fetchHuggingFaceModelInfo(modelId) {
     );
     // Return unverified rather than null so the model can still be included
     return { verified: false, id: modelId };
+  }
+}
+
+async function fetchHuggingFaceDatasetInfo(datasetId) {
+  console.log(`[HuggingFace API] Fetching dataset info for: ${datasetId}`);
+  try {
+    const response = await fetch(`${HUGGINGFACE_API_BASE}/datasets/${datasetId}`);
+    if (!response.ok) {
+      console.warn(
+        `[HuggingFace API] ⚠️  Dataset not enriched: ${datasetId} (HTTP ${response.status})`,
+      );
+      return { verified: false, id: datasetId, status: response.status };
+    }
+
+    const data = await response.json();
+    console.log(`[HuggingFace API] ✓ Found dataset: ${data.id}`);
+    return {
+      verified: true,
+      id: data.id || datasetId,
+      enrichment: buildDatasetEnrichmentFromHuggingFace(data)
+    };
+  } catch (error) {
+    console.warn(`[HuggingFace API] ⚠️  Exception fetching dataset ${datasetId}:`, error.message);
+    return { verified: false, id: datasetId };
   }
 }
 

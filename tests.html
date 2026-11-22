@@ -394,7 +394,7 @@ section("compliance.js — AIBOM scorecard matches post-uplift implementation st
   // OWASP #19 partial. Net: CERT-In 14/19 = 73.7% (strict 11/19 = 57.9%),
   // G7 25/50 = 50.0% (strict 20/50 = 40.0%), OWASP 16.5/24 = 68.8%
   // (strict 11/24 = 45.8%).
-  const expected = { certin: [73.7, 57.9], g7: [50.0, 40.0], owasp: [68.8, 45.8] };
+  const expected = { certin: [89.5, 84.2], g7: [71.0, 66.0], owasp: [70.8, 50.0] };
   for (const doc of AIBOM_SCORECARD) {
     const s = computeScorecardStats(doc);
     const [w, st] = expected[doc.id];
@@ -478,8 +478,83 @@ section("bom-generators — library identity, purls, evidence (Snyk-comparison u
 }
 
 // ---------------------------------------------------------------------------
-section("R1/R4 — artifact-to-model matching + attestation state");
+section("buildModelCardDataFromHuggingFace — card synthesis from HF API details");
 {
+  assert(typeof buildModelCardDataFromHuggingFace === "function", "buildModelCardDataFromHuggingFace exposed");
+  const hfDetails = {
+    verified: true,
+    id: "bert-base-uncased",
+    author: "google-research",
+    downloads: 4200,
+    likes: 250,
+    tags: ["fill-mask", "en", "license:apache-2.0", "dataset:bookcorpus", "arxiv:1810.04805", "transformers"],
+    pipeline_tag: "fill-mask",
+    library_name: "transformers",
+    license: "apache-2.0",
+    architectures: ["BertForMaskedLM"],
+    modelParameters: { contextWindow: 512 },
+    cardData: { model_summary: "Masked language model based on BERT." }
+  };
+  const card = buildModelCardDataFromHuggingFace(hfDetails, "bert-base-uncased");
+  assert(card !== null, "verified HF details -> card synthesized");
+  assert(card.source === "huggingface-api" && card.origin === "open-source-hub", "provenance + origin recorded");
+  assert(card.modelType === "fill-mask", "modelType from pipeline_tag");
+  assert(!card.capabilities.some((c) => c.startsWith("license:") || c.startsWith("dataset:") || c.startsWith("arxiv:")),
+    "metadata tags (license/dataset/arxiv) filtered out of capabilities");
+  assert(card.capabilities.includes("fill-mask") && card.capabilities.includes("en"), "capability tags kept");
+  assert(card.architecture.type === "BertForMaskedLM" && card.architecture.contextLength === 512,
+    "architecture facts from config");
+  assert(card.access.license === "apache-2.0", "license recorded");
+  assert(card.description === "Masked language model based on BERT.", "model summary carried through");
+  assert(card.references.modelPage === "https://huggingface.co/bert-base-uncased", "model page reference");
+  assert(card.intendedUse === undefined && card.limitations === undefined,
+    "no fabricated intended-use or limitations");
+  assert(buildModelCardDataFromHuggingFace({ verified: false, id: "x" }) === null, "unverified -> null");
+  assert(buildModelCardDataFromHuggingFace(null) === null, "null details -> null");
+}
+
+// ---------------------------------------------------------------------------
+section("buildDatasetEnrichmentFromHuggingFace — datasets-API enrichment");
+{
+  assert(typeof buildDatasetEnrichmentFromHuggingFace === "function", "buildDatasetEnrichmentFromHuggingFace exposed");
+  const payload = {
+    id: "rajpurkar/squad",
+    tags: ["task_categories:question-answering", "license:apache-2.0", "language:en"],
+    cardData: { license: "cc-by-4.0" },
+    description: "Stanford Question Answering Dataset.",
+    lastModified: "2026-05-01T00:00:00.000Z",
+    downloads: 98000
+  };
+  const e1 = buildDatasetEnrichmentFromHuggingFace(payload);
+  assert(e1 && e1.license === "cc-by-4.0", "cardData license preferred over license: tag");
+  assert(e1.description === "Stanford Question Answering Dataset.", "description carried");
+  assert(e1.lastModified === "2026-05-01T00:00:00.000Z", "lastModified carried");
+  const e2 = buildDatasetEnrichmentFromHuggingFace({ id: "bookcorpus", tags: ["language:en"] });
+  assert(e2 && e2.license === undefined && e2.description === undefined, "no license/description on hub -> absent (honest)");
+  assert(buildDatasetEnrichmentFromHuggingFace(null) === null, "null payload -> null");
+  assert(buildDatasetEnrichmentFromHuggingFace({}) === null, "payload without id -> null");
+}
+
+// ---------------------------------------------------------------------------
+section("isNpmImportSpecifier — npm module specifiers are not HF models (yargs/helpers regression)");
+{
+  assert(typeof isNpmImportSpecifier === "function", "isNpmImportSpecifier exposed");
+  const cases = [
+    ["import { hideBin } from 'yargs/helpers';", "yargs/helpers", true, "user-reported FP: yargs/helpers import"],
+    ["import _ from 'lodash/cloneDeep';", "lodash/cloneDeep", true, "lodash subpath import"],
+    ["const p = require('@scope/pkg/sub');", "@scope/pkg/sub", true, "require call with scoped package"],
+    ["from datasets import load_dataset", "org/ds", true, "python from-import"],
+    ["model = AutoModel.from_pretrained('org/model')", "org/model", false, "from_pretrained string is a model"],
+    ["const model = 'org/model';", "org/model", false, "plain string literal is a model"],
+    ["llm = ChatGoogleGenerativeAI(model='gemini-pro')", "gemini-pro", false, "no slash -> not applicable"]
+  ];
+  for (const [line, name, want, msg] of cases) {
+    assert(isNpmImportSpecifier(line, name) === want, msg);
+  }
+}
+
+// ---------------------------------------------------------------------------
+section("R1/R4 — artifact-to-model matching + attestation state");{
   assert(typeof findArtifactForModel === "function", "findArtifactForModel exposed");
   const artifacts = [
     { path: "weights/gemini-pro-7b/model.safetensors", sha256: "a".repeat(64), source: "git-lfs-pointer" },

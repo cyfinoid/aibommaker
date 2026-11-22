@@ -2185,8 +2185,12 @@ async function modelsIdentifierDetector({
     `[Detector: AI Models] Detected providers in use: ${Array.from(providersUsed).join(", ") || "None detected, will infer from patterns"}`,
   );
 
+  const hasHuggingFaceModels =
+    Object.values(modelsFound).some(
+      (d) => d.isHuggingFace || d.provider === "HuggingFace",
+    ) || providersUsed.has("HuggingFace");
   const shouldCheckHuggingFace =
-    providersUsed.size === 0 || providersUsed.has("HuggingFace");
+    providersUsed.size === 0 || hasHuggingFaceModels;
   console.log(
     `[Detector: AI Models] Will query HuggingFace API: ${shouldCheckHuggingFace}`,
   );
@@ -2839,14 +2843,28 @@ async function modelsIdentifierDetector({
           modelName = normalizedBedrockId;
         }
 
+        // Calculate line number by counting newlines before match
+        const lineNum = content.substring(0, match.index).split("\n").length;
+        const lineContent = lines[lineNum - 1] || "";
+
+        // HF-slug candidates extracted from import/require statements are
+        // module specifiers, not models (e.g. `import { hideBin } from
+        // 'yargs/helpers'`) — models are never importable modules, so reject
+        // them locally without any API round-trip.
+        if (
+          provider === "HuggingFace" &&
+          isNpmImportSpecifier(lineContent, modelName)
+        ) {
+          console.log(
+            `[Detector: AI Models] ✗ Skipping npm import specifier: ${modelName} (module imports are not models)`,
+          );
+          continue;
+        }
+
         // Validate model name to filter out false positives
         if (!isValidModelName(modelName, provider)) {
           continue; // Skip invalid model names
         }
-
-        // Calculate line number by counting newlines before match
-        const lineNum = content.substring(0, match.index).split("\n").length;
-        const lineContent = lines[lineNum - 1] || "";
 
         // Normalize Google model names: prefer "models/embedding-001" format
         let normalizedModelName = modelName;
@@ -3051,6 +3069,17 @@ async function modelsIdentifierDetector({
       );
       const hfInfo = await fetchHuggingFaceModelInfo(data.modelName);
       if (hfInfo) {
+        // HF API 404 = the slug does not exist on the Hub. A slug-shaped
+        // candidate that isn't on HuggingFace is a false positive (e.g. the
+        // npm subpath import 'yargs/helpers' looks like org/repo) — drop it
+        // rather than emitting a model that cannot be verified anywhere.
+        if (hfInfo.status === 404) {
+          console.log(
+            `[Detector: AI Models] ✗ ${data.modelName} not found on HuggingFace Hub — dropping false-positive candidate`,
+          );
+          modelsFound.delete(key);
+          continue;
+        }
         data.hfDetails = hfInfo;
         // Update modelType from HuggingFace if available
         if (hfInfo.verified && hfInfo.pipeline_tag) {
@@ -3076,6 +3105,19 @@ async function modelsIdentifierDetector({
           } catch (e) {
             console.log(
               `[Detector: AI Models] Could not parse ModelCard YAML for ${data.modelName}: ${e.message}`,
+            );
+          }
+        }
+
+        // No parseable card YAML (or no README) — synthesize a structured
+        // card from the verified API details so every HF model still gets a
+        // model card in the UI and the generated BOMs.
+        if (!data.modelCardData) {
+          const synthesized = buildModelCardDataFromHuggingFace(hfInfo, data.modelName);
+          if (synthesized) {
+            data.modelCardData = synthesized;
+            console.log(
+              `[Detector: AI Models] ✓ Synthesized model card from HuggingFace API data for ${data.modelName}`,
             );
           }
         }
@@ -3558,6 +3600,29 @@ async function dataPipelineDetector({ tree, getFileContent }) {
     });
   }
 
+  // R5-lite: enrich HF-sourced dataset names via the HuggingFace datasets
+  // API (license/description/last-modified — license-if-public tier).
+  // Slug-shaped and top-level hub ids both resolve; capped like LFS fetches.
+  const hfDatasets = [];
+  for (const [key, data] of datasetsFound) {
+    for (const loc of data.locations) {
+      if (loc.dataset && loc.source === "huggingface" && !hfDatasets.some((d) => d.name === loc.dataset)) {
+        hfDatasets.push({ name: loc.dataset });
+      }
+    }
+  }
+  if (hfDatasets.length > 0) {
+    console.log(
+      `[Detector: Data Pipeline] Enriching ${hfDatasets.length} HuggingFace dataset(s) via the datasets API...`,
+    );
+    for (const ds of hfDatasets.slice(0, 25)) {
+      const info = await fetchHuggingFaceDatasetInfo(ds.name);
+      if (info.verified && info.enrichment) {
+        ds.hf = info.enrichment;
+      }
+    }
+  }
+
   // Create findings
   for (const [key, data] of datasetsFound) {
     const title = `${data.tool} Data Pipeline Detected`;
@@ -3582,11 +3647,15 @@ async function dataPipelineDetector({ tree, getFileContent }) {
         category: data.category,
         datasets: data.locations
           .filter((loc) => loc.dataset)
-          .map((loc) => ({
-            name: loc.dataset,
-            source: loc.source,
-            location: `${data.file}:${loc.line}`,
-          })),
+          .map((loc) => {
+            const entry = { name: loc.dataset, source: loc.source };
+            // HF datasets-API enrichment (license/description) attached earlier
+            const hf = hfDatasets.find((d) => d.name === loc.dataset);
+            if (hf && hf.hf) {
+              entry.hf = hf.hf;
+            }
+            return entry;
+          }),
       },
     });
   }

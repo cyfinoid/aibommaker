@@ -9,6 +9,48 @@ below; drop sections that genuinely don't apply.
 
 ---
 
+## 2026-11-21 (night) — Requirements gap-closing pass
+
+**Summary:** Full audit of all remaining CERT-In/G7/OWASP gaps; implemented every non-structural fix: system producer/manufacturer, system version (package.json/pyproject.toml), system timestamp (repo last-push), SBOM version property, system application areas, security-controls property, model timestamps (release-date/last-modified), tokenizer identity (tokenizer_config.json), model licensing from bundled cards, dataset components (R5-lite: `type: data` + `ai_Dataset` + repo dependency edges), and the R6 vulnerability-posture honesty note. Scorecard: CERT-In 89.5/84.2, G7 69.0/64.0, OWASP 70.8/50.0 (§6 snapshot was 65.8/45.0/50.0 weighted).
+
+**Remaining unmet rows are all structural (⛔)** — CVE/VEX feeds, SBOM signing, training-time observation, G7 KPIs, dataset hash/provenance/stats/sensitivity, flow typing, validity period. Remaining 🟡 partials are honest depth limits. Optional future: HF datasets API for dataset license/description (G7 #42/#34).
+
+---
+
+## 2026-11-21 (night) — HuggingFace models now always get a model card
+
+**Summary:** User scanned a repo, HF models were detected but produced no model card. Root cause was three compounding gaps in the enrichment pipeline; fixed by broadening the HF API gate and synthesizing a structured card from verified API details when no card YAML parses. Follow-up in the same entry: compared `guidance/sample/Sweaterdog_Andy-3.6_aibom_1_7.json` (OWASP-AIBOM-Generator output for the same model our scan under-served) and adopted its best ideas — commit-pinned versions, proper 1.7 attribution, dataset hub URLs, richer HF references.
+
+**Why:** (1) `shouldCheckHuggingFace` gated the API on `providersUsed.has('HuggingFace')` — HF models referenced by plain name (no HF-specific library import) never triggered a fetch. (2) When fetched, `modelCardData` was only set if the remote README YAML parsed non-empty (`parseModelCardYAML`). (3) The bundled-card fallback has no `modelcards/huggingface/` entries, so the local lookup 404s for every HF model. Net: HF models got at most a task/IO fragment in the BOM, and the UI panel showed no card at all.
+
+**What changed:**
+- `js/utils.js`: `buildModelCardDataFromHuggingFace(hfDetails, modelName)` — synthesizes a structured card from verified API details only: `modelType` (pipeline_tag), `capabilities` (tags with `license:`/`dataset:`/`arxiv:`/… metadata prefixes filtered), `architecture` (config architectures + context window), `access.license`, `origin: 'open-source-hub'`, `description` (card model_summary when present), `references.modelPage`. No intended-use/limitations fabrication. Returns null for unverified details. Also `buildDatasetEnrichmentFromHuggingFace` — datasets-API payload → license/description/last-modified/downloads (license-if-public tier).
+- `js/github-api.js`: HF API result now carries `sha` + `lastModified`; new `fetchHuggingFaceDatasetInfo` (datasets API — license/description/last-modified/downloads via the pure `buildDatasetEnrichmentFromHuggingFace` mapper in `js/utils.js`).
+- `js/detectors.js`: dataPipelineDetector enriches HF-sourced dataset names via the datasets API (capped 25, `hf` enrichment on `dataPipelineInfo.datasets`); gate broadened (`hasHuggingFaceModels` when any detected model is HF-sourced); synthesis applied when YAML parsing produced no card — single point so the UI panel, CycloneDX modelCard, and SPDX all benefit.
+- `js/bom-generators.js`: `aibom:model-card-source` distinguishes `HuggingFace API — <model url>` from bundled card files; `aibom:origin` property emitted when a card carries origin classification; dataset components now carry API license (`licenses`), `description`, `aibom:dataset:last-modified`/`downloads` properties, and SPDX `ai_Dataset` elements get `licenseConcluded`.
+- `js/ui.js`: `renderFindings` falls back to `fetchHuggingFaceModelInfo` + synthesis when a HuggingFace finding has no card after the bundled lookup (per-render cache) — covers scan-time fetch failures like rate limits or gated models; broadened to any HF-slug id (`org/repo`) regardless of provider attribution (DeepSeek-signature models with HF-slug names were skipped by the provider gate).
+- `js/github-api.js`: HF API result now carries `sha` + `lastModified`.
+- **OWASP-sample comparison uplift** (`guidance/sample/Sweaterdog_Andy-3.6_aibom_1_7.json`): HF models commit-pinned (`component.version` + purl `@sha` from the API `sha` field — immutable revision, closes CERT-In #2 and G7 #22), 1.7 attribution (`supplier`/`manufacturer`/`authors` = HF org; the platform name was wrong as `author`), training datasets as `modelParameters.datasets` with `contents.url` hub links, `distribution` (tree/main) + commit-specific `vcs` external references. Scorecard: CERT-In #2 and G7 #22 → met → CERT-In 78.9% weighted / 63.2% strict, G7 52.0% / 42.0%.
+- `tests.html`: 13 new assertions (synthesis: tag filtering, architecture, license, provenance, no-fabrication, unverified→null).
+- `scripts/tests/verify-e2e.js`: third fixture model (HF `bert-base-uncased` with API-synthesized card + commit sha + datasets); asserts commit-pinned version/purl, supplier/manufacturer/author, dataset hub URLs, commit/distribution references, provenance/origin/context-length properties, task from pipeline_tag, no speculative HF service; NTIA supplier tally updated (3/6).
+- `README.md`, `CHANGELOG.md`, this file.
+
+**How / commands run:**
+```
+node --check js/{utils,detectors,bom-generators}.js
+node scripts/tests/verify-compliance.js   # PASS
+node scripts/tests/verify-e2e.js          # PASS (HF synthesis + card assertions)
+node scripts/tests/run-tests-html.js      # 215 passed / 1 pre-existing failure
+aidc-scan                                 # clean
+```
+
+**Verification notes:**
+- e2e validated behavior: HF model card present with `task: fill-mask` (pipeline_tag), origin + provenance properties, HF purl, license — and no speculative HuggingFace inference service (HF not in `AI_SERVICE_ENDPOINTS` since hub models are frequently run locally).
+- NTIA supplier tally updated for the new fixture (3/6: 3 attributed models, libraries/frameworks unattributed).
+- The user-reported scan predates this fix; re-scanning will now produce cards for HF models whose API data is reachable (404/rate-limited models stay card-less, honestly).
+
+---
+
 ## 2026-11-21 (evening) — R1/R3/R4 implemented + BOM download UX
 
 **Summary:** Revisited the three 2026-11-20-deferred recommendations and implemented all three, plus reworked the Generated AI BOM section for quick downloads (per-format Download-first buttons, collapsed JSON views, Download-all).
@@ -26,7 +68,8 @@ below; drop sections that genuinely don't apply.
   - R4: `getAttestationState` → `aibom:attestation` metadata property (JSON/XML) + SPDX repository element `comment`; detected types or explicit "none found in repository scan"
   - guards: `artifactInfo`/`attestationInfo` findings are state metadata — skipped in the CDX generic-component branch and SPDX package branch (they must not become components)
   - XML generator: metadata `<lifecycles>` + header properties in XSD order; `<hashes>` emission; guarded optional `<version>`/`<author>`
-- `js/ui.js` + `index.html` + `styles.css`: per-tab Download-first actions, **Show content** toggle (`bom-preview.collapsed` default), **Download all** staggered batch; Analysis Notes section moved below Standards Compliance and reformatted as a compact gap table (Missing / What we searched / What it would add) with category chips, icons, count-in-heading and a clearer "gaps, not errors" caption
+- `js/ui.js` + `index.html` + `styles.css`: per-tab Download-first actions, **Show content** toggle (`bom-preview.collapsed` default), **Download all** staggered batch; Analysis Notes section moved below Standards Compliance and reformatted as a compact gap table (Missing / What we searched / What it would add) with category chips, icons, count-in-heading and a clearer "gaps, not errors" caption; Analysis Results section collapsed by default with a single-click Expand/Collapse toggle (replaces click-for-items + double-click-for-section)
+- Later (same session): user-requested default — **Analysis Results collapsed on load**
 - `js/compliance.js`: scorecard rows for R1/R3/R4 flipped with dated notes; header headline updated
 - scorecard notes later cleaned to factual where/why statements only (no dates/change commentary — user request); movement history stays in this changelog
 - `tests.html`: 15 new assertions (artifact-to-model matching incl. generic-token/no-overlap cases, attestation state derivation, LFS pointer parsing end-to-end with stubbed fetch); scorecard expectations updated

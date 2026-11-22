@@ -1047,7 +1047,16 @@ function generateSummary(metadata, findings) {
 function extractAnalysisNotes(findings, analysisResult) {
     const notes = {
         not_found_in_scan: [],
-        suggested_improvements: []
+        suggested_improvements: [],
+        // R6: vulnerability posture honesty — never imply a clean bill of
+        // health; a repository scan cannot produce CVE/VEX data.
+        not_derivable: [
+            {
+                category: 'Vulnerabilities',
+                item: 'Vulnerability references / VEX for AI',
+                reason: 'Not derivable from a repository scan — obtain from supplier advisory and VEX channels (G7 #48 / CERT-In #18)'
+            }
+        ]
     };
     
     // Check what we scanned for but didn't find

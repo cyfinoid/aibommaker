@@ -238,12 +238,33 @@ async function renderFindings(findings, repoUrl) {
         return;
     }
     
-    // Load model card data for model findings that don't have it
+    // Load model card data for model findings that don't have it:
+    // bundled local card first, then the HuggingFace API for HF models
+    // (e.g. when the scan-time fetch failed or was rate-limited).
+    const hfCardCache = new Map();
     await Promise.all(findings.map(async (finding) => {
         if (finding.modelInfo && !finding.modelInfo.modelCardData &&
             finding.modelInfo.provider && finding.modelInfo.modelName) {
             try {
-                const modelCardData = await loadModelCardUI(finding.modelInfo.modelName, finding.modelInfo.provider);
+                let modelCardData = await loadModelCardUI(finding.modelInfo.modelName, finding.modelInfo.provider);
+
+                // Fall back to the HuggingFace API when the model id looks
+                // like an HF slug (org/repo) or is HF-attributed — provider
+                // signatures like DeepSeek can claim HF-slug models too, and
+                // the API 404s honestly for names that aren't on the hub.
+                if (!modelCardData &&
+                    (finding.modelInfo.provider === 'HuggingFace' || finding.modelInfo.modelName.includes('/'))) {
+                    const cacheKey = finding.modelInfo.modelName.toLowerCase();
+                    if (hfCardCache.has(cacheKey)) {
+                        modelCardData = hfCardCache.get(cacheKey);
+                    } else {
+                        console.log(`[UI ModelCard] Local card not found, querying HuggingFace API: ${finding.modelInfo.modelName}`);
+                        const hfInfo = await fetchHuggingFaceModelInfo(finding.modelInfo.modelName);
+                        modelCardData = buildModelCardDataFromHuggingFace(hfInfo, finding.modelInfo.modelName);
+                        hfCardCache.set(cacheKey, modelCardData);
+                    }
+                }
+
                 if (modelCardData) {
                     finding.modelInfo.modelCardData = modelCardData;
                 }
@@ -318,13 +339,34 @@ async function renderFindings(findings, repoUrl) {
                                 ${modelCard.ethicalConsiderations.privacyConsiderations ? `<p><strong>Privacy:</strong> ${modelCard.ethicalConsiderations.privacyConsiderations}</p>` : ''}
                             </div>
                         ` : ''}
-                        ${modelCard.references ? `
-                            <div class="model-references">
-                                <strong>References:</strong>
-                                ${modelCard.references.modelSpecificDocs ? `<p><a href="${modelCard.references.modelSpecificDocs}" target="_blank">📖 Official Documentation</a></p>` : ''}
-                                ${modelCard.references.officialDocs ? `<p><a href="${modelCard.references.officialDocs}" target="_blank">🏢 Provider Documentation</a></p>` : ''}
-                            </div>
-                        ` : ''}
+                        ${(() => {
+                            if (!modelCard.references || typeof modelCard.references !== 'object') return '';
+                            const REFERENCE_LABELS = {
+                                modelPage: '🌐 Model Page',
+                                pricing: '💰 Pricing',
+                                announcement: '📣 Announcement',
+                                huggingFace: '🤗 HuggingFace',
+                                paper: '📄 Paper',
+                                modelSpecificDocs: '📖 Official Documentation',
+                                officialDocs: '🏢 Provider Documentation',
+                                securityContact: '🔐 Security Contact'
+                            };
+                            const links = Object.entries(modelCard.references)
+                                .filter(([, url]) => typeof url === 'string' && /^https?:\/\//i.test(url))
+                                .map(([key, url]) => {
+                                    const label = REFERENCE_LABELS[key] ||
+                                        key.replace(/([a-z])([A-Z])/g, '$1 $2').replace(/^./, c => c.toUpperCase());
+                                    const safeUrl = escapeHtml(url).replace(/"/g, '&quot;');
+                                    return `<p><a href="${safeUrl}" target="_blank" rel="noopener noreferrer">${label}</a></p>`;
+                                })
+                                .join('');
+                            return links ? `
+                                <div class="model-references">
+                                    <strong>References:</strong>
+                                    ${links}
+                                </div>
+                            ` : '';
+                        })()}
                     </div>
                 </div>
             `;
@@ -712,28 +754,12 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     });
     
-    // Collapse/Expand all findings
+    // Collapse/Expand the Analysis Results section (collapsed by default —
+    // the review flow is: scan → review findings → generate BOM below)
     document.getElementById('collapse-all-findings').addEventListener('click', function() {
-        const items = document.querySelectorAll('.finding-item');
-        const allCollapsed = Array.from(items).every(item => item.classList.contains('collapsed'));
-        
-        items.forEach(item => {
-            if (allCollapsed) {
-                item.classList.remove('collapsed');
-            } else {
-                item.classList.add('collapsed');
-            }
-        });
-        
-        this.textContent = allCollapsed ? 'Collapse All' : 'Expand All';
-    });
-    
-    // Collapse/Expand findings section
-    document.getElementById('collapse-all-findings').addEventListener('dblclick', function(e) {
-        e.preventDefault();
         const content = document.getElementById('findings-content');
-        content.classList.toggle('collapsed');
-        this.textContent = content.classList.contains('collapsed') ? 'Expand Section' : 'Collapse All';
+        const collapsed = content.classList.toggle('collapsed');
+        this.textContent = collapsed ? 'Expand' : 'Collapse';
     });
     
     // Collapse/Expand Analysis Notes section

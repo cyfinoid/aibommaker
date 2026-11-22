@@ -380,6 +380,35 @@ async function analyzeRepository(input, onProgress = null) {
         console.warn('[Analyzer] ⚠️  Tree was truncated by GitHub - analysis may be incomplete');
     }
 
+    // System version (G7 #14): declared project version, when the repo
+    // carries one (package.json / pyproject.toml). Absent stays null.
+    let systemVersion = null;
+    try {
+        const pkgContent = await getFileContent("package.json");
+        if (pkgContent) {
+            const parsed = JSON.parse(pkgContent);
+            if (typeof parsed.version === "string" && parsed.version.trim()) {
+                systemVersion = parsed.version.trim();
+            }
+        }
+    } catch (e) {
+        console.log("[Analyzer] No parseable package.json version: " + e.message);
+    }
+    if (!systemVersion) {
+        try {
+            const pyproject = await getFileContent("pyproject.toml");
+            if (pyproject) {
+                const m = pyproject.match(/^\s*version\s*=\s*"([^"]+)"/m);
+                if (m) systemVersion = m[1];
+            }
+        } catch (e) {
+            console.log("[Analyzer] No pyproject.toml version: " + e.message);
+        }
+    }
+    if (systemVersion) {
+        console.log("[Analyzer] System version: " + systemVersion);
+    }
+
     return {
         score,
         confidence,
@@ -393,7 +422,9 @@ async function analyzeRepository(input, onProgress = null) {
             description: repoMeta.description,
             topics: repoMeta.topics,
             languages: repoMeta.languages,
-            scannedRef: input.ref || repoMeta.defaultBranch || 'main'
+            scannedRef: input.ref || repoMeta.defaultBranch || 'main',
+            systemVersion: systemVersion,
+            lastPushed: repoMeta.pushedAt
         },
         parsedDocs: parsedDocs, // Include parsed documentation for BOM generation
         analyzedAt: new Date().toISOString()

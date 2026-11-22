@@ -64,6 +64,8 @@ async function generateCycloneDXJson(analysisResult, selectedFindings) {
             // declare scope, completeness, generation context and authorship
             // instead of letting silence imply producer assertions.
             lifecycles: [{ phase: 'post-build' }],
+            // G7 #13: the analyzed repository's owner is the system producer
+            manufacturer: { name: repository.owner, url: [repository.htmlUrl] },
             properties: [
                 {
                     name: 'aibom:scope',
@@ -84,6 +86,18 @@ async function generateCycloneDXJson(analysisResult, selectedFindings) {
                 {
                     name: 'aibom:graph-type',
                     value: 'static dependency graph (source + manifest + SBOM analysis)'
+                },
+                {
+                    name: 'aibom:sbom-version',
+                    value: '1.0.0'
+                },
+                {
+                    name: 'aibom:system:timestamp',
+                    value: repository.lastPushed || analyzedAt
+                },
+                {
+                    name: 'aibom:system:version',
+                    value: repository.systemVersion || `branch:${repository.scannedRef || 'main'}`
                 },
                 {
                     name: 'aibom:attestation',
@@ -108,7 +122,9 @@ async function generateCycloneDXJson(analysisResult, selectedFindings) {
                 'bom-ref': `repo-${repository.owner}-${repository.repo}`,
                 group: repository.owner,
                 name: repository.repo,
-                version: 'main',
+                // Declared project version when present (G7 #14); branch ref otherwise
+                version: repository.systemVersion || 'main',
+                supplier: { name: repository.owner },
                 description: repository.description || '',
                 purl: `pkg:github/${repository.owner}/${repository.repo}`,
                 externalReferences: [
@@ -297,6 +313,40 @@ async function generateCycloneDXJson(analysisResult, selectedFindings) {
     const libraryRefIds = libraryRefs.map(l => l['bom-ref']);
     
     // Main repo depends on all direct components
+    // R5-lite: datasets captured by the data-pipeline detector become
+    // first-class data components (G7 §2.4 / CERT-In #9/#10)
+    const datasetComponents = buildDatasetComponents(selectedFindings);
+    bom.components.push(...datasetComponents);
+    const datasetRefs = datasetComponents.map(c => c['bom-ref']);
+    if (datasetRefs.length > 0) {
+        bom.metadata.component.properties.push({
+            name: 'aibom:data-sources',
+            value: datasetComponents.map(c => c.name).join(', ')
+        });
+    }
+
+    // CERT-In #12: security controls detected in the repository
+    const guardrails = [...new Set(selectedFindings
+        .filter(f => f.category === 'guardrails')
+        .map(f => f.title))];
+    if (guardrails.length > 0) {
+        bom.metadata.component.properties.push({
+            name: 'aibom:security-controls',
+            value: guardrails.join(', ')
+        });
+    }
+
+    // G7 #19: system-level application areas = distinct model tasks
+    const applicationAreas = [...new Set(modelRefs
+        .map(r => r.component.properties.find(p => p.name === 'category')?.value)
+        .filter(Boolean))];
+    if (applicationAreas.length > 0) {
+        bom.metadata.component.properties.push({
+            name: 'aibom:application-areas',
+            value: applicationAreas.join(', ')
+        });
+    }
+
     bom.dependencies.push({
         ref: mainRef,
         dependsOn: bom.components.map(c => c['bom-ref'])
@@ -581,6 +631,58 @@ function findArtifactForModel(artifacts, modelName) {
 }
 
 /**
+ * R5-lite: build data components for datasets captured by the data-pipeline
+ * detector (name + source + hub URL where applicable) — G7 §2.4 / CERT-In
+ * #9/#10 tier: name, identifier and source traceability.
+ * @param {Array} findings
+ * @returns {Array} CycloneDX components of type `data`
+ */
+function buildDatasetComponents(findings) {
+  const components = [];
+  const seen = new Set();
+  for (const finding of findings || []) {
+    for (const ds of finding.dataPipelineInfo?.datasets || []) {
+      if (!ds.name || seen.has(ds.name.toLowerCase())) continue;
+      seen.add(ds.name.toLowerCase());
+      const component = {
+        type: 'data',
+        'bom-ref': `dataset-${components.length + 1}`,
+        name: ds.name,
+        properties: [{ name: 'aibom:dataset:source', value: ds.source || 'custom' }]
+      };
+      // HuggingFace datasets-API enrichment (license-if-public tier)
+      const hf = ds.hf || null;
+      if (hf) {
+        if (hf.license) {
+          // SPDX ids use the id form; anything else the name form
+          component.licenses = [{ license: /^[a-z0-9.-]+$/i.test(hf.license)
+            ? { id: hf.license }
+            : { name: hf.license } }];
+        }
+        if (hf.description) {
+          component.description = hf.description;
+        }
+        if (hf.lastModified) {
+          component.properties.push({ name: 'aibom:dataset:last-modified', value: hf.lastModified });
+        }
+        if (hf.downloads != null) {
+          component.properties.push({ name: 'aibom:dataset:downloads', value: String(hf.downloads) });
+        }
+      }
+      if (ds.source === 'huggingface') {
+        component.externalReferences = [{
+          comment: 'Dataset source',
+          type: 'website',
+          url: `https://huggingface.co/datasets/${ds.name}`
+        }];
+      }
+      components.push(component);
+    }
+  }
+  return components;
+}
+
+/**
  * R4: attestation presence state for the scanned repository, recorded
  * explicitly in the BOM metadata (detected types or an honest "none found").
  * Derived from ALL scan findings — not the user's current selection — so
@@ -628,17 +730,24 @@ async function createMLModelComponents(findings) {
                     // No invented version: source identifiers don't pin one and
                     // local cards carry no version field. Unknown stays unknown
                     // (properties below record why), per model-identity guidance.
+                    // HuggingFace hub models are commit-pinned via the API sha.
                     description: finding.description,
                     scope: 'required',
                     properties: [
                         {
                             name: 'aibom:model:version-status',
-                            value: modelCardData?.version ? 'derived-from-model-card' : 'unpinned-in-source'
+                            value: modelCardData?.version
+                                ? 'derived-from-model-card'
+                                : (provider === 'HuggingFace' && huggingface?.sha
+                                    ? 'commit-pinned'
+                                    : 'unpinned-in-source')
                         }
                     ]
                 };
                 if (modelCardData?.version) {
                     component.version = String(modelCardData.version);
+                } else if (provider === 'HuggingFace' && huggingface?.sha) {
+                    component.version = huggingface.sha;
                 }
                 
                 // Add detection source if available
@@ -676,15 +785,32 @@ async function createMLModelComponents(findings) {
                 
                 // Add purl if applicable
                 if (provider === 'HuggingFace' && huggingface) {
-                    component.purl = `pkg:huggingface/${modelName}`;
+                    // Commit sha from the HF API pins the exact revision —
+                    // an immutable, verifiable model version (G7 #22/#26)
+                    if (huggingface.sha) {
+                        component.version = huggingface.sha;
+                        component.purl = `pkg:huggingface/${modelName}@${huggingface.sha}`;
+                    } else {
+                        component.purl = `pkg:huggingface/${modelName}`;
+                    }
                     component.group = huggingface.author || modelName.split('/')[0];
                     component.name = modelName.split('/').pop();
+                    // 1.7 attribution: the HF org is the actual author/supplier,
+                    // not the platform
+                    if (huggingface.author) {
+                        component.author = huggingface.author;
+                        component.supplier = { name: huggingface.author };
+                        component.manufacturer = { name: huggingface.author };
+                        component.authors = [{ name: huggingface.author }];
+                    }
                 } else if (provider === 'OpenAI') {
                     component.purl = `pkg:ml/openai/${modelName}`;
                 } else if (provider === 'Anthropic') {
                     component.purl = `pkg:ml/anthropic/${modelName}`;
                 } else if (provider === 'Google') {
                     component.purl = `pkg:ml/google/${modelName}`;
+                } else if (['Mistral', 'xAI', 'DeepSeek', 'Groq', 'Cohere'].includes(provider)) {
+                    component.purl = `pkg:ml/${provider.toLowerCase()}/${modelName}`;
                 }
                 
                 // Add intended use based on model type and provider
@@ -737,6 +863,18 @@ async function createMLModelComponents(findings) {
                         type: 'vcs',
                         url: `https://huggingface.co/${modelName}`
                     });
+                    component.externalReferences.push({
+                        comment: 'Model files',
+                        type: 'distribution',
+                        url: `https://huggingface.co/${modelName}/tree/main`
+                    });
+                    if (huggingface?.sha) {
+                        component.externalReferences.push({
+                            comment: 'Specific commit',
+                            type: 'vcs',
+                            url: `https://huggingface.co/${modelName}/commit/${huggingface.sha}`
+                        });
+                    }
                     // Detect framework and add dependency
                     if (huggingface?.library_name) {
                         libraryDeps.add(huggingface.library_name);
@@ -841,6 +979,19 @@ async function createMLModelComponents(findings) {
                         });
                     }
 
+                    // Release date (G7 #23: model timestamp)
+                    if (localModelCardData.releaseDate) {
+                        modelCard.properties.push({
+                            name: 'aibom:release-date',
+                            value: localModelCardData.releaseDate
+                        });
+                    }
+
+                    // Licensing from bundled cards when no API license exists
+                    if (!component.licenses && localModelCardData.access?.license) {
+                        component.licenses = [{ license: { name: localModelCardData.access.license } }];
+                    }
+
                     // Ethical considerations → ethicalConsiderations[] risk objects
                     const ec = localModelCardData.ethicalConsiderations;
                     if (ec) {
@@ -885,11 +1036,44 @@ async function createMLModelComponents(findings) {
                         });
                     }
 
-                    // Enrichment provenance → property
+                    // R7-style origin classification (open-source-hub / vendor-API / in-house)
+                    if (localModelCardData.origin) {
+                        modelCard.properties.push({
+                            name: 'aibom:origin',
+                            value: localModelCardData.origin
+                        });
+                    }
+
+                    // Enrichment provenance → property (bundled card file or
+                    // HuggingFace API — whichever actually sourced the data)
                     modelCard.properties.push({
                         name: 'aibom:model-card-source',
-                        value: `modelcards/${provider.toLowerCase()}/${modelName.toLowerCase().replace(/[^a-z0-9-]/g, '-')}.json`
+                        value: localModelCardData.source === 'huggingface-api'
+                            ? `HuggingFace API — https://huggingface.co/${localModelCardData.modelName || modelName}`
+                            : `modelcards/${provider.toLowerCase()}/${modelName.toLowerCase().replace(/[^a-z0-9-]/g, '-')}.json`
                     });
+
+                    // Card references → component external references
+                    // (CycloneDX 1.7 reference-type enum)
+                    if (localModelCardData.references && typeof localModelCardData.references === 'object') {
+                        const REFERENCE_TYPES = {
+                            modelPage: 'website',
+                            pricing: 'website',
+                            announcement: 'website',
+                            huggingFace: 'model-card',
+                            paper: 'citation',
+                            modelSpecificDocs: 'documentation',
+                            officialDocs: 'documentation'
+                        };
+                        Object.entries(localModelCardData.references).forEach(([refKey, refUrl]) => {
+                            if (typeof refUrl !== 'string' || !/^https?:\/\//i.test(refUrl)) return;
+                            component.externalReferences.push({
+                                comment: `Model card reference: ${refKey}`,
+                                type: REFERENCE_TYPES[refKey] || 'other',
+                                url: refUrl
+                            });
+                        });
+                    }
                 }
 
                 if (huggingface) {
@@ -927,12 +1111,20 @@ async function createMLModelComponents(findings) {
                         pushPropertyOnce(modelCard, 'aibom:model-type', modelType);
                     }
 
-                    // Datasets from cardData or ModelCard
+                    // Datasets from cardData or ModelCard — HF dataset names
+                    // get a hub URL so training data is traceable
                     const datasets = cardData.datasets || modelCardData?.datasets || [];
                     if (datasets.length > 0) {
                         modelCard.modelParameters.datasets = Array.isArray(datasets)
-                            ? datasets.map(ds => typeof ds === 'string' ? { type: 'dataset', name: ds } : ds)
-                            : [{ type: 'dataset', name: String(datasets) }];
+                            ? datasets.map(ds => {
+                                if (typeof ds !== 'string') return ds;
+                                return {
+                                    type: 'dataset',
+                                    name: ds,
+                                    contents: { url: `https://huggingface.co/datasets/${ds}` }
+                                };
+                              })
+                            : [{ type: 'dataset', name: String(datasets), contents: { url: `https://huggingface.co/datasets/${String(datasets)}` } }];
                     }
 
                     // Base model (schema: no modelParameters.baseModel — keep as property)
@@ -1086,6 +1278,20 @@ async function createMLModelComponents(findings) {
                         modelCard.properties.push({
                             name: 'num_attention_heads',
                             value: String(modelParams.num_attention_heads)
+                        });
+                    }
+                    if (modelParams.tokenizerClass) {
+                        // G7 #29: tokenizer identity
+                        modelCard.properties.push({
+                            name: 'aibom:tokenizer',
+                            value: String(modelParams.tokenizerClass)
+                        });
+                    }
+                    if (huggingface?.lastModified) {
+                        // G7 #23: model timestamp from the hub
+                        modelCard.properties.push({
+                            name: 'aibom:last-modified',
+                            value: huggingface.lastModified
                         });
                     }
 
@@ -1355,6 +1561,36 @@ async function createMLModelComponents(findings) {
         }
     }
     
+    // Merge model entries that resolve to the same base model name (last
+    // path segment, case-insensitive) — e.g. an attributed
+    // 'models/text-embedding-004' and a bare 'text-embedding-004' detected
+    // elsewhere are one model, not two components. The richer entry (card
+    // or purl present) wins; evidence occurrences are unioned.
+    const baseOwner = new Map();
+    for (const [key, entry] of [...modelMap]) {
+      const base = entry.component.name.split('/').pop().toLowerCase();
+      const prevKey = baseOwner.get(base);
+      if (!prevKey) {
+        baseOwner.set(base, key);
+        continue;
+      }
+      const prevEntry = modelMap.get(prevKey);
+      const keepPrev = !!(prevEntry.component.modelCard || prevEntry.component.purl);
+      const rich = keepPrev ? prevEntry : entry;
+      const poor = keepPrev ? entry : prevEntry;
+      const richOcc = rich.component.evidence?.occurrences || [];
+      const poorOcc = poor.component.evidence?.occurrences || [];
+      if (poorOcc.length > 0) {
+        const seen = new Set(richOcc.map(o => `${o.location}:${o.line}`));
+        rich.component.evidence.occurrences = [...richOcc, ...poorOcc.filter(o => !seen.has(`${o.location}:${o.line}`))];
+      }
+      modelMap.delete(keepPrev ? key : prevKey);
+      baseOwner.set(base, keepPrev ? prevKey : key);
+      console.log(
+        `[BOM Generator] ⚙ Merged duplicate model component: ${poor.component.name} → ${rich.component.name}`,
+      );
+    }
+
     // Add all identified models
     const models = Array.from(modelMap.values()).map(m => m.component);
     // R1: attach verified Git-LFS artifact hashes to matching model components.
@@ -1709,8 +1945,9 @@ async function generateCycloneDXXml(analysisResult, selectedFindings) {
     xml += `    <timestamp>${escapeXml(analyzedAt)}</timestamp>\n`;
     // R3: generation context as a declared lifecycle phase
     xml += '    <lifecycles>\n      <lifecycle><phase>post-build</phase></lifecycle>\n    </lifecycles>\n';
-    xml += '    <tools>\n';
-    xml += '      <components>\n';
+    // G7 #13: system producer
+    xml += `    <manufacturer>\n      <name>${escapeXml(repository.owner)}</name>\n    </manufacturer>\n`;
+    xml += '    <tools>\n';    xml += '      <components>\n';
     xml += '        <component type="application" bom-ref="tool-aibom-generator">\n';
     xml += '          <name>AI BOM Generator</name>\n';
     xml += '          <version>1.0.0</version>\n';
@@ -1718,21 +1955,25 @@ async function generateCycloneDXXml(analysisResult, selectedFindings) {
     xml += '      </components>\n';
     xml += '    </tools>\n';
     xml += `    <component type="application" bom-ref="repo-${escapeXml(repository.owner)}-${escapeXml(repository.repo)}">\n`;
+    xml += `      <supplier><name>${escapeXml(repository.owner)}</name></supplier>\n`;
     xml += `      <group>${escapeXml(repository.owner)}</group>\n`;
     xml += `      <name>${escapeXml(repository.repo)}</name>\n`;
-    xml += '      <version>main</version>\n';
+    xml += `      <version>${escapeXml(repository.systemVersion || 'main')}</version>\n`;
     if (repository.description) {
         xml += `      <description>${escapeXml(repository.description)}</description>\n`;
     }
     xml += `      <purl>pkg:github/${escapeXml(repository.owner)}/${escapeXml(repository.repo)}</purl>\n`;
     xml += '    </component>\n';
-    // R3: header self-descriptions (properties close the metadata sequence)
+    // R3 + G7: header self-descriptions close the metadata sequence
     xml += '    <properties>\n';
     xml += `      <property name="aibom:scope">repository static source analysis (${escapeXml(repository.fullName)}@${escapeXml(repository.scannedRef || 'main')})</property>\n`;
     xml += '      <property name="aibom:completeness">partial — post-build source-level analysis; training-time observation not possible</property>\n';
     xml += '      <property name="aibom:generation-context">after-build</property>\n';
     xml += '      <property name="aibom:authorship">tool-generated</property>\n';
     xml += '      <property name="aibom:graph-type">static dependency graph (source + manifest + SBOM analysis)</property>\n';
+    xml += '      <property name="aibom:sbom-version">1.0.0</property>\n';
+    xml += `      <property name="aibom:system:timestamp">${escapeXml(repository.lastPushed || analyzedAt)}</property>\n`;
+    xml += `      <property name="aibom:system:version">${escapeXml(repository.systemVersion || `branch:${repository.scannedRef || 'main'}`)}</property>\n`;
     xml += `      <property name="aibom:attestation">${escapeXml(getAttestationState(selectedFindings, analysisResult))}</property>\n`;
     xml += '    </properties>\n';
     xml += '  </metadata>\n';
@@ -1741,6 +1982,7 @@ async function generateCycloneDXXml(analysisResult, selectedFindings) {
     // SAME bom-refs as the component list)
     xml += '  <components>\n';
     const { components, modelRefs, libraryRefs } = await createMLModelComponents(selectedFindings);
+    const xmlDatasetComponents = buildDatasetComponents(selectedFindings);
 
     components.forEach(comp => {
         xml += `    <component type="${comp.type}" bom-ref="${escapeXml(comp['bom-ref'])}">\n`;
@@ -1797,7 +2039,30 @@ async function generateCycloneDXXml(analysisResult, selectedFindings) {
 
         xml += '    </component>\n';
     });
-    
+
+    // R5-lite: dataset components
+    xmlDatasetComponents.forEach(comp => {
+        xml += `    <component type="data" bom-ref="${escapeXml(comp['bom-ref'])}">\n`;
+        xml += `      <name>${escapeXml(comp.name)}</name>\n`;
+        if (comp.properties && comp.properties.length > 0) {
+            xml += '      <properties>\n';
+            comp.properties.forEach(prop => {
+                xml += `        <property name="${escapeXml(prop.name)}">${escapeXml(prop.value)}</property>\n`;
+            });
+            xml += '      </properties>\n';
+        }
+        if (comp.externalReferences && comp.externalReferences.length > 0) {
+            xml += '      <externalReferences>\n';
+            comp.externalReferences.forEach(ref => {
+                xml += `        <reference type="${escapeXml(ref.type)}">\n`;
+                xml += `          <url>${escapeXml(ref.url)}</url>\n`;
+                xml += '        </reference>\n';
+            });
+            xml += '      </externalReferences>\n';
+        }
+        xml += '    </component>\n';
+    });
+
     xml += '  </components>\n';
 
     // Services (external AI inference APIs — trust-boundary documentation,
@@ -1835,6 +2100,9 @@ async function generateCycloneDXXml(analysisResult, selectedFindings) {
     // Main repo depends on all components and services
     xml += `    <dependency ref="repo-${escapeXml(repository.owner)}-${escapeXml(repository.repo)}">\n`;
     components.forEach(comp => {
+        xml += `      <dependency ref="${escapeXml(comp['bom-ref'])}" />\n`;
+    });
+    xmlDatasetComponents.forEach(comp => {
         xml += `      <dependency ref="${escapeXml(comp['bom-ref'])}" />\n`;
     });
     Object.values(serviceRefsByProvider).forEach(serviceRef => {
@@ -1936,7 +2204,7 @@ function generateSPDX(analysisResult, selectedFindings) {
         },
         'name': repository.repo,
         'summary': repository.description || '',
-        'packageVersion': 'main',
+        'packageVersion': repository.systemVersion || 'main',
         'downloadLocation': repository.htmlUrl,
         'homepage': repository.htmlUrl,
         'sourceInfo': `GitHub repository: ${repository.fullName}`,
@@ -1984,10 +2252,12 @@ function generateSPDX(analysisResult, selectedFindings) {
                     'name': provider
                 }
             };
-            // No invented version: omit packageVersion unless the model card
-            // carries a real version (unknown stays unknown).
+            // No invented version: omit packageVersion unless derivable —
+            // HuggingFace commit sha for hub models, model-card version else.
             if (finding.modelInfo.modelCardData?.version) {
                 aiPackage.packageVersion = String(finding.modelInfo.modelCardData.version);
+            } else if (finding.modelInfo.huggingface?.sha) {
+                aiPackage.packageVersion = finding.modelInfo.huggingface.sha;
             }
 
             // Preserve detection evidence (source locations + snippets) as a
@@ -2314,6 +2584,55 @@ function generateSPDX(analysisResult, selectedFindings) {
     });
     
     // Add all relationships to element array
+    // R5-lite: dataset elements (SPDX AI profile) + relationships
+    const spdxDatasets = [];
+    const seenSpdxDatasets = new Set();
+    for (const finding of selectedFindings) {
+        for (const ds of finding.dataPipelineInfo?.datasets || []) {
+            if (!ds.name || seenSpdxDatasets.has(ds.name.toLowerCase())) continue;
+            seenSpdxDatasets.add(ds.name.toLowerCase());
+            spdxDatasets.push(ds);
+        }
+    }
+    spdxDatasets.forEach((ds, idx) => {
+        const dsId = `${namespace}/Dataset-${generateShortId()}`;
+        const dsElement = {
+            '@id': dsId,
+            'type': 'ai_Dataset',
+            'spdxId': dsId,
+            'creationInfo': {
+                'type': 'CreationInfo',
+                'specVersion': '3.0.1',
+                'created': analyzedAt,
+                'createdBy': ['Tool: AI BOM Generator-1.0.0']
+            },
+            'name': ds.name,
+            'summary': `Dataset (${ds.source || 'custom'}) referenced by the application`,
+            'downloadLocation': ds.source === 'huggingface'
+                ? `https://huggingface.co/datasets/${ds.name}`
+                : 'NOASSERTION'
+        };
+        if (ds.hf?.license) {
+            dsElement.licenseConcluded = ds.hf.license;
+        }
+        spdx.element.push(dsElement);
+        relationships.push({
+            '@id': `${namespace}/Relationship-ds-${idx}`,
+            'type': 'Relationship',
+            'spdxId': `${namespace}/Relationship-ds-${idx}`,
+            'creationInfo': {
+                'type': 'CreationInfo',
+                'specVersion': '3.0.1',
+                'created': analyzedAt,
+                'createdBy': ['Tool: AI BOM Generator-1.0.0']
+            },
+            'relationshipType': 'dependsOn',
+            'from': repoId,
+            'to': [dsId],
+            'completeness': 'noAssertion'
+        });
+    });
+
     spdx.element.push(...relationships);
     
     return JSON.stringify(spdx, null, 2);

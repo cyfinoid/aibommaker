@@ -180,7 +180,7 @@ The **Standards Compliance** section (below the generated BOM) checks and scores
 
 **AIBOM standards scorecard (static, per tool version):** element-by-element conformance of the tool's AIBOM output surface against CERT-In Technical Guidelines Table 10 (19 elements), the G7 Cyber Group SBOM-for-AI minimum elements (50 elements), and the OWASP AIBOM Foundations checklist (24 points), with weighted (✅ 1.0 / 🟡 0.5 / ❌ 0) and strict (✅ only) scores, per-element status, and the structural (⛔) limits of a post-hoc, browser-only scanner. Full methodology and per-element citations: `guidance/guidance_details.md` §6.
 
-Current headline: CERT-In **73.7%** weighted / 57.9% strict · G7 **50.0%** / 40.0% · OWASP **68.8%** / 45.8% (weighted gives partial credit for partially met elements; strict counts fully met elements only). Per-element status lives in the Standards Compliance section; full methodology in `guidance/guidance_details.md` §6.
+Current headline: CERT-In **89.5%** weighted / 84.2% strict · G7 **71.0%** / 66.0% · OWASP **70.8%** / 50.0% (weighted gives partial credit for partially met elements; strict counts fully met elements only). Per-element status lives in the Standards Compliance section; full methodology in `guidance/guidance_details.md` §6.
 
 ### Beyond the baseline: R1 / R3 / R4
 
@@ -191,6 +191,7 @@ Current headline: CERT-In **73.7%** weighted / 57.9% strict · G7 **50.0%** / 40
 ### Identity, evidence and external services
 
 - **Clean component identity**: library components carry real names, versions and PURLs (`pkg:pypi/langchain@0.1.13`) instead of `"Dependency: …"` with placeholder versions; model components keep the verbatim source identifier and never invent a version (unknown stays unknown).
+- **Model card enrichment**: bundled local cards (`modelcards/<provider>/<model>.json`) plus live HuggingFace API details — when a HF model has no bundled card and no parseable card YAML, a structured card is synthesized from the verified API data (task, capability tags, architecture/config facts, license, hub provenance); nothing is fabricated (no intended-use or limitations text the API didn't provide). HF **datasets** are enriched the same way: `load_dataset` names resolved against the datasets API for license/description/last-modified (license-if-public tier).
 - **Native CycloneDX evidence**: `evidence.identity` (technique `manifest-analysis` for SBOM/manifest finds, `source-code-analysis` for code finds, with confidence) and `evidence.occurrences` (file, line, snippet as `additionalContext`); SPDX exports preserve the same as package `comment`s.
 - **External AI services**: cloud models emit CycloneDX `services` entries (provider, public API endpoint, authenticated) wired into the dependency graph (repo → service, model → service), documenting the third-party trust boundary.
 - **Import analysis**: undeclared-but-imported AI packages (e.g. `langchain-community`, `langchain-core`) are detected directly in source (`aiImportsDetector`) and added with version unknown — closing the recall gap vs manifest-only scanning.

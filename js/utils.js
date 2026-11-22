@@ -204,6 +204,128 @@ function parseEvalResults(evalResults) {
 }
 
 /**
+ * Build a structured model card from HuggingFace API details, used when the
+ * remote model card README has no parseable YAML frontmatter. Only verified
+ * API data is included — nothing is fabricated (no intended-use or
+ * limitations text if the API didn't provide it). Shape matches the local
+ * model card JSONs so downstream consumers (UI panel, BOM generators) treat
+ * both identically.
+ * @param {Object} hfDetails fetchHuggingFaceModelInfo() result
+ * @param {string} [modelName] Fallback model identifier
+ * @returns {Object|null} Structured model card, or null when not verified
+ */
+/**
+ * Build a dataset enrichment record from a HuggingFace datasets-API payload
+ * (GET /api/datasets/<id>). License comes from the card license first, then
+ * the `license:` tag; description only when the hub provides one — nothing
+ * is fabricated. Returns null for unresolvable payloads.
+ * @param {Object} apiData Raw API payload
+ * @returns {Object|null} {id, license?, description?, lastModified?, downloads?}
+ */
+function buildDatasetEnrichmentFromHuggingFace(apiData) {
+  if (!apiData || !apiData.id) {
+    return null;
+  }
+
+  const enrichment = { id: apiData.id };
+  const licenseTag = (apiData.tags || [])
+    .find((t) => typeof t === "string" && t.startsWith("license:"));
+  const license = apiData.cardData?.license
+    || (licenseTag ? licenseTag.slice("license:".length) : null);
+  if (license) {
+    enrichment.license = license;
+  }
+  const description = apiData.description || apiData.cardData?.description || null;
+  if (description) {
+    enrichment.description = description;
+  }
+  if (apiData.lastModified) {
+    enrichment.lastModified = apiData.lastModified;
+  }
+  if (apiData.downloads != null) {
+    enrichment.downloads = apiData.downloads;
+  }
+  return enrichment;
+}
+
+/**
+ * True when a candidate `org/model` slug was extracted from a module
+ * import/require statement. Models are never importable modules — an
+ * import specifier like `import { hideBin } from 'yargs/helpers'` is an
+ * npm module path, not a HuggingFace model reference. Rejecting these
+ * locally avoids both false positives and unnecessary HF API calls.
+ * @param {string} lineContent The matched source line
+ * @param {string} modelName Candidate model name
+ * @returns {boolean}
+ */
+function isNpmImportSpecifier(lineContent, modelName) {
+  if (!modelName || !modelName.includes("/")) {
+    return false;
+  }
+  if (!lineContent || typeof lineContent !== "string") {
+    return false;
+  }
+  // import x from 'pkg/sub' · import 'pkg/sub' · export * from 'pkg/sub'
+  // · Python: from pkg.sub import x · require('pkg/sub')
+  const lineImport = /^\s*(?:import\b|from\s+[\w.]+\s+import\b|export\b)/.test(lineContent);
+  const requireCall = /require\s*\(\s*["'][^"']+["']\s*\)/.test(lineContent);
+  return lineImport || requireCall;
+}
+
+function buildModelCardDataFromHuggingFace(hfDetails, modelName) {
+  if (!hfDetails || !hfDetails.verified) {
+    return null;
+  }
+  const card = {
+    modelName: hfDetails.id || modelName,
+    provider: 'HuggingFace',
+    source: 'huggingface-api',
+    origin: 'open-source-hub'
+  };
+
+  // Task / type straight from the API — omit rather than guess
+  if (hfDetails.pipeline_tag) {
+    card.modelType = hfDetails.pipeline_tag;
+  }
+
+  // Capability tags (HF tags mix capabilities with license/dataset/paper
+  // metadata — the latter are not capabilities)
+  const METADATA_TAG_PREFIXES = ['license:', 'dataset:', 'arxiv:', 'doi:', 'url:', 'region:', 'spaces:', 'mediatype:', 'base_model:'];
+  const capabilities = (hfDetails.tags || [])
+    .filter((t) => typeof t === 'string' && t.trim() && !METADATA_TAG_PREFIXES.some((p) => t.startsWith(p)));
+  if (capabilities.length > 0) {
+    card.capabilities = capabilities;
+  }
+
+  // Architecture facts from config.json
+  const contextWindow = hfDetails.modelParameters?.contextWindow;
+  const architecture = hfDetails.architectures?.[0];
+  if (contextWindow || architecture) {
+    card.architecture = {};
+    if (architecture) card.architecture.type = architecture;
+    if (contextWindow) card.architecture.contextLength = contextWindow;
+  }
+
+  // License + hub provenance
+  if (hfDetails.license) {
+    card.access = { license: hfDetails.license, origin: 'open-source-hub' };
+  }
+
+  // Model summary from the card when the API surfaced one
+  if (hfDetails.cardData?.model_summary) {
+    card.description = hfDetails.cardData.model_summary;
+  }
+
+  // Reference link back to the hub model page
+  const modelId = hfDetails.id || modelName;
+  if (modelId) {
+    card.references = { modelPage: `https://huggingface.co/${modelId}` };
+  }
+
+  return card;
+}
+
+/**
  * Format a model-card field for display.
  *
  * Local model card JSONs store some fields as structured objects rather than
