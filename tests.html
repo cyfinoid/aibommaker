@@ -285,6 +285,78 @@ section("Tree truncation plumbing");
 }
 
 // ---------------------------------------------------------------------------
+section("parseRepoInput — host-validated GitHub URL parsing");
+{
+  const parse = (s) => parseRepoInput(s);
+  // `msgPart` pins which rejection fired ("Invalid repository format…" vs
+  // "Only github.com repository URLs are supported."), so a crash-bug can't
+  // pass as a rejection.
+  const throws = (s, msgPart) => {
+    try { parse(s); return false; } catch (e) { return !msgPart || String(e.message).includes(msgPart); }
+  };
+
+  // Accepted forms
+  assert(JSON.stringify(parse("owner/repo")) === JSON.stringify({ owner: "owner", repo: "repo" }),
+    "shorthand owner/repo");
+  assert(parse("https://github.com/owner/repo").owner === "owner" && parse("https://github.com/owner/repo").repo === "repo",
+    "plain GitHub URL");
+  assert(parse("https://www.github.com/owner/repo.git").repo === "repo",
+    "www host + .git suffix stripped");
+  assert(parse("https://github.com/owner/repo/tree/main").repo === "repo",
+    "URL with extra path segments keeps owner/repo");
+  assert(parse("https://github.com/owner/repo?x=1#frag").repo === "repo",
+    "query string and fragment ignored");
+  assert(parse("//github.com/owner/repo").owner === "owner",
+    "protocol-relative URL accepted");
+  assert(parse("git@github.com:owner/repo.git").owner === "owner" && parse("git@github.com:owner/repo.git").repo === "repo",
+    "scp-like SSH form accepted");
+  assert(parse("ssh://git@github.com/owner/repo").owner === "owner",
+    "ssh:// URL accepted");
+  assert(parse("HTTPS://GITHUB.COM/Owner/Repo").owner === "Owner",
+    "scheme/host case-insensitive, owner case preserved");
+  assert(parse("owner/repo.git").repo === "repo",
+    "shorthand .git suffix stripped");
+  assert(parse("  owner/repo  ").owner === "owner",
+    "surrounding whitespace trimmed");
+  assert(parse("owner/repo/tree/main").repo === "repo",
+    "shorthand with extra segments ignores them");
+
+  // Rejected: the substring bypass CodeQL flagged must not parse
+  assert(throws("https://evil.example/github.com/owner/repo", "Only github.com"),
+    "github.com embedded in path of another host rejected");
+  assert(throws("https://github.com.evil.example/owner/repo", "Only github.com"),
+    "github.com as subdomain suffix of attacker host rejected");
+  assert(throws("https://evil.example/?x=github.com/owner/repo", "Only github.com"),
+    "github.com embedded in query string rejected");
+  assert(throws("git@github.com.evil.example:owner/repo", "Only github.com"),
+    "scp form with attacker host rejected");
+  assert(throws("https://gitlab.com/owner/repo", "Only github.com"),
+    "non-GitHub host rejected");
+  assert(throws("https://github.com/owner-only", "Invalid repository format"),
+    "URL without repo segment rejected");
+
+  // Bare-host paste forms (worked with the old substring matcher)
+  assert(parse("github.com/owner/repo").owner === "owner",
+    "bare github.com host form accepted");
+  assert(parse("www.github.com/owner/repo").owner === "owner",
+    "bare www.github.com host form accepted");
+  assert(parse("https:/github.com/owner/repo").owner === "owner",
+    "single-slash scheme typo repaired");
+  assert(throws("evil.com/github.com/owner/repo", "Invalid repository format"),
+    "bare attacker host with embedded github.com rejected");
+
+  // Rejected: malformed slugs (would otherwise flow into API URLs and BOM output)
+  assert(throws("own er/repo", "Invalid repository format"),
+    "slug with whitespace rejected");
+  assert(throws("owner/repo$", "Invalid repository format"),
+    "slug with shell metacharacter rejected");
+  assert(throws("", "Invalid repository format"),
+    "empty input rejected");
+  assert(throws("not-a-repo", "Invalid repository format"),
+    "single segment rejected");
+}
+
+// ---------------------------------------------------------------------------
 section("formatModelCardField — structured card fields render as text (models-embedding-001 regression)");
 {
   assert(typeof formatModelCardField === "function", "formatModelCardField exposed from utils.js");
@@ -550,6 +622,38 @@ section("isNpmImportSpecifier — npm module specifiers are not HF models (yargs
   ];
   for (const [line, name, want, msg] of cases) {
     assert(isNpmImportSpecifier(line, name) === want, msg);
+  }
+}
+
+// ---------------------------------------------------------------------------
+section("extractModelNameVersionInfo — version/quantization declared in the identifier");
+{
+  assert(typeof extractModelNameVersionInfo === "function", "extractModelNameVersionInfo exposed");
+  const cases = [
+    ["meta-llama-v3-q4", { version: "3", quantization: "q4" }],
+    ["deepseek-v3", { version: "3" }],
+    ["gpt-3.5-turbo", { version: "3.5" }],
+    ["llama-3.1-70b-instruct", { version: "3.1", parameterSize: "70b" }],
+    ["qwen2.5-coder", { version: "2.5" }],
+    ["qwen3:4b", { parameterSize: "4b" }],
+    ["qwen3-14b-q4_k_m", { quantization: "q4_k_m", parameterSize: "14b" }],
+    ["claude-3-sonnet-20241022", { version: "3" }],
+    ["meta-llama-3-70b-instruct", { version: "3", parameterSize: "70b" }],
+    ["text-embedding-3-small", { version: "3" }],
+    ["Sweaterdog/Andy-3.6", { version: "3.6" }],
+    ["gpt-4o", null],
+    ["models/embedding-001", null],
+    ["yargs/helpers", null],
+    ["grok-beta", null]
+  ];
+  for (const [name, want] of cases) {
+    const got = extractModelNameVersionInfo(name);
+    const ok = want === null
+      ? got === null
+      : got !== null && want.version === got.version
+        && (want.quantization || null) === (got.quantization || null)
+        && (want.parameterSize || null) === (got.parameterSize || null);
+    assert(ok, `${name} -> ${JSON.stringify(got)}`);
   }
 }
 

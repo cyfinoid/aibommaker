@@ -1,19 +1,91 @@
 // GitHub API functions
+
+// Owner/repo slugs are interpolated into API URLs, evidence links, and the
+// generated BOM documents, so accept only the characters GitHub itself
+// allows instead of trusting whatever the URL happened to contain.
+// Owners: letters/digits, then letters/digits/hyphens. Repos: letters/
+// digits/hyphens/underscores/dots (".github" is a real repo name).
+const REPO_OWNER_RE = /^[A-Za-z0-9][A-Za-z0-9-]*$/;
+const REPO_NAME_RE = /^[A-Za-z0-9._-]+$/;
+
+const REPO_INPUT_ERROR = 'Invalid repository format. Use "owner/repo" or GitHub URL.';
+
 function parseRepoInput(input) {
-  input = input.trim();
-  const urlPattern = /github\.com\/([^\/]+)\/([^\/]+)/;
-  const urlMatch = input.match(urlPattern);
-
-  if (urlMatch) {
-    return { owner: urlMatch[1], repo: urlMatch[2].replace(/\.git$/, "") };
+  input = String(input || "").trim();
+  if (!input) {
+    throw new Error(REPO_INPUT_ERROR);
   }
 
-  const parts = input.split("/");
+  // Validate and normalize the extracted slugs. Shared by every accepted
+  // input form so no variant can bypass the charset check.
+  const finish = (owner, repo) => {
+    owner = owner.replace(/\.git$/, "");
+    repo = repo.replace(/\.git$/, "");
+    if (
+      !REPO_OWNER_RE.test(owner) ||
+      !REPO_NAME_RE.test(repo) ||
+      repo === "." ||
+      repo === ".."
+    ) {
+      throw new Error(REPO_INPUT_ERROR);
+    }
+    return { owner, repo };
+  };
+
+  // Bare-host paste forms ("github.com/owner/repo", "www.github.com/…")
+  // were accepted by the old substring matcher; keep them working by
+  // pinning the scheme and reusing the URL path below.
+  if (/^(?:www\.)?github\.com\/.+/i.test(input)) {
+    input = `https://${input}`;
+  } else if (/^https?:\/(?!\/)/i.test(input)) {
+    // Single-slash scheme typo ("https:/github.com/…") — repair it.
+    input = input.replace(/^(https?):\/(?!\/)/i, "$1://");
+  }
+
+  // URL forms (https://github.com/o/r, //github.com/o/r,
+  // git@github.com:o/r, ssh://git@github.com/o/r.git). Parse the URL and
+  // validate its HOST exactly — matching "github.com" as a substring would
+  // accept "https://evil.example/github.com/a/b" or
+  // "https://github.com.evil.example/a/b".
+  if (input.includes("://") || input.startsWith("git@") || input.startsWith("//")) {
+    if (input.startsWith("git@")) {
+      // scp-like SSH syntax (git@github.com:owner/repo.git) is not
+      // URL-parseable; normalize it into ssh:// form first.
+      const ssh = input.match(/^git@([^/:]+):\/?([^\/]+)\/(.+)$/);
+      if (!ssh) {
+        throw new Error(REPO_INPUT_ERROR);
+      }
+      input = `ssh://git@${ssh[1]}/${ssh[2]}/${ssh[3]}`;
+    } else if (input.startsWith("//")) {
+      // Protocol-relative URL — pin the scheme so `new URL` can parse it.
+      input = `https:${input}`;
+    }
+    let url;
+    try {
+      url = new URL(input);
+    } catch {
+      throw new Error(REPO_INPUT_ERROR);
+    }
+
+    const host = url.hostname.toLowerCase();
+    if (host !== "github.com" && host !== "www.github.com") {
+      throw new Error("Only github.com repository URLs are supported.");
+    }
+
+    const segments = url.pathname.split("/").filter(Boolean);
+    if (segments.length < 2) {
+      throw new Error(REPO_INPUT_ERROR);
+    }
+    return finish(segments[0], segments[1]);
+  }
+
+  // Shorthand "owner/repo" (extra segments such as /tree/main are ignored).
+  const parts = input.split("/").filter(Boolean);
   if (parts.length >= 2) {
-    return { owner: parts[0], repo: parts[1] };
+    return finish(parts[0], parts[1]);
   }
 
-  throw new Error('Invalid repository format. Use "owner/repo" or GitHub URL.');
+  throw new Error(REPO_INPUT_ERROR);
 }
 
 async function fetchRepoMeta(owner, repo, token = null) {

@@ -41,6 +41,9 @@ const ctx = {
   fetch: realFetch,
   performance: { now: () => Date.now() },
   crypto: require('crypto').webcrypto,
+  // vm contexts do not inherit Node globals — URL is needed by
+  // parseRepoInput (host-validated GitHub URL parsing).
+  URL,
   document: {
     getElementById: (id) => (id === 'results' ? resultsDiv : id === 'summary' ? summaryDiv : { innerHTML: '', classList: { add() {}, remove() {} } }),
     querySelectorAll: () => [],

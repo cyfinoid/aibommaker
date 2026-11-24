@@ -215,6 +215,60 @@ function parseEvalResults(evalResults) {
  * @returns {Object|null} Structured model card, or null when not verified
  */
 /**
+ * Extract version / quantization / parameter-size facts embedded in a model
+ * identifier (e.g. "meta-llama-v3-q4" → version 3, quantization q4;
+ * "llama-3.1-70b-instruct" → version 3.1, parameter-size 70b). These are
+ * declared in the source identifier itself, not invented.
+ *
+ * Conservative rules to avoid false grabs:
+ * - quantization:  q4, q4_k_m, q8_0, int8, fp16, f16 … (dash/dot-bounded)
+ * - parameter size: 70b, 8b, 1.5b, 350m (dash/colon-bounded)
+ * - version: v-prefixed numbers (v3, v2.1) or dot-bounded numerics (3.5)
+ *   — bare integers (the "3" in qwen3) are NOT taken as versions
+ * @param {string} modelName
+ * @returns {Object|null} {version?, quantization?, parameterSize?}
+ */
+function extractModelNameVersionInfo(modelName) {
+  if (!modelName || typeof modelName !== "string") {
+    return null;
+  }
+  const info = {};
+
+  const q = modelName.match(/(?:^|[-_.])((?:q\d(?:(?:_[a-z0-9]+)+)?|int[48]|fp(?:16|32)|f(?:16|32)))(?=$|[-_.])/i);
+  if (q) {
+    info.quantization = q[1].toLowerCase();
+  }
+
+  const p = modelName.match(/(?:^|[-_.:])(\d+(?:\.\d+)?)([bm])(?=$|[-_.:])/i);
+  if (p) {
+    info.parameterSize = `${p[1]}${p[2].toLowerCase()}`;
+  }
+
+  let v = modelName.match(/(?:^|[-_.])v(\d+(?:\.\d+)*)(?=$|[-_.])/i);
+  if (!v) {
+    // Dash/dot-bounded dotted numbers (…-3.5-…)
+    v = modelName.match(/(?:^|[-_.])(\d+\.\d+)(?=$|[-_.])/i);
+  }
+  if (!v) {
+    // Letter-attached dotted numbers (qwen2.5-coder)
+    const attached = modelName.match(/([a-z])(\d+\.\d+)(?=$|[-_.])/i);
+    if (attached) {
+      info.version = attached[2];
+    }
+  }
+  if (!v && !info.version) {
+    // Dash-bounded bare integer with a following segment (claude-3-sonnet,
+    // meta-llama-3-70b) — bare attached integers (qwen3) are NOT versions
+    v = modelName.match(/(?:^|[-_])(\d+)(?=-[-a-z0-9])/i);
+  }
+  if (v && !info.version) {
+    info.version = v[1];
+  }
+
+  return Object.keys(info).length > 0 ? info : null;
+}
+
+/**
  * Build a dataset enrichment record from a HuggingFace datasets-API payload
  * (GET /api/datasets/<id>). License comes from the card license first, then
  * the `license:` tag; description only when the hub provides one — nothing

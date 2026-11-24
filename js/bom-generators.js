@@ -722,6 +722,8 @@ async function createMLModelComponents(findings) {
             
             if (!modelMap.has(key)) {
                 const bomRef = `model-${generateShortId()}`;
+                // Version/quantization facts declared in the identifier itself
+                const nameVersionInfo = extractModelNameVersionInfo(modelName);
                 const component = {
                     type: 'machine-learning-model',
                     'bom-ref': bomRef,
@@ -740,7 +742,9 @@ async function createMLModelComponents(findings) {
                                 ? 'derived-from-model-card'
                                 : (provider === 'HuggingFace' && huggingface?.sha
                                     ? 'commit-pinned'
-                                    : 'unpinned-in-source')
+                                    : (nameVersionInfo?.version
+                                        ? 'declared-in-identifier'
+                                        : 'unpinned-in-source'))
                         }
                     ]
                 };
@@ -748,6 +752,20 @@ async function createMLModelComponents(findings) {
                     component.version = String(modelCardData.version);
                 } else if (provider === 'HuggingFace' && huggingface?.sha) {
                     component.version = huggingface.sha;
+                } else if (nameVersionInfo?.version) {
+                    component.version = nameVersionInfo.version;
+                }
+                if (nameVersionInfo?.quantization) {
+                    component.properties.push({
+                        name: 'aibom:model:quantization',
+                        value: nameVersionInfo.quantization
+                    });
+                }
+                if (nameVersionInfo?.parameterSize) {
+                    component.properties.push({
+                        name: 'aibom:model:parameter-size',
+                        value: nameVersionInfo.parameterSize
+                    });
                 }
                 
                 // Add detection source if available

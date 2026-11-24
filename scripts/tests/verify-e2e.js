@@ -143,6 +143,18 @@ const findings = [
     }
   },
   {
+    // Local quantized model: version + quantization declared in the identifier
+    id: 'f-meta-llama-v3-q4', category: 'models', title: 'Local model: meta-llama-v3-q4',
+    description: 'Locally quantized model referenced by name',
+    severity: 'medium', weight: 4,
+    modelInfo: {
+      provider: 'Ollama', modelName: 'meta-llama-v3-q4', modelType: 'text-generation',
+      detectionSource: 'pattern',
+      files: [{ path: 'scripts/run.sh', line: 5, snippet: 'MODEL=meta-llama-v3-q4' }]
+    },
+    evidence: [{ file: 'scripts/run.sh', line: 5, snippet: 'MODEL=meta-llama-v3-q4' }]
+  },
+  {
     // R1: hashed model artifact (matched to gemini-pro by name token)
     id: 'artifact-3f79bb7b435b', category: 'models', title: 'Model Artifact: gemini-pro-7b.safetensors (sha256 verified)',
     description: 'Model artifact with verified integrity: weights/gemini-pro-7b/model.safetensors',
@@ -213,18 +225,22 @@ const analysisResult = {
 
   console.log('== model identity (P0 fix: no invented versions) ==');
   const models = cdxDoc.components.filter(c => c.type === 'machine-learning-model');
-  check(models.length === 3, `three model components (${models.length})`);
+  check(models.length === 4, `four model components (${models.length})`);
   const bertModel = models.find(m => m.name === 'bert-base-uncased');
   check(bertModel && bertModel.version === 'f9c2dc59097785ff138a64bb2e313997894bca53',
     'HF hub model commit-pinned as version');
-  check(models.filter(m => m.name !== 'bert-base-uncased').every(m => m.version === undefined),
-    'unpinned models carry no invented version');
+  const quantized = models.find(m => m.name === 'meta-llama-v3-q4');
+  check(quantized && quantized.version === '3', 'name-declared version extracted (v3)');
+  check(models.filter(m => m.name !== 'bert-base-uncased' && m.name !== 'meta-llama-v3-q4')
+        .every(m => m.version === undefined),
+    'genuinely unpinned models carry no invented version');
   const vsProps = models.map(m => m.properties.find(p => p.name === 'aibom:model:version-status')?.value);
-  check(vsProps.includes('commit-pinned') && vsProps.filter(v => v === 'unpinned-in-source').length === 2,
+  check(vsProps.includes('commit-pinned') && vsProps.includes('declared-in-identifier') &&
+        vsProps.filter(v => v === 'unpinned-in-source').length === 2,
     `version-status recorded (${vsProps.join(', ')})`);
   check(models.every(m => m.properties.some(p => p.name === 'aibom:model:version-status')),
     'version-status property recorded');
-  check(models.every(m => ['gemini-pro', 'models/embedding-001', 'bert-base-uncased'].includes(m.name)),
+  check(models.every(m => ['gemini-pro', 'models/embedding-001', 'bert-base-uncased', 'meta-llama-v3-q4'].includes(m.name)),
     'source identifiers preserved');
 
   console.log('== native CycloneDX evidence ==');
@@ -273,7 +289,7 @@ const analysisResult = {
   check(svc && svc.authenticated === true && svc.provider.name === 'Google', 'service provider + auth');
   const mainDep = cdxDoc.dependencies.find(d => d.ref.startsWith('repo-'));
   check(mainDep.dependsOn.includes(svc['bom-ref']), 'repo dependsOn service');
-  check(models.filter(m => m.name !== 'bert-base-uncased')
+  check(models.filter(m => m.author === 'Google')
         .every(m => (cdxDoc.dependencies.find(d => d.ref === m['bom-ref']) || {dependsOn:[]}).dependsOn.includes(svc['bom-ref'])),
     'Google models dependOn service (data flow; HF hub model has no speculative service)');
   const depRefs = cdxDoc.dependencies.map(d => d.ref);
@@ -307,9 +323,20 @@ const analysisResult = {
   check(bertCardProps['aibom:tokenizer'] === 'BertTokenizer', 'aibom:tokenizer from tokenizer_config (G7 #29)');
   check(bertCardProps['aibom:last-modified'] === '2026-06-01T00:00:00.000Z', 'aibom:last-modified (G7 #23)');
 
+  console.log('== name-embedded version/quantization extraction ==');
+  const quantized2 = models.find(m => m.name === 'meta-llama-v3-q4');
+  check(quantized2 && quantized2.version === '3',
+    `version extracted from identifier (${quantized2 && quantized2.version})`);
+  check(quantized2 && (quantized2.properties || []).some(p => p.name === 'aibom:model:quantization' && p.value === 'q4'),
+    'quantization property (q4)');
+  const quantStatus2 = quantized2 && quantized2.properties.find(p => p.name === 'aibom:model:version-status');
+  check(quantStatus2 && quantStatus2.value === 'declared-in-identifier',
+    `version-status = declared-in-identifier (${quantStatus2 && quantStatus2.value})`);
+  check(!quantized2 || !quantized2.hashes, 'local model carries no hash claim');
+
   console.log('== R1: artifact hashes ==');
   const geminiModel = models.find(m => m.name === 'gemini-pro');
-  check(models.length === 3, `duplicate bare-name model merged (${models.length} components for 3 distinct models)`);
+  check(models.length === 4, `duplicate bare-name model merged (${models.length} components for 4 distinct models)`);
   check(Array.isArray(geminiModel.hashes) && geminiModel.hashes[0].alg === 'SHA-256' &&
         geminiModel.hashes[0].content === '3f79bb7b435b05321651daefd374cdc681dc06faa65e374e38337b88ca046dea',
     'matched artifact sha256 on model component');
@@ -411,8 +438,8 @@ const analysisResult = {
   const nv = rn.checks.find(c => c.id === 'ntia-version');
   check(nv.status === 'fail', `NTIA version honestly MISSING when unpinned (${nv.status}: ${nv.detail})`);
   const ns = rn.checks.find(c => c.id === 'ntia-supplier');
-  check(ns.status === 'warn' && ns.detail.includes('3/10'),
-    `NTIA supplier honest: 3 models attributed, libraries/datasets not (${ns.detail})`);
+  check(ns.status === 'warn' && ns.detail.includes('4/11'),
+    `NTIA supplier honest: 4 models attributed, libraries/datasets not (${ns.detail})`);
   const rs = compliance.validateSpdxBom(spdx);
   check(rs.checks.every(c => c.status !== 'fail'), 'SPDX validator: no failed checks');
 
