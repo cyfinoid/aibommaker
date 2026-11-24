@@ -1830,7 +1830,10 @@ async function modelsDetector({ tree, getFileContent }) {
     for (const f of lfsCandidates.slice(0, 50)) {
       try {
         const content = await getFileContent(f.file);
-        if (!content || !content.includes("https://git-lfs.github.com/spec/v1")) {
+        // LFS spec: a pointer file BEGINS with the version line, so match it
+        // at the start rather than anywhere in the content — a file that
+        // merely mentions the LFS URL (README, docs) is not a pointer.
+        if (!content || !content.startsWith("version https://git-lfs.github.com/spec/v1")) {
           continue;
         }
         const oidMatch = content.match(/oid\s+sha256:\s*([0-9a-f]{64})/i);

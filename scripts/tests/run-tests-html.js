@@ -34,7 +34,19 @@ const realFetch = (p) => {
 };
 
 const resultsDiv = { set innerHTML(v) { fs.writeFileSync(path.join(require('os').tmpdir(), 'aibom-tests-results.html'), v); } };
-const summaryDiv = { set innerHTML(v) { console.log('SUMMARY:', v.replace(/<[^>]+>/g, '')); } };
+// Strip HTML tags for readable console output. Re-applied to a fixpoint:
+// a single pass can re-form tags from nested input ("<<script>script>"
+// strips to "<script>"), which CodeQL flags as
+// js/incomplete-multi-character-sanitization.
+const stripTags = (v) => {
+  let prev;
+  do {
+    prev = v;
+    v = v.replace(/<[^>]+>/g, '');
+  } while (v !== prev);
+  return v;
+};
+const summaryDiv = { set innerHTML(v) { console.log('SUMMARY:', stripTags(v)); } };
 
 const ctx = {
   console: { log: () => {}, warn: () => {}, error: console.error },

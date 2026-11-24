@@ -749,6 +749,33 @@ section("R1 — modelsDetector parses Git-LFS pointers into hashed artifact find
     assert(false, "modelsDetector LFS test threw: " + err.message);
     renderResults();
   });
+
+  // Stricter pointer check: the version line must LEAD the file. A weight
+  // file that merely mentions the LFS URL mid-content is not a pointer
+  // (CodeQL js/incomplete-url-substring-sanitization fix), while a CRLF
+  // pointer still parses.
+  const hex64 = "b".repeat(64);
+  const lfsCases = modelsDetector({
+    tree: [
+      { path: "weights/m/readme-like.bin", size: 80 },
+      { path: "weights/m/crlf-model.safetensors", size: 130 }
+    ],
+    getFileContent: (f) => {
+      if (f.endsWith("readme-like.bin")) {
+        return "docs: see https://git-lfs.github.com/spec/v1 for details\noid sha256:" + hex64 + "\nsize 5\n";
+      }
+      return "version https://git-lfs.github.com/spec/v1\r\noid sha256:" + hex64 + "\r\nsize 42\r\n";
+    }
+  }).then((findings) => {
+    const artifacts = findings.filter((f) => f.artifactInfo);
+    assert(artifacts.length === 1 && artifacts[0].artifactInfo.path === "weights/m/crlf-model.safetensors",
+      "LFS check: mention-only file rejected, CRLF pointer accepted");
+    assert(artifacts[0].artifactInfo.sizeBytes === 42, "CRLF pointer size parsed");
+    renderResults();
+  }).catch((err) => {
+    assert(false, "modelsDetector strict-LFS test threw: " + err.message);
+    renderResults();
+  });
 }
 
 // ---------------------------------------------------------------------------
